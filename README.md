@@ -40,6 +40,16 @@ Docker-образ поднимает весь локальный Firebase backen
 docker compose up --build -d
 ```
 
+Или используйте скрипт для своей ОС — он проверит Docker и совместим как с Compose v2, так и со старой командой `docker-compose`:
+
+```bash
+# macOS / Linux
+./scripts/install-backend.sh
+
+# Windows (Command Prompt)
+scripts\install-backend.bat
+```
+
 После первого запуска Emulator Suite доступен на `http://localhost:4000`; порты backend: Functions `5001`, Firestore `8080`, Auth `9099`, Storage `9199`. Данные эмуляторов сохраняются в Docker volume `firebase-emulator-data` и переживают перезапуск контейнера.
 
 Для создания первой точки дождитесь строк `All emulators ready` в `docker compose logs -f backend`, затем выполните (замените значения своими):
