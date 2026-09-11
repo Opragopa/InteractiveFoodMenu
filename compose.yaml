@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-interactivefoodmenu}
+      ENFORCE_APP_CHECK: "false"
+      # Used by seed and by server-rendered display links when supplied.
+      DISPLAY_BASE_URL: ${DISPLAY_BASE_URL:-}
+    ports:
+      - "4000:4000" # Emulator Suite UI
+      - "5001:5001" # Cloud Functions
+      - "8080:8080" # Firestore
+      - "9099:9099" # Authentication
+      - "9199:9199" # Storage
+    volumes:
+      - firebase-emulator-data:/srv/app/.firebase-data
+    restart: unless-stopped
+
+volumes:
+  firebase-emulator-data:

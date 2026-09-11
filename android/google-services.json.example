@@ -1,0 +1,16 @@
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "your-project-id",
+    "storage_bucket": "your-project-id.firebasestorage.app"
+  },
+  "client": [{
+    "client_info": {
+      "mobilesdk_app_id": "1:000000000000:android:replace-me",
+      "android_client_info": { "package_name": "ru.interactivefoodmenu.staff" }
+    },
+    "api_key": [{ "current_key": "replace-me" }]
+  }],
+  "configuration_version": "1"
+}
+
