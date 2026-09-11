@@ -16,7 +16,11 @@ services:
       - "9199:9199" # Storage
     volumes:
       - firebase-emulator-data:/srv/app/.firebase-data
-    restart: unless-stopped
+    # This is a local development backend. Do not hide a startup error behind
+    # an automatic restart loop; inspect it with `docker compose logs backend`.
+    restart: "no"
+    init: true
+    stop_grace_period: 30s
 
 volumes:
   firebase-emulator-data:

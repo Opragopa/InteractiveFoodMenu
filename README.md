@@ -52,6 +52,16 @@ scripts\install-backend.bat
 
 После первого запуска Emulator Suite доступен на `http://localhost:4000`; порты backend: Functions `5001`, Firestore `8080`, Auth `9099`, Storage `9199`. Данные эмуляторов сохраняются в Docker volume `firebase-emulator-data` и переживают перезапуск контейнера.
 
+Первичная сборка скачивает бинарники Firebase Emulator в Docker image и поэтому занимает заметно больше времени. Последующие перезапуски используют их из image и не скачивают заново. Если запуск завершился с ошибкой, контейнер намеренно не перезапускается бесконечно: причина будет видна в `docker compose logs backend`.
+
+После обновления Docker-конфигурации пересоздайте контейнер одной командой:
+
+```bash
+docker compose up --build --force-recreate -d
+```
+
+Для диагностики остановившегося backend используйте `docker compose logs --tail=150 backend`.
+
 Для создания первой точки дождитесь строк `All emulators ready` в `docker compose logs -f backend`, затем выполните (замените значения своими):
 
 ```bash
