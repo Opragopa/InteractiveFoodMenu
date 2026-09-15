@@ -177,12 +177,13 @@ class MenuRepository(
         batch.commit().await()
     }
 
-    suspend fun updateVenue(venueId: String, name: String, backgroundColor: String, accentColor: String, duration: Int) {
+    suspend fun updateVenue(venueId: String, name: String, backgroundColor: String, accentColor: String, duration: Int, displayScalePercent: Int) {
         firestore.collection("venues").document(venueId).update(audit() + mapOf(
             "name" to name,
             "backgroundColor" to backgroundColor,
             "accentColor" to accentColor,
             "pageDurationSeconds" to duration,
+            "displayScalePercent" to displayScalePercent,
         )).await()
     }
 

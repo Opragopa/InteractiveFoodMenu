@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f4ee">
+  <title>Подключение телевизора — Меню</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 28px; background: #f7f4ee; color: #24211f; font: 22px Arial, sans-serif; text-align: center; }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { margin: 0 0 18px; color: #9c3d24; font-size: 42px; }
+    p { line-height: 1.4; }
+    #qr { display: block; width: 360px; height: 360px; max-width: 88vw; max-height: 88vw; margin: 20px auto; background: #fff; }
+    #status { min-height: 2em; color: #625d58; }
+    .error { color: #a12f24 !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Подключение телевизора</h1>
+    <p>Отсканируйте QR-код телефоном сотрудника и введите код точки и PIN.</p>
+    <canvas id="qr" width="360" height="360" aria-label="QR-код подключения"></canvas>
+    <p id="status">Создаём одноразовый QR-код…</p>
+  </main>
+  <script src="/legacy-connect.js"></script>
+</body>
+</html>

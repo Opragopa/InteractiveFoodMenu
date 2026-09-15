@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f4ee">
+  <title>Диагностика ТВ — Меню</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 28px; background: #f7f4ee; color: #24211f; font: 20px Arial, sans-serif; }
+    main { max-width: 1000px; margin: 0 auto; }
+    h1 { margin: 0 0 10px; color: #9c3d24; font-size: 38px; }
+    p { line-height: 1.45; }
+    #ua { padding: 12px; border: 1px solid #cbc5ba; background: #fff; overflow-wrap: anywhere; font-size: 16px; }
+    #checks { padding: 0; list-style: none; }
+    #checks li { margin: 10px 0; padding: 13px 16px; border-radius: 8px; background: #fff; border-left: 6px solid #777; }
+    #checks li.ok { border-color: #238636; }
+    #checks li.fail { border-color: #b42318; }
+    #checks li.info { border-color: #8b70a6; }
+    #run { margin: 8px 0 20px; padding: 14px 22px; border: 0; border-radius: 8px; color: #fff; background: #9c3d24; font: bold 20px Arial, sans-serif; }
+    #hint { color: #625d58; }
+    code { word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Диагностика подключения ТВ</h1>
+    <p>Отдельная локальная проверка без React и Firebase SDK. Она проверяет, отвечает ли Firebase Function через прокси Vite.</p>
+    <p><strong>Адрес:</strong> <span id="address"></span></p>
+    <p><strong>Защищённое соединение:</strong> <span id="secure"></span></p>
+    <p><strong>Браузер телевизора:</strong></p>
+    <div id="ua"></div>
+    <button id="run" type="button">Проверить соединение</button>
+    <ul id="checks"></ul>
+    <p id="hint">Ожидаемый результат теста Functions: ответ <code>UNAUTHENTICATED</code> для заведомо несуществующего тестового ключа. Это означает, что запрос дошёл до функции и Firestore.</p>
+  </main>
+  <script>
+    (function () {
+      var checks = document.getElementById("checks");
+      var button = document.getElementById("run");
+      var userAgent = navigator.userAgent || "не определён";
+      document.getElementById("address").textContent = window.location.href;
+      document.getElementById("secure").textContent = window.isSecureContext === true ? "Да (браузер считает контекст защищённым)" : "Нет — HTTP или старый браузер без isSecureContext";
+      document.getElementById("ua").textContent = userAgent;
+
+      function addCheck(label, detail, result) {
+        var row = document.createElement("li");
+        row.className = result;
+        row.textContent = label + ": " + detail;
+        checks.appendChild(row);
+      }
+
+      function run() {
+        checks.innerHTML = "";
+        button.disabled = true;
+        addCheck("JavaScript", "страница исполняет обычный JavaScript без модулей", "ok");
+        addCheck("Promise", typeof window.Promise === "function" ? "доступен" : "не найден", typeof window.Promise === "function" ? "ok" : "fail");
+        addCheck("XMLHttpRequest", typeof window.XMLHttpRequest === "function" ? "доступен" : "не найден", typeof window.XMLHttpRequest === "function" ? "ok" : "fail");
+        addCheck("HTTP", window.location.protocol + " // отдельная проверка TLS/сертификата не выполняется", window.location.protocol === "https:" ? "ok" : "info");
+
+        var endpoint = window.location.origin + "/interactivefoodmenu/europe-west1/getDisplayPairingStatus";
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", endpoint, true);
+        xhr.timeout = 10000;
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function () {
+          if (xhr.readyState !== 4) return;
+          button.disabled = false;
+          var payload = null;
+          try { payload = JSON.parse(xhr.responseText); } catch (ignore) {}
+          var status = payload && payload.error && payload.error.status;
+          if (status === "UNAUTHENTICATED") {
+            addCheck("Firebase Functions + Firestore", "доступны; тестовый ключ ожидаемо отклонён (UNAUTHENTICATED)", "ok");
+          } else {
+            var detail = "HTTP " + xhr.status + (status ? " · " + status : "") + (xhr.responseText ? " · " + xhr.responseText.slice(0, 220) : "");
+            addCheck("Firebase Functions + Firestore", detail || "пустой ответ", "fail");
+          }
+        };
+        xhr.onerror = function () {
+          button.disabled = false;
+          addCheck("Firebase Functions + Firestore", "сетевой сбой, CORS или порт недоступен для ТВ", "fail");
+        };
+        xhr.ontimeout = function () {
+          button.disabled = false;
+          addCheck("Firebase Functions + Firestore", "таймаут через 10 секунд; проверьте эмулятор и прокси", "fail");
+        };
+        try {
+          xhr.send(JSON.stringify({ data: { pairingToken: "debugtoken123.0123456789abcdef0123456789abcdef" } }));
+        } catch (error) {
+          button.disabled = false;
+          addCheck("Firebase Functions + Firestore", error.message || "ошибка отправки запроса", "fail");
+        }
+      }
+
+      button.onclick = run;
+      run();
+    })();
+  </script>
+</body>
+</html>

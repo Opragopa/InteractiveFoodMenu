@@ -9,11 +9,13 @@ import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.functions.FirebaseFunctionsException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,6 +37,8 @@ data class UiState(
     val pin: String = "",
     val venueId: String? = null,
     val menu: MenuSnapshot = MenuSnapshot(),
+    val menuError: String? = null,
+    val availabilityErrors: Map<String, String> = emptyMap(),
     val query: String = "",
     val busy: Boolean = false,
     val error: String? = null,
@@ -50,6 +54,7 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(UiState(configMissing = repository == null))
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var menuJob: Job? = null
+    private val pendingAvailability = mutableMapOf<String, Boolean>()
 
     init {
         viewModelScope.launch {
@@ -120,16 +125,53 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun attach(venueId: String) {
         menuJob?.cancel()
-        _state.update { it.copy(venueId = venueId, screen = AppScreen.MENU, initializing = false) }
+        _state.update { it.copy(venueId = venueId, screen = AppScreen.MENU, initializing = false, menuError = null, error = null) }
         menuJob = viewModelScope.launch {
-            repository?.observeMenu(venueId)?.collect { menu -> _state.update { it.copy(menu = menu, error = null) } }
+            repository?.observeMenu(venueId)
+                ?.catch { error ->
+                    _state.update { it.copy(menuError = readable(error)) }
+                }
+                ?.collect { menu ->
+                    val visibleMenu = menu.copy(items = menu.items.map { item ->
+                        pendingAvailability[item.id]?.let { item.copy(isAvailable = it) } ?: item
+                    })
+                    _state.update { it.copy(menu = visibleMenu, menuError = null) }
+                }
         }
     }
 
+    fun retryMenu() {
+        _state.value.venueId?.let(::attach)
+    }
+
     fun toggle(item: MenuItem, unavailable: Boolean) {
+        val currentItem = _state.value.menu.items.firstOrNull { it.id == item.id } ?: item
+        val nextAvailability = !unavailable
+        pendingAvailability[item.id] = nextAvailability
+        _state.update { state ->
+            state.copy(
+                menu = state.menu.copy(items = state.menu.items.map { current ->
+                    if (current.id == item.id) current.copy(isAvailable = nextAvailability) else current
+                }),
+                availabilityErrors = state.availabilityErrors - item.id,
+            )
+        }
         viewModelScope.launch {
-            runCatching { repository?.setAvailability(item, !unavailable) }
-                .onFailure { error -> _state.update { it.copy(error = readable(error)) } }
+            runCatching {
+                (repository ?: error("Firebase не настроен.")).setAvailability(currentItem, nextAvailability)
+            }.onSuccess {
+                if (pendingAvailability[item.id] == nextAvailability) pendingAvailability.remove(item.id)
+            }.onFailure { error ->
+                if (pendingAvailability[item.id] == nextAvailability) pendingAvailability.remove(item.id)
+                _state.update { state ->
+                    state.copy(
+                        menu = state.menu.copy(items = state.menu.items.map { current ->
+                            if (current.id == item.id && current.isAvailable == nextAvailability) currentItem else current
+                        }),
+                        availabilityErrors = state.availabilityErrors + (item.id to readable(error)),
+                    )
+                }
+            }
         }
     }
 
@@ -174,12 +216,13 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
         mutate(null) { repository?.reorderItems(sorted) }
     }
 
-    fun saveVenue(name: String, background: String, accent: String, duration: Int) {
+    fun saveVenue(name: String, background: String, accent: String, duration: Int, displayScalePercent: Int) {
         val validName = Validation.itemName(name) ?: return fail("Введите название точки до 80 символов.")
         val validBackground = Validation.hexColor(background) ?: return fail("Фон должен быть цветом вида #F7F4EE.")
         val validAccent = Validation.hexColor(accent) ?: return fail("Акцент должен быть цветом вида #9C3D24.")
         if (duration !in 5..60) return fail("Смена страниц — от 5 до 60 секунд.")
-        mutate("Настройки сохранены") { repository?.updateVenue(_state.value.venueId!!, validName, validBackground, validAccent, duration) }
+        if (displayScalePercent !in 80..160) return fail("Масштаб меню — от 80 до 160%.")
+        mutate("Настройки сохранены") { repository?.updateVenue(_state.value.venueId!!, validName, validBackground, validAccent, duration, displayScalePercent) }
     }
 
     fun uploadLogo(uri: Uri) {
@@ -201,7 +244,7 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository?.logout()
             menuJob?.cancel()
-            _state.update { it.copy(screen = AppScreen.LOGIN, venueId = null, menu = MenuSnapshot(), pin = "", displayUrl = "") }
+            _state.update { it.copy(screen = AppScreen.LOGIN, venueId = null, menu = MenuSnapshot(), menuError = null, error = null, pin = "", displayUrl = "") }
         }
     }
 
@@ -217,6 +260,15 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
     private fun fail(message: String) { _state.update { it.copy(error = message) } }
 
     private fun readable(error: Throwable): String = when (error) {
+        is FirebaseFirestoreException -> when (error.code) {
+            FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+                "Firebase отклонил запрос. Проверьте, что вы вошли как сотрудник и у вас есть доступ к этому заведению."
+            FirebaseFirestoreException.Code.UNAUTHENTICATED -> "Сессия завершилась. Войдите в приложение заново."
+            FirebaseFirestoreException.Code.UNAVAILABLE,
+            FirebaseFirestoreException.Code.DEADLINE_EXCEEDED ->
+                "Не удалось связаться с Firebase. Проверьте интернет или запущенные локальные эмуляторы."
+            else -> "Не удалось сохранить изменение в Firebase. Попробуйте ещё раз."
+        }
         is FirebaseFunctionsException -> when (error.code) {
             FirebaseFunctionsException.Code.UNAUTHENTICATED ->
                 error.message ?: "Неверный код заведения или PIN."

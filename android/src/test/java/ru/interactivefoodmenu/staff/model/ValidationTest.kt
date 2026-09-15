@@ -29,5 +29,18 @@ class ValidationTest {
         assertEquals("Кухня", result.single().category.name)
         assertEquals("Салат", result.single().items.single().name)
     }
-}
 
+    @Test fun putsSoldOutItemsAtTheEndOfTheirCategory() {
+        val categories = listOf(MenuCategory("a", "v", "Кухня", 1))
+        val items = listOf(
+            MenuItem("sold-out", "v", "a", "Закончился", 10000, 0, isAvailable = false),
+            MenuItem("available-later", "v", "a", "В наличии позже по порядку", 10000, 2),
+            MenuItem("available-first", "v", "a", "В наличии", 10000, 1),
+        )
+
+        assertEquals(
+            listOf("available-first", "available-later", "sold-out"),
+            groupedMenu(categories, items).single().items.map { it.id },
+        )
+    }
+}

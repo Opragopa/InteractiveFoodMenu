@@ -1,5 +1,7 @@
 package ru.interactivefoodmenu.staff.model
 
+import com.google.firebase.firestore.PropertyName
+
 data class Venue(
     val name: String = "Меню в наличии",
     val currency: String = "RUB",
@@ -7,6 +9,7 @@ data class Venue(
     val accentColor: String = "#9C3D24",
     val logoPath: String = "",
     val pageDurationSeconds: Int = 10,
+    val displayScalePercent: Int = 100,
     val displayVersion: Int = 1,
     val staffVersion: Int = 1,
 )
@@ -25,7 +28,9 @@ data class MenuItem(
     val name: String = "",
     val priceMinor: Long = 0,
     val sortOrder: Int = 0,
-    val isAvailable: Boolean = true,
+    @get:PropertyName("isAvailable")
+    @set:PropertyName("isAvailable")
+    var isAvailable: Boolean = true,
 )
 
 data class MenuSnapshot(
@@ -37,4 +42,3 @@ data class MenuSnapshot(
 )
 
 data class GroupedMenu(val category: MenuCategory, val items: List<MenuItem>)
-

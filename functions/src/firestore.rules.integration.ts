@@ -17,6 +17,7 @@ const venue = {
   accentColor: "#9C3D24",
   logoPath: "",
   pageDurationSeconds: 10,
+  displayScalePercent: 100,
   displayVersion: 2,
   staffVersion: 3,
   updatedAt: new Date(),
@@ -55,9 +56,10 @@ test("rotated display token and anonymous clients are denied", async () => {
 
 test("staff can update only its venue with valid fields", async () => {
   const db = environment.authenticatedContext("staff", { role: "staff", venueId: "main", staffVersion: 3 }).firestore();
+  await assertSucceeds(db.doc("venues/main").update({ displayScalePercent: 150, updatedAt: new Date(), updatedBy: "staff" }));
+  await assertFails(db.doc("venues/main").update({ displayScalePercent: 170, updatedAt: new Date(), updatedBy: "staff" }));
   await assertSucceeds(db.doc("items/main-soup").update({ isAvailable: false, updatedAt: new Date(), updatedBy: "staff" }));
   await assertFails(db.doc("items/other-soup").update({ isAvailable: false }));
   await assertFails(db.doc("items/main-soup").update({ priceMinor: -1 }));
   assert.equal((await db.doc("items/main-soup").get()).data()?.isAvailable, false);
 });
-

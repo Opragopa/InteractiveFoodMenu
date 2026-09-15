@@ -20,6 +20,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected }: 
   connected: boolean;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
+  const scale = Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) / 100;
   const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }));
   useEffect(() => {
     const resize = () => setViewport({ width: innerWidth, height: innerHeight });
@@ -27,9 +28,9 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected }: 
     return () => removeEventListener("resize", resize);
   }, []);
   const pages = useMemo(() => {
-    const layout = layoutForViewport(viewport.width, viewport.height);
-    return paginateMenu(categories, items.filter((item) => item.isAvailable), layout.rowsPerColumn, layout.columnCount);
-  }, [categories, items, viewport]);
+    const layout = layoutForViewport(viewport.width / scale, viewport.height / scale);
+    return paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount);
+  }, [categories, items, viewport, scale]);
   useEffect(() => {
     setPageIndex((current) => pages.length ? Math.min(current, pages.length - 1) : 0);
     if (pages.length <= 1) return;
@@ -40,6 +41,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected }: 
   const page = pages[pageIndex];
   return (
     <main className="display" lang="ru" style={{
+      zoom: scale,
       "--background": venue.backgroundColor,
       "--accent": venue.accentColor,
       "--foreground": contrastForeground(venue.backgroundColor),

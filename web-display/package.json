@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:legacy-connect && tsc -b && vite build",
+    "build:legacy-connect": "esbuild src/legacy-connect-entry.js --bundle --platform=browser --target=chrome63 --format=iife --outfile=public/legacy-connect.js",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tv": "npm run build && vite preview --host 0.0.0.0 --port 5174 --strictPort"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

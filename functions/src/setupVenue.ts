@@ -59,6 +59,7 @@ async function main() {
     accentColor: "#9C3D24",
     logoPath: "",
     pageDurationSeconds: 10,
+    displayScalePercent: 100,
     displayVersion,
     staffVersion,
     updatedAt: FieldValue.serverTimestamp(),

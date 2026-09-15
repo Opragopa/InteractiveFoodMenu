@@ -13,6 +13,7 @@ import {
   verifySecret,
 } from "./security.js";
 import { displayBaseUrl, displayUrl, normalizeDisplayBaseUrl } from "./displayUrl.js";
+import { paginateLegacyDisplay } from "./legacyDisplay.js";
 
 initializeApp();
 const db = getFirestore();
@@ -38,8 +39,16 @@ function htmlEscape(value: unknown): string {
   return String(value ?? "").replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" }[character] ?? character));
 }
 
+function foregroundFor(background: string): string {
+  const channels = [1, 3, 5].map((index) => parseInt(background.slice(index, index + 2), 16) / 255)
+    .map((value) => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+  const luminance = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+  return luminance > .45 ? "#201f1c" : "#ffffff";
+}
+
 /**
- * A no-JavaScript display for old TVs (for example LG webOS 3 / Chromium 38).
+ * A no-JavaScript display for old TVs (for example LG webOS 3 / Chromium 38
+ * and Samsung Tizen 5 / Chromium 63).
  * The TV only receives static HTML and refreshes it periodically.
  */
 export const renderDisplay = onRequest({ region: "europe-west1", timeoutSeconds: 30 }, async (request, response) => {
@@ -59,18 +68,31 @@ export const renderDisplay = onRequest({ region: "europe-west1", timeoutSeconds:
     db.collection("categories").where("venueId", "==", token.venueId).get(),
     db.collection("items").where("venueId", "==", token.venueId).get(),
   ]);
-  const categories = categorySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as MenuDoc).sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0));
-  const items = itemSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as MenuDoc).filter((item) => item.isAvailable !== false).sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0));
-  const byCategory = new Map(categories.map((category) => [category.id, { category, items: items.filter((item) => item.categoryId === category.id) }]));
-  const sections = categories.map(({ id, name }) => {
-    const group = byCategory.get(id);
-    if (!group || !group.items.length) return "";
-    return `<section><h2>${htmlEscape(name)}</h2>${group.items.map((item) => `<div class="item"><span>${htmlEscape(item.name)}</span><b>${(Number(item.priceMinor ?? 0) / 100).toFixed(2).replace(".", ",")} ₽</b></div>`).join("")}</section>`;
-  }).join("");
+  const categories = categorySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as { id: string; name: string; sortOrder?: number }))
+    .sort((a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0));
+  const items = itemSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as {
+    id: string; categoryId: string; name: string; sortOrder?: number; isAvailable?: boolean; priceMinor?: number;
+  }));
+  const scale = Math.min(1.6, Math.max(0.8, (Number(venue.displayScalePercent) || 100) / 100));
+  const pages = paginateLegacyDisplay(categories, items, Math.max(5, Math.floor(19 / scale)), 2);
+  const requestedPage = Number.parseInt(String(request.query.page ?? "0"), 10);
+  const pageIndex = Number.isFinite(requestedPage) && requestedPage >= 0 && pages.length
+    ? requestedPage % pages.length
+    : 0;
+  const page = pages[pageIndex] ?? [];
+  const content = page.map((column) => `<div class="column">${column.map((entry) => entry.kind === "category"
+    ? `<h2>${htmlEscape(entry.name)}${entry.repeated ? '<small> · продолжение</small>' : ""}</h2>`
+    : `<div class="item${entry.item.isAvailable === false ? " unavailable" : ""}"><span>${htmlEscape(entry.item.name)}</span><b>${(Number(entry.item.priceMinor ?? 0) / 100).toFixed(2).replace(".", ",")} ₽</b></div>`).join("")}</div>`).join("");
   const background = /^#[0-9a-f]{6}$/i.test(String(venue.backgroundColor)) ? String(venue.backgroundColor) : "#f7f4ee";
   const accent = /^#[0-9a-f]{6}$/i.test(String(venue.accentColor)) ? String(venue.accentColor) : "#9c3d24";
-  response.set("Cache-Control", "no-store, no-cache, must-revalidate").status(200).type("html").send(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="20"><title>${htmlEscape(venue.name)} — Меню</title><style>
-    *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;color:#201f1c;background:${background}}body{padding:32px 48px}h1{margin:0 0 28px;color:${accent};font-size:clamp(36px,4vw,72px);line-height:1.05}main{columns:2 420px;column-gap:56px}section{break-inside:avoid;margin:0 0 28px}h2{margin:0 0 8px;padding:0 0 6px;color:${accent};font-size:clamp(24px,2vw,36px);border-bottom:3px solid ${accent}}.item{display:flex;align-items:flex-end;gap:12px;min-height:42px;padding:5px 0;font-size:clamp(20px,1.7vw,30px);line-height:1.2}.item span{flex:1;overflow-wrap:break-word}.item b{white-space:nowrap} .empty{font-size:32px;color:#777}</style></head><body><h1>${htmlEscape(venue.name)}</h1><main>${sections || '<div class="empty">Меню пока не заполнено</div>'}</main></body></html>`);
+  const foreground = foregroundFor(background);
+  const duration = Math.min(60, Math.max(5, Number(venue.pageDurationSeconds) || 10));
+  const nextPage = pages.length > 1 ? (pageIndex + 1) % pages.length : 0;
+  const refresh = pages.length > 1
+    ? `${duration};url=/display/${match[1]}.${match[2]}?page=${nextPage}`
+    : String(duration);
+  response.set("Cache-Control", "no-store, no-cache, must-revalidate").status(200).type("html").send(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="${refresh}"><title>${htmlEscape(venue.name)} — Меню</title><style>
+    @font-face{font-family:Onest;src:url('/fonts/onest-variable.ttf') format('truetype');font-weight:100 900;font-display:swap}*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;font-family:Onest,Arial,sans-serif;color:${foreground};background:${background}}body{height:100vh;padding:2vh 2.4vw;display:flex;flex-direction:column}h1{flex:0 0 ${7 * scale}vh;max-width:100%;margin:0 0 ${1 * scale}vh;overflow:hidden;color:${accent};font-size:${5.2 * scale}vh;line-height:1.1;white-space:nowrap;text-overflow:ellipsis}main{display:flex;flex:1;min-height:0;overflow:hidden}.column{width:50%;height:100%;overflow:hidden;padding:0 1.5vw}.column+.column{border-left:1px solid ${accent}55}h2{height:${4.4 * scale}vh;margin:0;padding:0 ${.5 * scale}vh;overflow:hidden;color:${accent};font-size:${2.8 * scale}vh;line-height:1.1;white-space:nowrap;text-overflow:ellipsis;border-bottom:${.25 * scale}vh solid ${accent}}h2 small{font-size:.55em;font-weight:400;opacity:.65}.item{height:${4.2 * scale}vh;display:flex;align-items:center;overflow:hidden;font-size:${2.35 * scale}vh;line-height:1.1;white-space:nowrap}.item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.item b{margin-left:1vw;white-space:nowrap}.item.unavailable{color:#88837d;opacity:.65}.item.unavailable span,.item.unavailable b{text-decoration:line-through;text-decoration-thickness:1px}.empty{width:100%;display:flex;align-items:center;justify-content:center;color:#777;font-size:${4 * scale}vh}footer{height:2vh;flex:0 0 2vh;text-align:right;color:${foreground};opacity:.55;font-size:1.4vh}@media(max-aspect-ratio:4/3){body{padding:2vh 3vw}h1{font-size:${4 * scale}vh}.item{font-size:${2 * scale}vh}}</style></head><body><h1>${htmlEscape(venue.name)}</h1><main>${content || '<div class="empty">Меню пока не заполнено</div>'}</main><footer>${pages.length ? `${pageIndex + 1} / ${pages.length}` : ""}</footer></body></html>`);
 });
 
 async function assertNotRateLimited(key: string) {

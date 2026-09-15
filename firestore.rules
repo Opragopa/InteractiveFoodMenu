@@ -17,7 +17,7 @@ service cloud.firestore {
     function validVenue() {
       return request.resource.data.keys().hasOnly([
         'name', 'currency', 'backgroundColor', 'accentColor', 'logoPath',
-        'pageDurationSeconds', 'displayVersion', 'staffVersion', 'updatedAt', 'updatedBy'
+        'pageDurationSeconds', 'displayScalePercent', 'displayVersion', 'staffVersion', 'updatedAt', 'updatedBy'
       ])
       && request.resource.data.name is string
       && request.resource.data.name.size() >= 1
@@ -28,6 +28,10 @@ service cloud.firestore {
       && request.resource.data.pageDurationSeconds is int
       && request.resource.data.pageDurationSeconds >= 5
       && request.resource.data.pageDurationSeconds <= 60
+      && (!request.resource.data.keys().hasAny(['displayScalePercent'])
+        || (request.resource.data.displayScalePercent is int
+          && request.resource.data.displayScalePercent >= 80
+          && request.resource.data.displayScalePercent <= 160))
       && request.resource.data.displayVersion == resource.data.displayVersion
       && request.resource.data.staffVersion == resource.data.staffVersion;
     }

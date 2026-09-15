@@ -5,6 +5,7 @@ export type Venue = {
   accentColor: string;
   logoPath: string;
   pageDurationSeconds: number;
+  displayScalePercent?: number;
 };
 
 export type Category = { id: string; venueId: string; name: string; sortOrder: number };
@@ -23,4 +24,3 @@ export type PageEntry =
   | { kind: "item"; item: MenuItem };
 
 export type MenuPage = { columns: PageEntry[][] };
-

@@ -6,11 +6,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,14 +32,13 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -75,6 +74,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -193,16 +194,35 @@ private fun MenuScreen(state: UiState, viewModel: MenuViewModel, snackbar: Snack
                     singleLine = true,
                 )
             }
+            state.menuError?.let { message ->
+                item(key = "menu-load-error") {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("Не удалось обновить меню", fontWeight = FontWeight.SemiBold)
+                            Text(message, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
+                                FilledTonalButton(onClick = viewModel::retryMenu) { Text("Повторить") }
+                                TextButton(onClick = viewModel::logout) { Text("Войти заново") }
+                            }
+                        }
+                    }
+                }
+            }
             grouped.forEach { group ->
                 item(key = "category-${group.category.id}") {
                     Text(group.category.name, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
                 }
                 items(group.items, key = { it.id }) { item ->
-                    MenuAvailabilityRow(item) { checked ->
+                    MenuAvailabilityRow(item, state.availabilityErrors[item.id], modifier = Modifier.animateItem(placementSpec = spring())) { checked ->
                         viewModel.toggle(item, checked)
                         scope.launch {
                             val result = snackbar.showSnackbar(
-                                if (checked) "Позиция отмечена закончившейся" else "Позиция снова в наличии",
+                                if (checked) "${item.name}: нет в наличии" else "${item.name}: снова в наличии",
                                 actionLabel = "Отменить",
                             )
                             if (result == SnackbarResult.ActionPerformed) viewModel.toggle(item, !checked)
@@ -217,57 +237,65 @@ private fun MenuScreen(state: UiState, viewModel: MenuViewModel, snackbar: Snack
 }
 
 @Composable
-private fun MenuAvailabilityRow(item: MenuItem, onUnavailableChange: (Boolean) -> Unit) {
+private fun MenuAvailabilityRow(item: MenuItem, availabilityError: String?, modifier: Modifier = Modifier, onUnavailableChange: (Boolean) -> Unit) {
     val unavailable = !item.isAvailable
     val textColor by animateColorAsState(
-        if (unavailable) MaterialTheme.colorScheme.onSurface.copy(alpha = .52f) else MaterialTheme.colorScheme.onSurface,
+        if (unavailable) MaterialTheme.colorScheme.onSurface.copy(alpha = .64f) else MaterialTheme.colorScheme.onSurface,
         animationSpec = spring(), label = "itemTextColor",
     )
-    val toggleBackground by animateColorAsState(
-        if (unavailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceVariant,
-        animationSpec = spring(), label = "availabilityBackground",
-    )
-    val toggleTextColor by animateColorAsState(
-        if (unavailable) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = spring(), label = "availabilityTextColor",
-    )
-    val elevation by animateDpAsState(
-        if (unavailable) 4.dp else 1.dp,
-        animationSpec = spring(), label = "availabilityElevation",
-    )
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 7.dp).animateContentSize(),
+        modifier.fillMaxWidth().padding(vertical = 7.dp).animateContentSize(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(item.name, color = textColor, fontWeight = FontWeight.Medium, textDecoration = if (unavailable) TextDecoration.LineThrough else null)
             Text(formatPrice(item.priceMinor), color = textColor, style = MaterialTheme.typography.bodyMedium, textDecoration = if (unavailable) TextDecoration.LineThrough else null)
-        }
-        Surface(
-            color = toggleBackground,
-            contentColor = toggleTextColor,
-            shape = MaterialTheme.shapes.medium,
-            tonalElevation = elevation,
-            shadowElevation = elevation,
-            modifier = Modifier.semantics { contentDescription = "Нет в наличии: ${item.name}" },
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 4.dp)) {
+            availabilityError?.let {
                 Text(
-                    "Нет в наличии",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = toggleTextColor,
-                )
-                Checkbox(
-                    checked = unavailable,
-                    onCheckedChange = onUnavailableChange,
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = MaterialTheme.colorScheme.onError,
-                        checkmarkColor = MaterialTheme.colorScheme.error,
-                        uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
+                    "Не сохранено: $it",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
+        }
+        Text(
+            "Нет в наличии",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = if (unavailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        OutOfStockCheckbox(unavailable, onUnavailableChange, item.name)
+    }
+}
+
+@Composable
+private fun OutOfStockCheckbox(
+    unavailable: Boolean,
+    onUnavailableChange: (Boolean) -> Unit,
+    itemName: String,
+) {
+    Surface(
+        color = if (unavailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surface,
+        contentColor = if (unavailable) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = MaterialTheme.shapes.extraSmall,
+        border = BorderStroke(
+            1.dp,
+            if (unavailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+        ),
+        tonalElevation = 0.dp,
+        modifier = Modifier
+            .size(32.dp)
+            .toggleable(
+                value = unavailable,
+                role = Role.Checkbox,
+                onValueChange = onUnavailableChange,
+            )
+            .semantics { contentDescription = "Нет в наличии: $itemName" },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            if (unavailable) Icon(Icons.Default.Close, contentDescription = null)
         }
     }
 }
@@ -275,11 +303,12 @@ private fun MenuAvailabilityRow(item: MenuItem, onUnavailableChange: (Boolean) -
 @Composable
 private fun SyncStatus(state: UiState) {
     val text = when {
+        state.menuError != null -> "Ошибка загрузки меню"
         state.menu.pendingWrites -> "Синхронизация…"
         state.menu.fromCache -> "Офлайн · изменения будут отправлены позже"
         else -> "Все изменения сохранены"
     }
-    Text(text, style = MaterialTheme.typography.labelSmall, color = if (state.menu.fromCache) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(text, style = MaterialTheme.typography.labelSmall, color = if (state.menu.fromCache || state.menuError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 private enum class ManageTab { CATEGORIES, ITEMS, SETTINGS }
@@ -431,6 +460,7 @@ private fun VenueSettings(state: UiState, viewModel: MenuViewModel) {
     var background by remember(venue) { mutableStateOf(venue.backgroundColor) }
     var accent by remember(venue) { mutableStateOf(venue.accentColor) }
     var duration by remember(venue) { mutableIntStateOf(venue.pageDurationSeconds) }
+    var displayScale by remember(venue) { mutableIntStateOf(venue.displayScalePercent.coerceIn(80, 160)) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> if (uri != null) viewModel.uploadLogo(uri) }
     val context = LocalContext.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -442,7 +472,12 @@ private fun VenueSettings(state: UiState, viewModel: MenuViewModel) {
             IconButton({ duration = (duration - 1).coerceAtLeast(5) }) { Text("−") }
             IconButton({ duration = (duration + 1).coerceAtMost(60) }) { Text("+") }
         }
-        Button({ viewModel.saveVenue(name, background, accent, duration) }, Modifier.fillMaxWidth()) { Text("Сохранить оформление") }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Масштаб меню ТВ: $displayScale%", Modifier.weight(1f))
+            IconButton({ displayScale = (displayScale - 5).coerceAtLeast(80) }) { Text("−") }
+            IconButton({ displayScale = (displayScale + 5).coerceAtMost(160) }) { Text("+") }
+        }
+        Button({ viewModel.saveVenue(name, background, accent, duration, displayScale) }, Modifier.fillMaxWidth()) { Text("Сохранить оформление") }
         OutlinedButton({ picker.launch("image/*") }, Modifier.fillMaxWidth()) { Text("Выбрать логотип (до 2 МБ)") }
         HorizontalDivider(Modifier.padding(vertical = 6.dp))
         Text("Экран телевизора", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)

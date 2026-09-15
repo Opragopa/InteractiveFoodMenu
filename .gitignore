@@ -9,6 +9,7 @@ android/keystore.properties
 *.keystore
 node_modules/
 web-display/dist/
+web-display/public/legacy-connect.js
 *.tsbuildinfo
 functions/lib/
 functions/.env*

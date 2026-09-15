@@ -21,7 +21,9 @@ export function paginateMenu(
     .forEach((category) => {
       const categoryItems = items
         .filter((item) => item.categoryId === category.id)
-        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ru"));
+        .sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false)
+          || a.sortOrder - b.sortOrder
+          || a.name.localeCompare(b.name, "ru"));
       if (!categoryItems.length) return;
 
       if (rows - column.length < 2) flush();
