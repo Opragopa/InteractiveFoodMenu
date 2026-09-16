@@ -20,7 +20,7 @@ else
 fi
 
 echo "Собираю и запускаю Firebase backend..."
-compose up --build -d
+compose --profile emulators up --build -d backend
 
 cat <<'EOF'
 

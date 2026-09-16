@@ -23,7 +23,7 @@ if not errorlevel 1 (
 )
 
 echo Building and starting the Firebase backend...
-%COMPOSE% up --build -d
+%COMPOSE% --profile emulators up --build -d backend
 if errorlevel 1 exit /b 1
 
 echo.

@@ -30,9 +30,32 @@
 3. Скопируйте `web-display/.env.example` в `web-display/.env.local`, заполните Firebase web config и установите `VITE_USE_EMULATORS=true`.
 4. Скопируйте реальный Android config в `android/google-services.json`. Файл не коммитится.
 
-## Backend в Docker
+## Публичный веб в Docker и Firebase
 
-Docker-образ поднимает весь локальный Firebase backend: Cloud Functions, Authentication, Firestore и Storage. Это **не** замена production Firebase: production Functions и базы остаются управляемыми сервисами Firebase и разворачиваются обычной командой `firebase deploy`.
+Production-вариант изолирует веб-интерфейс в Docker, но оставляет Auth, Firestore, Storage и Functions в Firebase. В Compose запускаются `web` (собранный TV/кабинет) и `proxy`; наружу доступен только `127.0.0.1:8088`. Существующий Nginx Windows продолжает владеть `80/443` для Jellyfin и нового поддомена меню, передавая запросы меню на этот loopback-порт.
+
+1. На сервере скопируйте `docker/.env.deploy.example` в `.env.deploy`, заполните Firebase Web config и свой HTTPS-домен.
+2. В настройках DNS направьте поддомен, например `menu.example.com`, на белый IP дома; добавьте сертификат и новый server block по `docker/host-nginx-menu.conf.example` в уже работающий Nginx.
+3. Запустите из корня репозитория:
+
+   ```bash
+   docker compose --env-file .env.deploy up --build -d
+   ```
+
+4. Проверьте контейнеры и локальный proxy:
+
+   ```bash
+   docker compose ps
+   curl -I http://127.0.0.1:8088/
+   ```
+
+Веб-кабинет будет выпускать QR-ссылки на `VITE_DISPLAY_BASE_URL`. Для Android release укажите тот же адрес при сборке: `./gradlew :android:assembleRelease -PdisplayBaseUrl=https://menu.example.com`.
+
+Ни Docker, ни Windows Firewall не должны публиковать `4000`, `5001`, `8080`, `9099` или `9199`. Публичным остаётся только Nginx на HTTPS. Команда `docker compose down` останавливает только контейнеры меню и не влияет на Jellyfin или системный Nginx.
+
+## Backend в Docker для разработки
+
+Docker-образ `backend` поднимает локальный Firebase backend: Cloud Functions, Authentication, Firestore и Storage. Это **не** замена production Firebase: production Functions и базы остаются управляемыми сервисами Firebase и разворачиваются обычной командой `firebase deploy`.
 
 Не открывайте этот набор эмуляторов в интернет: он предназначен только для разработки. Для домашнего сервера с публичным IP оставляйте наружу только веб-сервер/API, а Auth, Firestore, Storage и Emulator UI — во внутренней Docker-сети. HTTP допустим только как временный вариант: его нельзя использовать для входа сотрудника через публичный интернет, поскольку PIN, сессии и данные меню можно перехватить. Для Android в debug HTTP уже разрешён; release-сборка намеренно требует HTTPS.
 
@@ -43,7 +66,7 @@ Docker-образ поднимает весь локальный Firebase backen
 На машине достаточно Docker Desktop с Compose. Из корня проекта выполните:
 
 ```bash
-docker compose up --build -d
+docker compose --profile emulators up --build -d backend
 ```
 
 Или используйте скрипт для своей ОС — он проверит Docker и совместим как с Compose v2, так и со старой командой `docker-compose`:
@@ -63,7 +86,7 @@ scripts\install-backend.bat
 После обновления Docker-конфигурации пересоздайте контейнер одной командой:
 
 ```bash
-docker compose up --build --force-recreate -d
+docker compose --profile emulators up --build --force-recreate -d backend
 ```
 
 Для диагностики остановившегося backend используйте `docker compose logs --tail=150 backend`.

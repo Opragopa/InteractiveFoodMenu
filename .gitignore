@@ -14,6 +14,7 @@ web-display/public/legacy-connect.js
 functions/lib/
 functions/.env*
 **/.env.local
+.env.deploy
 .firebase/
 .firebase-data/
 firebase-debug.log
