@@ -11,6 +11,7 @@ import QRCode from "qrcode";
 import { parseMenuCsv, type CsvMenuRow } from "./csv";
 import { currentDisplayBaseUrl } from "./displayBaseUrl";
 import { forgetVenueCredentials, saveVenueCredentials, savedVenueCredentials } from "./venueCredentials";
+import { reportClientError } from "./clientLogger";
 
 function installationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -69,7 +70,8 @@ export function App() {
       const response = await login(credentials);
       await signInWithCustomToken(auth, response.data.customToken);
       setVenueId(response.data.venueId);
-    } catch {
+    } catch (cause) {
+      reportClientError("display_login_failed", cause, { path: window.location.pathname });
       setError("Ссылка экрана недействительна или была перевыпущена.");
       setLoading(false);
     }
@@ -127,7 +129,10 @@ function StaffScreen() {
       await signInWithCustomToken(auth, response.data.customToken);
       saveVenueCredentials(code, pin);
       setVenueId(response.data.venueId);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось войти"); }
+    } catch (cause) {
+      reportClientError("staff_login_failed", cause);
+      setError(cause instanceof Error ? cause.message : "Не удалось войти");
+    }
     finally { setBusy(false); }
   };
   useEffect(() => onAuthStateChanged(auth, async (user) => {
@@ -176,6 +181,7 @@ function StaffScreen() {
       const currentRoot = availabilityListRef.current;
       previousRowsRef.current = new Map(Array.from(currentRoot?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
       setItems(current => current.map(value => value.id === item.id ? { ...value, isAvailable: item.isAvailable } : value));
+      reportClientError("availability_update_failed", cause, { itemId: item.id });
       setError(cause instanceof Error ? `Не удалось обновить наличие: ${cause.message}` : "Не удалось обновить наличие.");
     }
   };

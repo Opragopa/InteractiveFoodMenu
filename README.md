@@ -34,6 +34,12 @@
 
 Docker-образ поднимает весь локальный Firebase backend: Cloud Functions, Authentication, Firestore и Storage. Это **не** замена production Firebase: production Functions и базы остаются управляемыми сервисами Firebase и разворачиваются обычной командой `firebase deploy`.
 
+Не открывайте этот набор эмуляторов в интернет: он предназначен только для разработки. Для домашнего сервера с публичным IP оставляйте наружу только веб-сервер/API, а Auth, Firestore, Storage и Emulator UI — во внутренней Docker-сети. HTTP допустим только как временный вариант: его нельзя использовать для входа сотрудника через публичный интернет, поскольку PIN, сессии и данные меню можно перехватить. Для Android в debug HTTP уже разрешён; release-сборка намеренно требует HTTPS.
+
+### Диагностический журнал
+
+Веб-интерфейс и Android отправляют ошибки операций и необработанные ошибки в callable `reportClientLog`. Функция привязывает запись к проверенному пользователю и заведению, сохраняет её в коллекции Firestore `clientLogs` и дублирует в серверный журнал. Секреты, PIN, токены и фрагменты ссылок перед отправкой скрываются; клиентам чтение `clientLogs` запрещено. В локальном Docker-наборе смотрите записи через Emulator UI: `http://localhost:4000/firestore/clientLogs`; в production — в Firestore Console и Cloud Logging.
+
 На машине достаточно Docker Desktop с Compose. Из корня проекта выполните:
 
 ```bash

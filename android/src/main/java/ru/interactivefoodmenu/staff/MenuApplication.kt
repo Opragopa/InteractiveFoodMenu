@@ -10,12 +10,15 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
 import ru.interactivefoodmenu.staff.data.MenuRepository
+import ru.interactivefoodmenu.staff.data.ClientLogger
 import ru.interactivefoodmenu.staff.data.VenuePreferences
 
 class MenuApplication : Application() {
     var repository: MenuRepository? = null
         private set
     lateinit var preferences: VenuePreferences
+        private set
+    var clientLogger: ClientLogger? = null
         private set
 
     override fun onCreate() {
@@ -49,5 +52,6 @@ class MenuApplication : Application() {
             storage,
             BuildConfig.DISPLAY_BASE_URL.takeIf { it.isNotBlank() },
         )
+        clientLogger = ClientLogger(functions)
     }
 }

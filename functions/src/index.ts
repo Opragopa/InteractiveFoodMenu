@@ -34,6 +34,26 @@ type DisplayToken = {
   active: boolean;
 };
 type MenuDoc = { id: string; [key: string]: unknown };
+type ClientLogLevel = "info" | "warn" | "error";
+
+function redactLogText(value: unknown, maxLength = 500): string {
+  return String(value ?? "")
+    .replace(/(pin|secret|token|password)=[^\s&]+/gi, "$1=[redacted]")
+    .replace(/#[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{20,}/g, "#[redacted]")
+    .slice(0, maxLength);
+}
+
+function clientLogDetails(value: unknown): Record<string, string | number | boolean> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const details: Record<string, string | number | boolean> = {};
+  for (const [key, entry] of Object.entries(value).slice(0, 12)) {
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(key)) continue;
+    if (typeof entry === "string") details[key] = redactLogText(entry, 200);
+    else if (typeof entry === "number" && Number.isFinite(entry)) details[key] = entry;
+    else if (typeof entry === "boolean") details[key] = entry;
+  }
+  return details;
+}
 
 function htmlEscape(value: unknown): string {
   return String(value ?? "").replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" }[character] ?? character));
@@ -179,6 +199,27 @@ export const loginDisplay = onCall(displayCallableOptions, async (request) => {
   });
   await db.collection("loginAttempts").doc(attemptKey).delete().catch(() => undefined);
   return { customToken, venueId: token.venueId };
+});
+
+/** Receives redacted diagnostics from authenticated clients only. */
+export const reportClientLog = onCall(callableOptions, async (request) => {
+  const auth = request.auth;
+  const venueId = typeof auth?.token.venueId === "string" ? auth.token.venueId : null;
+  const role = auth?.token.role;
+  if (!auth || !venueId || (role !== "staff" && role !== "display")) {
+    throw new HttpsError("unauthenticated", "Требуется авторизованный клиент.");
+  }
+  const event = String(request.data?.event ?? "");
+  const level = String(request.data?.level ?? "error") as ClientLogLevel;
+  if (!/^[a-z][a-z0-9_]{2,63}$/.test(event) || !["info", "warn", "error"].includes(level)) {
+    throw new HttpsError("invalid-argument", "Некорректный диагностический журнал.");
+  }
+  const message = redactLogText(request.data?.message, 500);
+  const details = clientLogDetails(request.data?.details);
+  const entry = { event, level, message, details, venueId, role, uid: auth.uid };
+  await db.collection("clientLogs").add({ ...entry, createdAt: FieldValue.serverTimestamp() });
+  logger[level]("Client diagnostic", entry);
+  return { accepted: true };
 });
 
 export const rotateDisplayToken = onCall(callableOptions, async (request) => {

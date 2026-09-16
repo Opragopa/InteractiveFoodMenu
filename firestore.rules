@@ -86,6 +86,7 @@ service cloud.firestore {
     match /displayTokens/{document=**} { allow read, write: if false; }
     match /loginAttempts/{document=**} { allow read, write: if false; }
     match /venueAccess/{document=**} { allow read, write: if false; }
+    match /clientLogs/{document=**} { allow read, write: if false; }
     match /{document=**} { allow read, write: if false; }
   }
 }

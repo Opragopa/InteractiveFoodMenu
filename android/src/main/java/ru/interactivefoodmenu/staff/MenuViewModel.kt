@@ -83,7 +83,10 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
                     listOfNotNull(row.category?.let { "[$it]" }, row.name, row.price?.let { "$it ₽" }).joinToString(" — ")
                 }.ifBlank { result.text }
             }.onSuccess { preview -> _state.update { it.copy(ocrBusy = false, ocrPreview = preview) } }
-                .onFailure { error -> _state.update { it.copy(ocrBusy = false, error = "Не удалось распознать фото: ${error.message ?: "проверьте качество снимка"}") } }
+                .onFailure { error ->
+                    app.clientLogger?.error("photo_import_failed", error)
+                    _state.update { it.copy(ocrBusy = false, error = "Не удалось распознать фото: ${error.message ?: "проверьте качество снимка"}") }
+                }
         }
     }
 
@@ -98,7 +101,10 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
                 repository?.importItems(_state.value.venueId ?: error("Сначала войдите в заведение."), _state.value.menu.categories, _state.value.menu.items, rows)
                 rows.size
             }.onSuccess { count -> _state.update { it.copy(busy = false, message = "Импортировано позиций: $count") } }
-                .onFailure { error -> _state.update { it.copy(busy = false, error = "Не удалось импортировать CSV: ${error.message ?: "проверьте файл"}") } }
+                .onFailure { error ->
+                    app.clientLogger?.error("csv_import_failed", error)
+                    _state.update { it.copy(busy = false, error = "Не удалось импортировать CSV: ${error.message ?: "проверьте файл"}") }
+                }
         }
     }
 
@@ -118,6 +124,7 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(pin = "", busy = false) }
                 attach(venueId)
             }.onFailure { error ->
+                app.clientLogger?.error("staff_login_failed", error)
                 _state.update { it.copy(busy = false, error = readable(error)) }
             }
         }
@@ -129,6 +136,7 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
         menuJob = viewModelScope.launch {
             repository?.observeMenu(venueId)
                 ?.catch { error ->
+                    app.clientLogger?.error("menu_subscription_failed", error, mapOf("venueId" to venueId))
                     _state.update { it.copy(menuError = readable(error)) }
                 }
                 ?.collect { menu ->
@@ -163,6 +171,7 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
                 if (pendingAvailability[item.id] == nextAvailability) pendingAvailability.remove(item.id)
             }.onFailure { error ->
                 if (pendingAvailability[item.id] == nextAvailability) pendingAvailability.remove(item.id)
+                app.clientLogger?.error("availability_update_failed", error, mapOf("itemId" to item.id))
                 _state.update { state ->
                     state.copy(
                         menu = state.menu.copy(items = state.menu.items.map { current ->
@@ -253,7 +262,10 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(error = null) }
             runCatching { block() }
                 .onSuccess { if (success != null) _state.update { it.copy(message = success) } }
-                .onFailure { _state.update { state -> state.copy(error = readable(it)) } }
+                .onFailure {
+                    app.clientLogger?.error("menu_mutation_failed", it, mapOf("screen" to _state.value.screen.name))
+                    _state.update { state -> state.copy(error = readable(it)) }
+                }
         }
     }
 
