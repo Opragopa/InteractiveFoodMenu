@@ -53,57 +53,75 @@ Production-вариант изолирует веб-интерфейс в Docker
 
 Ни Docker, ни Windows Firewall не должны публиковать `4000`, `5001`, `8080`, `9099` или `9199`. Публичным остаётся только Nginx на HTTPS. Команда `docker compose down` останавливает только контейнеры меню и не влияет на Jellyfin или системный Nginx.
 
-## Backend в Docker для разработки
+## Локальная отладка: Firebase Emulator Suite
 
-Docker-образ `backend` поднимает локальный Firebase backend: Cloud Functions, Authentication, Firestore и Storage. Это **не** замена production Firebase: production Functions и базы остаются управляемыми сервисами Firebase и разворачиваются обычной командой `firebase deploy`.
+Для разработки используются Firebase Authentication, Firestore, Storage и Functions Emulator. Это не production backend и его нельзя публиковать в интернет. Production-веб из раздела выше использует Firebase Cloud; локальный `backend` запускается только с Compose-профилем `emulators` и не стартует случайно вместе с `web`/`proxy`.
 
-Не открывайте этот набор эмуляторов в интернет: он предназначен только для разработки. Для домашнего сервера с публичным IP оставляйте наружу только веб-сервер/API, а Auth, Firestore, Storage и Emulator UI — во внутренней Docker-сети. HTTP допустим только как временный вариант: его нельзя использовать для входа сотрудника через публичный интернет, поскольку PIN, сессии и данные меню можно перехватить. Для Android в debug HTTP уже разрешён; release-сборка намеренно требует HTTPS.
+HTTP разрешён только в debug-сборках и локальной сети. В release Android требует HTTPS; не выставляйте порты Emulator Suite наружу на домашнем сервере.
 
-### Диагностический журнал
+### Вариант 1: эмуляторы без Docker
 
-Веб-интерфейс и Android отправляют ошибки операций и необработанные ошибки в callable `reportClientLog`. Функция привязывает запись к проверенному пользователю и заведению, сохраняет её в коллекции Firestore `clientLogs` и дублирует в серверный журнал. Секреты, PIN, токены и фрагменты ссылок перед отправкой скрываются; клиентам чтение `clientLogs` запрещено. В локальном Docker-наборе смотрите записи через Emulator UI: `http://localhost:4000/firestore/clientLogs`; в production — в Firestore Console и Cloud Logging.
-
-На машине достаточно Docker Desktop с Compose. Из корня проекта выполните:
+Подходит для обычной разработки на Mac/Windows при установленном Node.js. В первом терминале из корня проекта:
 
 ```bash
+ENFORCE_APP_CHECK=false npx firebase emulators:start \
+  --project interactivefoodmenu \
+  --only auth,functions,firestore,storage
+```
+
+Дождитесь `All emulators ready!`. Во втором терминале можно создать тестовую точку:
+
+```bash
+USE_FIREBASE_EMULATORS=true FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
+DISPLAY_BASE_URL=http://127.0.0.1:5173 \
+npm run seed -- --project=interactivefoodmenu --id=main \
+  --code=my-cafe --pin=123456 --name="Кафе" --demo-menu=true
+```
+
+### Вариант 2: эмуляторы в Docker
+
+Этот вариант не требует Node.js или Java на хосте: образ содержит Firebase CLI и нужные эмуляторы. Требуется только Docker Desktop с запущенным Linux Engine.
+
+```bash
+# запуск и сборка только debug backend, без production web/proxy
 docker compose --profile emulators up --build -d backend
+
+# ждать готовности и смотреть ошибки
+docker compose --profile emulators logs -f backend
 ```
 
-Или используйте скрипт для своей ОС — он проверит Docker и совместим как с Compose v2, так и со старой командой `docker-compose`:
+После строки `All emulators ready!` Emulator UI доступен на `http://localhost:4000`. Порты отладки: Functions `5001`, Firestore `8080`, Auth `9099`, Storage `9199`. Данные хранятся в Docker volume `firebase-emulator-data` и переживают перезапуск.
+
+Для первичной тестовой точки выполните:
 
 ```bash
-# macOS / Linux
-./scripts/install-backend.sh
-
-# Windows (Command Prompt)
-scripts\install-backend.bat
+docker compose --profile emulators exec \
+  -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
+  -e USE_FIREBASE_EMULATORS=true \
+  -e DISPLAY_BASE_URL=http://127.0.0.1:5173 \
+  backend npm run seed -- --project=interactivefoodmenu --id=main \
+  --code=my-cafe --pin=123456 --name="Кафе" --demo-menu=true
 ```
 
-После первого запуска Emulator Suite доступен на `http://localhost:4000`; порты backend: Functions `5001`, Firestore `8080`, Auth `9099`, Storage `9199`. Данные эмуляторов сохраняются в Docker volume `firebase-emulator-data` и переживают перезапуск контейнера.
-
-Первичная сборка скачивает бинарники Firebase Emulator в Docker image и поэтому занимает заметно больше времени. Последующие перезапуски используют их из image и не скачивают заново. Если запуск завершился с ошибкой, контейнер намеренно не перезапускается бесконечно: причина будет видна в `docker compose logs backend`.
-
-После обновления Docker-конфигурации пересоздайте контейнер одной командой:
+Перезапуск backend после изменения Functions:
 
 ```bash
 docker compose --profile emulators up --build --force-recreate -d backend
 ```
 
-Для диагностики остановившегося backend используйте `docker compose logs --tail=150 backend`.
-
-Для создания первой точки дождитесь строк `All emulators ready` в `docker compose logs -f backend`, затем выполните (замените значения своими):
+Остановить только debug backend, не затрагивая production `web`/`proxy` в этом же Compose-проекте:
 
 ```bash
-docker compose exec -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 \
-  -e USE_FIREBASE_EMULATORS=true \
-  -e DISPLAY_BASE_URL=http://192.168.0.183:5173 \
-  backend npm run seed -- --project=interactivefoodmenu --id=main \
-  --code=my-cafe --pin=123456 --name="Кафе" --demo-menu=true
+docker compose --profile emulators stop backend
 ```
 
-`DISPLAY_BASE_URL` должен быть LAN-адресом машины с web-экраном: он попадёт в QR/ссылку для ТВ. Для локальной проверки на одном компьютере можно указать `http://127.0.0.1:5173`.
+На macOS/Linux вместо `docker compose` можно использовать `./scripts/install-backend.sh`; на Windows CMD — `scripts\install-backend.bat`. Оба скрипта запускают только профиль `emulators`.
 
-Остановить backend без удаления данных: `docker compose down`. Чтобы удалить и данные эмуляторов: `docker compose down -v`.
+### Диагностический журнал
+
+Веб-интерфейс и Android отправляют ошибки операций и необработанные ошибки в callable `reportClientLog`. Функция привязывает запись к проверенному пользователю и заведению, сохраняет её в коллекции Firestore `clientLogs` и дублирует в серверный журнал. Секреты, PIN, токены и фрагменты ссылок перед отправкой скрываются; клиентам чтение `clientLogs` запрещено. В локальном Docker-наборе смотрите записи через Emulator UI: `http://localhost:4000/firestore/clientLogs`; в production — в Firestore Console и Cloud Logging.
+
+Для диагностики остановившегося контейнера используйте `docker compose --profile emulators logs --tail=150 backend`. При работе с физическим телефоном или ТВ замените `127.0.0.1` в `FIRESTORE_EMULATOR_HOST` и `DISPLAY_BASE_URL` на LAN-IP машины, где запущены эмуляторы и Vite.
 
 ### Вариант A: Android Emulator
 
