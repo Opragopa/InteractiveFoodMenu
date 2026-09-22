@@ -1,14 +1,15 @@
 # Public Appwrite/API endpoint. TLS is terminated by the existing host Nginx.
 # Appwrite itself is expected on 127.0.0.1:8089 and the application API on
-# 127.0.0.1:8090.
+# 127.0.0.1:8091. The public ports are non-standard because 80/443 belong to
+# another service on this host.
 server {
-    listen 80;
+    listen 8090;
     server_name api.foodmenu.cloudopragopa.online;
-    return 301 https://$host$request_uri;
+    return 301 https://$host:8443$request_uri;
 }
 
 server {
-    listen 443 ssl;
+    listen 8443 ssl;
     server_name api.foodmenu.cloudopragopa.online;
 
     ssl_certificate     C:/nginx/certs/api.foodmenu.cloudopragopa.online/fullchain.pem;
@@ -19,7 +20,7 @@ server {
     location /v1/ {
         proxy_pass http://127.0.0.1:8089;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
@@ -29,21 +30,21 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:8090;
+        proxy_pass http://127.0.0.1:8091;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
     }
 
     location = /health {
-        proxy_pass http://127.0.0.1:8090/health;
-        proxy_set_header Host $host;
+        proxy_pass http://127.0.0.1:8091/health;
+        proxy_set_header Host $http_host;
     }
 
     location = /ready {
-        proxy_pass http://127.0.0.1:8090/ready;
-        proxy_set_header Host $host;
+        proxy_pass http://127.0.0.1:8091/ready;
+        proxy_set_header Host $http_host;
     }
 }

@@ -5,14 +5,16 @@
 - self-hosted Appwrite хранит данные и файлы;
 - `backend-api` — единственная точка входа для web и Android, поэтому клиенты не зависят от конкретной базы данных.
 
-Appwrite и API слушают только loopback-порты сервера. Публичный HTTPS завершается существующим Nginx на `api.foodmenu.cloudopragopa.online`.
+Appwrite и API слушают только loopback-порты сервера. Публичный HTTPS завершается host Nginx на `https://api.foodmenu.cloudopragopa.online:8443`.
 
 ## 1. Требования к серверу
 
 - Docker Desktop с Docker Compose v2;
 - не менее 2 CPU, 4 GB RAM и 2 GB swap;
 - DNS A-запись `api.foodmenu.cloudopragopa.online`, направленная на сервер;
-- открыты наружу только 80/443. Порты 8089, 8090 и 20080 публиковать в интернет не нужно.
+- DNS A-запись должна указывать на внешний WAN-IP, а не LAN-IP `192.168.x.x`;
+- на роутере пробросьте WAN `8090` и `8443` на те же порты Windows-сервера;
+- не публикуйте в интернет порты 8089, 8091 и 20080.
 
 ## 2. Установка Appwrite
 
@@ -29,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-appwrite.ps1
 - Database: PostgreSQL;
 - Workers: Combined;
 - HTTP port: `8089`;
-- HTTPS port: любой свободный внутренний порт, например `8443`.
+- HTTPS port: `8433` (его занимает внутренний Traefik Appwrite; это не public Nginx).
 
 После установки порт мастера `20080` больше не нужен.
 
@@ -69,8 +71,8 @@ docker compose -f compose.backend.yaml logs --tail 100 api
 Локальная проверка на сервере:
 
 ```powershell
-curl.exe http://127.0.0.1:8090/health
-curl.exe http://127.0.0.1:8090/ready
+curl.exe http://127.0.0.1:8091/health
+curl.exe http://127.0.0.1:8091/ready
 ```
 
 Ожидаемые ответы: `status: ok` и `status: ready`.
@@ -82,8 +84,8 @@ curl.exe http://127.0.0.1:8090/ready
 Публичная проверка:
 
 ```powershell
-curl.exe https://api.foodmenu.cloudopragopa.online/health
-curl.exe https://api.foodmenu.cloudopragopa.online/ready
+curl.exe -k https://api.foodmenu.cloudopragopa.online:8443/health
+curl.exe -k https://api.foodmenu.cloudopragopa.online:8443/ready
 ```
 
 ## 5. Обновление
