@@ -89,6 +89,7 @@ export const TABLES: TableDefinition[] = [
       { key: "status", type: "enum", elements: ["pending", "complete", "expired"], required: true },
       { key: "expiresAt", type: "datetime", required: true },
       { key: "createdAt", type: "datetime", required: true },
+      { key: "displayUrl", type: "varchar", size: 500, required: false },
     ],
     indexes: [
       { key: "pairings_by_status", type: "key", attributes: ["status"] },
@@ -157,6 +158,18 @@ async function ensureTable(tables: TablesDB, databaseId: string, definition: Tab
   }
 }
 
+/**
+ * Appwrite does not add columns when a table already exists.  Keep the small
+ * set of additive migrations here, so `npm run bootstrap` is safe on both a
+ * fresh installation and an installation upgraded from an earlier release.
+ */
+async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
+  const columns = await tables.listColumns({ databaseId, tableId: "display_pairings", queries: ["limit(100)"] });
+  if (!columns.columns.some(column => column.key === "displayUrl")) {
+    await tables.createVarcharColumn({ databaseId, tableId: "display_pairings", key: "displayUrl", size: 500, required: false });
+  }
+}
+
 async function ensureBucket(storage: Storage, config: BackendConfig) {
   try {
     await storage.createBucket({
@@ -182,6 +195,7 @@ export async function ensureSchema(services: AppwriteServices, config: BackendCo
   for (const definition of TABLES) {
     tables[definition.id] = await ensureTable(services.tables, config.appwriteDatabaseId, definition);
   }
+  await ensureAdditiveColumns(services.tables, config.appwriteDatabaseId);
   const bucket = await ensureBucket(services.storage, config);
   return { database, tables, bucket };
 }

@@ -8,9 +8,6 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.FirebaseNetworkException
-import com.google.firebase.firestore.FirebaseFirestoreException
-import com.google.firebase.functions.FirebaseFunctionsException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -166,7 +163,7 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             runCatching {
-                (repository ?: error("Firebase не настроен.")).setAvailability(currentItem, nextAvailability)
+                (repository ?: error("Backend API не настроен.")).setAvailability(currentItem, nextAvailability)
             }.onSuccess {
                 if (pendingAvailability[item.id] == nextAvailability) pendingAvailability.remove(item.id)
             }.onFailure { error ->
@@ -271,31 +268,6 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun fail(message: String) { _state.update { it.copy(error = message) } }
 
-    private fun readable(error: Throwable): String = when (error) {
-        is FirebaseFirestoreException -> when (error.code) {
-            FirebaseFirestoreException.Code.PERMISSION_DENIED ->
-                "Firebase отклонил запрос. Проверьте, что вы вошли как сотрудник и у вас есть доступ к этому заведению."
-            FirebaseFirestoreException.Code.UNAUTHENTICATED -> "Сессия завершилась. Войдите в приложение заново."
-            FirebaseFirestoreException.Code.UNAVAILABLE,
-            FirebaseFirestoreException.Code.DEADLINE_EXCEEDED ->
-                "Не удалось связаться с Firebase. Проверьте интернет или запущенные локальные эмуляторы."
-            else -> "Не удалось сохранить изменение в Firebase. Попробуйте ещё раз."
-        }
-        is FirebaseFunctionsException -> when (error.code) {
-            FirebaseFunctionsException.Code.UNAUTHENTICATED ->
-                error.message ?: "Неверный код заведения или PIN."
-            FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
-                error.message ?: "Проверьте код заведения и шестизначный PIN."
-            FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED ->
-                error.message ?: "Слишком много попыток. Повторите через 5 минут."
-            FirebaseFunctionsException.Code.NOT_FOUND ->
-                error.message ?: "Заведение не настроено."
-            FirebaseFunctionsException.Code.INTERNAL ->
-                "Не удалось выполнить вход: backend вернул внутреннюю ошибку. Проверьте, что Firebase эмуляторы запущены и точка my-cafe создана."
-            else -> error.message ?: "Не удалось выполнить операцию."
-        }
-        is FirebaseNetworkException ->
-            "Не удалось подключиться к Firebase. Проверьте интернет или запущенные локальные эмуляторы."
-        else -> error.message?.substringAfterLast(": ") ?: "Не удалось выполнить операцию."
-    }
+    private fun readable(error: Throwable): String = error.message?.substringAfterLast(": ")
+        ?: "Не удалось выполнить операцию. Проверьте соединение с сервером меню."
 }

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
-import { httpsCallable } from "firebase/functions";
-import { auth, functions } from "./firebase";
+import { api } from "./api";
 
 type HubOverview = {
   generatedAt: string;
@@ -23,7 +21,7 @@ function hubInstallationId() {
 
 function errorMessage(cause: unknown) {
   const message = cause instanceof Error ? cause.message : "Операция не выполнена.";
-  return message.replace(/^Firebase:\s*/i, "").replace(/\s*\(functions\/[a-z-]+\)\.?$/i, "");
+  return message.replace(/\s*\(functions\/[a-z-]+\)\.?$/i, "");
 }
 
 function dateTime(value: string | null) {
@@ -31,8 +29,7 @@ function dateTime(value: string | null) {
 }
 
 export function BackendHub() {
-  const [authorized, setAuthorized] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [hubToken, setHubToken] = useState(() => sessionStorage.getItem("ifm-hub-session") ?? "");
   const [accessKey, setAccessKey] = useState("");
   const [overview, setOverview] = useState<HubOverview | null>(null);
   const [tab, setTab] = useState<"venues" | "functions" | "logs" | "audit">("venues");
@@ -45,32 +42,19 @@ export function BackendHub() {
   const loadOverview = useCallback(async () => {
     setBusy(true); setError("");
     try {
-      const call = httpsCallable<Record<string, never>, HubOverview>(functions, "getBackendHubOverview");
-      const response = await call({});
-      setOverview(response.data);
+      setOverview(await api.hubOverview(hubToken) as HubOverview);
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
-  }, []);
+  }, [hubToken]);
 
-  useEffect(() => {
-    const fallback = window.setTimeout(() => setReady(true), 1500);
-    const unsubscribe = onAuthStateChanged(auth, async user => {
-      window.clearTimeout(fallback);
-    if (!user) { setAuthorized(false); setReady(true); return; }
-    const token = await user.getIdTokenResult();
-    const isHubAdmin = token.claims.role === "platform_admin";
-    setAuthorized(isHubAdmin); setReady(true);
-    if (isHubAdmin) void loadOverview();
-    });
-    return () => { window.clearTimeout(fallback); unsubscribe(); };
-  }, [loadOverview]);
+  useEffect(() => { if (hubToken) void loadOverview(); }, [hubToken, loadOverview]);
 
   const login = async () => {
     setBusy(true); setError("");
     try {
-      const call = httpsCallable<{ accessKey: string; installationId: string }, { customToken: string }>(functions, "loginBackendHub");
-      const response = await call({ accessKey, installationId: hubInstallationId() });
-      await signInWithCustomToken(auth, response.data.customToken);
+      const response = await api.hubLogin(accessKey);
+      sessionStorage.setItem("ifm-hub-session", response.token);
+      setHubToken(response.token);
       setAccessKey("");
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
@@ -79,9 +63,8 @@ export function BackendHub() {
   const createVenue = async () => {
     setBusy(true); setError(""); setNotice(""); setCreatedDisplayUrl("");
     try {
-      const call = httpsCallable<typeof newVenue, { venueId: string; displayUrl: string }>(functions, "createVenueFromHub");
-      const response = await call(newVenue);
-      setCreatedDisplayUrl(response.data.displayUrl);
+      const response = await api.hubCreateVenue(hubToken, newVenue);
+      setCreatedDisplayUrl(response.displayUrl);
       setNotice(`Точка «${newVenue.name}» создана.`);
       setNewVenue({ venueId: "", venueCode: "", name: "", pin: "" });
       await loadOverview();
@@ -95,8 +78,7 @@ export function BackendHub() {
     if (!/^\d{6}$/.test(pin)) { setError("PIN должен состоять из шести цифр."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
-      const call = httpsCallable<{ venueId: string; venueCode: string; pin: string }, { updated: boolean }>(functions, "rotateVenuePinFromHub");
-      await call({ venueId, venueCode, pin });
+      await api.hubRotatePin(hubToken, venueId, venueCode, pin);
       setNotice("Код и PIN обновлены. Предыдущие сессии сотрудников отозваны.");
       await loadOverview();
     } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
@@ -106,8 +88,7 @@ export function BackendHub() {
     if (!window.confirm("Отозвать все сессии сотрудников и экранов этой точки? Экраны потребуется подключить заново.")) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const call = httpsCallable<{ venueId: string; scope: "all" }, { revoked: boolean }>(functions, "revokeVenueSessionsFromHub");
-      await call({ venueId, scope: "all" });
+      await api.hubRevoke(hubToken, venueId);
       setNotice("Все сессии точки отозваны.");
       await loadOverview();
     } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
@@ -119,13 +100,12 @@ export function BackendHub() {
     return Array.from(groups.entries());
   }, [overview]);
 
-  if (!ready) return <main className="hub-login"><p>Проверяем доступ…</p></main>;
-  if (!authorized) return <main className="hub-login">
+  if (!hubToken) return <main className="hub-login">
     <div className="hub-login-card"><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1><p>Единый центр управления серверной частью.</p><input type="password" autoComplete="current-password" placeholder="Ключ оператора" value={accessKey} onChange={event => setAccessKey(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void login(); }} /><button disabled={busy || !accessKey} onClick={() => void login()}>{busy ? "Проверяем…" : "Войти в хаб"}</button>{error && <p className="hub-error">{error}</p>}</div>
   </main>;
 
   return <main className="backend-hub">
-    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1></div><nav>{([ ["venues", "Точки"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button className="hub-signout" onClick={() => void auth.signOut()}>Выйти</button></aside>
+    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1></div><nav>{([ ["venues", "Точки"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button className="hub-signout" onClick={() => { sessionStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
     <section className="hub-content">
       <header className="hub-header"><div><span className="hub-kicker">Управление платформой</span><h2>{tab === "venues" ? "Точки и доступ" : tab === "functions" ? "Серверные функции" : tab === "logs" ? "Ошибки клиентов" : "Журнал действий"}</h2></div><button className="hub-refresh" disabled={busy} onClick={() => void loadOverview()}>{busy ? "Обновляем…" : "Обновить"}</button></header>
       {error && <p className="hub-banner hub-error">{error}</p>}{notice && <p className="hub-banner hub-success">{notice}</p>}

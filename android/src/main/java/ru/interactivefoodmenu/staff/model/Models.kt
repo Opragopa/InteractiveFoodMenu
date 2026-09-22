@@ -1,6 +1,5 @@
 package ru.interactivefoodmenu.staff.model
 
-import com.google.firebase.firestore.PropertyName
 
 data class Venue(
     val name: String = "Меню в наличии",
@@ -28,8 +27,6 @@ data class MenuItem(
     val name: String = "",
     val priceMinor: Long = 0,
     val sortOrder: Int = 0,
-    @get:PropertyName("isAvailable")
-    @set:PropertyName("isAvailable")
     var isAvailable: Boolean = true,
 )
 

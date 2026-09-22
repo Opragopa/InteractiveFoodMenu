@@ -1,18 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEffect as useEffectQr } from "react";
-import { onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, writeBatch } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { getDownloadURL, ref } from "firebase/storage";
-import { auth, db, functions, storage } from "./firebase";
 import { DisplayScreen } from "./DisplayScreen";
 import type { Category, MenuItem, Venue } from "./types";
 import QRCode from "qrcode";
 import { parseMenuCsv, type CsvMenuRow } from "./csv";
-import { currentDisplayBaseUrl } from "./displayBaseUrl";
 import { forgetVenueCredentials, saveVenueCredentials, savedVenueCredentials } from "./venueCredentials";
 import { reportClientError } from "./clientLogger";
 import { BackendHub } from "./BackendHub";
+import { api } from "./api";
 
 function installationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -33,11 +28,10 @@ export function App() {
   if (window.location.pathname === "/connect") return <ConnectScreen />;
   if (window.location.pathname === "/staff") return <StaffScreen />;
   if (window.location.pathname === "/pair") return <PairScreen />;
-  const [venueId, setVenueId] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState("");
   const [venue, setVenue] = useState<Venue | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
-  const [logoUrl, setLogoUrl] = useState("");
   const [connected, setConnected] = useState(navigator.onLine);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,14 +47,9 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      const token = await user.getIdTokenResult();
-      const id = token.claims.venueId;
-      if (typeof id === "string") setVenueId(id);
-      setLoading(false);
-      return;
-    }
+  useEffect(() => {
+    let cancelled = false;
+    const login = async () => {
     const credentials = parseDisplayHash();
     if (!credentials) {
       setError("Откройте полную ссылку экрана из приложения сотрудника.");
@@ -68,50 +57,44 @@ export function App() {
       return;
     }
     try {
-      const login = httpsCallable<typeof credentials, { customToken: string; venueId: string }>(functions, "loginDisplay");
-      const response = await login(credentials);
-      await signInWithCustomToken(auth, response.data.customToken);
-      setVenueId(response.data.venueId);
+      const response = await api.displayLogin(credentials.tokenId, credentials.secret);
+      if (!cancelled) setSessionToken(response.token);
     } catch (cause) {
       reportClientError("display_login_failed", cause, { path: window.location.pathname });
       setError("Ссылка экрана недействительна или была перевыпущена.");
       setLoading(false);
     }
-  }), []);
+    };
+    void login();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
-    if (!venueId) return;
-    const unsubVenue = onSnapshot(doc(db, "venues", venueId), { includeMetadataChanges: true }, (snapshot) => {
-      if (snapshot.exists()) {
-        const next = snapshot.data() as Venue;
-        setVenue(next);
-        setConnected(!snapshot.metadata.fromCache && navigator.onLine);
-        if (next.logoPath) getDownloadURL(ref(storage, next.logoPath)).then(setLogoUrl).catch(() => setLogoUrl(""));
-        else setLogoUrl("");
-      }
-      setLoading(false);
-    }, () => setConnected(false));
-    const unsubCategories = onSnapshot(query(collection(db, "categories"), where("venueId", "==", venueId)),
-      (snapshot) => setCategories(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Category))),
-      () => setConnected(false));
-    const unsubItems = onSnapshot(query(collection(db, "items"), where("venueId", "==", venueId)),
-      (snapshot) => setItems(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as MenuItem))),
-      () => setConnected(false));
-    return () => { unsubVenue(); unsubCategories(); unsubItems(); };
-  }, [venueId]);
+    if (!sessionToken) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const menu = await api.menu(sessionToken);
+        if (!cancelled) { setVenue(menu.venue as Venue); setCategories(menu.categories as Category[]); setItems(menu.items as MenuItem[]); setConnected(navigator.onLine); setLoading(false); }
+      } catch (cause) { if (!cancelled) { setConnected(false); setError(cause instanceof Error ? cause.message : "Меню недоступно."); setLoading(false); } }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 3000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [sessionToken]);
 
   if (loading) return <Status text="Подключаем меню…" />;
   if (error) return <Status text={error} error />;
   if (!venue) return <Status text="Меню пока недоступно. Проверьте подключение." error />;
 
-  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl={logoUrl} connected={connected} />;
+  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="" connected={connected} />;
 }
 
 function StaffScreen() {
   const [savedCredentials] = useState(savedVenueCredentials);
   const [code, setCode] = useState(savedCredentials.code);
   const [pin, setPin] = useState(savedCredentials.pin);
-  const [venueId, setVenueId] = useState<string | null>(null);
+  const [sessionToken, setSessionToken] = useState(() => sessionStorage.getItem("ifm-staff-session") ?? "");
   const [venue, setVenue] = useState<Venue | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -126,31 +109,26 @@ function StaffScreen() {
   const login = async () => {
     setBusy(true); setError("");
     try {
-      const call = httpsCallable<{ venueCode: string; pin: string; installationId: string }, { customToken: string; venueId: string }>(functions, "loginStaff");
-      const response = await call({ venueCode: code.trim().toLowerCase(), pin, installationId: installationId() });
-      await signInWithCustomToken(auth, response.data.customToken);
+      const response = await api.staffLogin(code.trim().toLowerCase(), pin);
       saveVenueCredentials(code, pin);
-      setVenueId(response.data.venueId);
+      sessionStorage.setItem("ifm-staff-session", response.token);
+      setSessionToken(response.token);
     } catch (cause) {
       reportClientError("staff_login_failed", cause);
       setError(cause instanceof Error ? cause.message : "Не удалось войти");
     }
     finally { setBusy(false); }
   };
-  useEffect(() => onAuthStateChanged(auth, async (user) => {
-    if (!user) { setVenueId(null); return; }
-    const token = await user.getIdTokenResult();
-    if (token.claims.role === "staff" && typeof token.claims.venueId === "string") setVenueId(token.claims.venueId);
-  }), []);
   useEffect(() => {
-    if (!venueId) return;
-    const stopVenue = onSnapshot(doc(db, "venues", venueId), snapshot => {
-      if (snapshot.exists()) setVenue({ ...snapshot.data() } as Venue);
-    }, cause => setError(cause instanceof Error ? cause.message : "Не удалось загрузить настройки точки."));
-    const stopCategories = onSnapshot(query(collection(db, "categories"), where("venueId", "==", venueId)), s => setCategories(s.docs.map(d => ({ id: d.id, ...d.data() } as Category))));
-    const stopItems = onSnapshot(query(collection(db, "items"), where("venueId", "==", venueId)), s => setItems(s.docs.map(d => ({ id: d.id, ...d.data() } as MenuItem))));
-    return () => { stopVenue(); stopCategories(); stopItems(); };
-  }, [venueId]);
+    if (!sessionToken) return;
+    let cancelled = false;
+    const load = async () => {
+      try { const menu = await api.menu(sessionToken); if (!cancelled) { setVenue(menu.venue as Venue); setCategories(menu.categories as Category[]); setItems(menu.items as MenuItem[]); } }
+      catch (cause) { if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось загрузить меню."); }
+    };
+    void load(); const timer = window.setInterval(() => void load(), 3000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [sessionToken]);
   useLayoutEffect(() => {
     const previous = previousRowsRef.current;
     const root = availabilityListRef.current;
@@ -171,14 +149,14 @@ function StaffScreen() {
       row.style.transform = "translateY(0)";
     })));
   }, [items]);
-  if (!venueId) return <main className="staff-login"><h1>Меню в наличии</h1><h2>Кабинет сотрудника</h2><input placeholder="Код заведения" value={code} onChange={e => setCode(e.target.value)} /><input placeholder="PIN-код" type="password" value={pin} onChange={e => setPin(e.target.value)} /><button onClick={login} disabled={busy}>{busy ? "Входим…" : "Войти"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN — до закрытия браузера.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть данные точки</button>{error && <p className="status-error">{error}</p>}</main>;
+  if (!sessionToken) return <main className="staff-login"><h1>Меню в наличии</h1><h2>Кабинет сотрудника</h2><input placeholder="Код заведения" value={code} onChange={e => setCode(e.target.value)} /><input placeholder="PIN-код" type="password" value={pin} onChange={e => setPin(e.target.value)} /><button onClick={login} disabled={busy}>{busy ? "Входим…" : "Войти"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN — до закрытия браузера.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть данные точки</button>{error && <p className="status-error">{error}</p>}</main>;
   const grouped = categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: items.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) }));
   const toggleAvailability = async (item: MenuItem, unavailable: boolean) => {
     const root = availabilityListRef.current;
     previousRowsRef.current = new Map(Array.from(root?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
     setItems(current => current.map(value => value.id === item.id ? { ...value, isAvailable: !unavailable } : value));
     try {
-      await updateDoc(doc(db, "items", item.id), { isAvailable: !unavailable, updatedAt: serverTimestamp(), updatedBy: "web-staff" });
+      await api.updateItem(sessionToken, item.id, { isAvailable: !unavailable });
     } catch (cause) {
       const currentRoot = availabilityListRef.current;
       previousRowsRef.current = new Map(Array.from(currentRoot?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
@@ -187,12 +165,12 @@ function StaffScreen() {
       setError(cause instanceof Error ? `Не удалось обновить наличие: ${cause.message}` : "Не удалось обновить наличие.");
     }
   };
-  const saveCategory = async () => { const name = newCategory.trim(); if (!name) return; await addDoc(collection(db, "categories"), { venueId, name, sortOrder: categories.length, updatedAt: serverTimestamp(), updatedBy: "web-staff" }); setNewCategory(""); };
-  const saveItem = async () => { const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100); if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor)) return; await addDoc(collection(db, "items"), { venueId, categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true, updatedAt: serverTimestamp(), updatedBy: "web-staff" }); setNewItem({ name: "", price: "", categoryId: newItem.categoryId }); };
+  const saveCategory = async () => { const name = newCategory.trim(); if (!name) return; await api.createCategory(sessionToken, { name, sortOrder: categories.length }); setNewCategory(""); };
+  const saveItem = async () => { const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100); if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor)) return; await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true }); setNewItem({ name: "", price: "", categoryId: newItem.categoryId }); };
   const saveVenueSettings = async (settings: Pick<Venue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent">) => {
     setBusy(true);
     try {
-      await updateDoc(doc(db, "venues", venueId), { ...settings, updatedAt: serverTimestamp(), updatedBy: "web-staff" });
+      await api.updateVenue(sessionToken, settings);
     } finally { setBusy(false); }
   };
   const importCsv = async () => {
@@ -201,23 +179,19 @@ function StaffScreen() {
     try {
       const categoryIds = new Map(categories.map(category => [category.name.trim().toLocaleLowerCase(), category.id]));
       const categoryOrders = new Map(categories.map(category => [category.id, items.filter(item => item.categoryId === category.id).length]));
-      const operations: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
-      csvRows.map(row => row.category).filter((name, index, names) => names.findIndex(other => other.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()) === index).forEach((name, index) => {
+      for (const [index, name] of csvRows.map(row => row.category).filter((name, index, names) => names.findIndex(other => other.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()) === index).entries()) {
         const key = name.trim().toLocaleLowerCase();
         if (!categoryIds.has(key)) {
-          const ref = doc(collection(db, "categories"));
-          categoryIds.set(key, ref.id); categoryOrders.set(ref.id, 0);
-          operations.push(batch => batch.set(ref, { venueId, name, sortOrder: categories.length + index, updatedAt: serverTimestamp(), updatedBy: "csv-import" }));
+          const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length + index });
+          categoryIds.set(key, result.category.id); categoryOrders.set(result.category.id, 0);
         }
-      });
-      csvRows.forEach(row => {
+      }
+      for (const row of csvRows) {
         const categoryId = categoryIds.get(row.category.trim().toLocaleLowerCase())!;
         const sortOrder = categoryOrders.get(categoryId) ?? 0;
         categoryOrders.set(categoryId, sortOrder + 1);
-        const ref = doc(collection(db, "items"));
-        operations.push(batch => batch.set(ref, { venueId, categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, isAvailable: row.isAvailable, updatedAt: serverTimestamp(), updatedBy: "csv-import" }));
-      });
-      for (let start = 0; start < operations.length; start += 500) { const batch = writeBatch(db); operations.slice(start, start + 500).forEach(operation => operation(batch)); await batch.commit(); }
+        await api.createItem(sessionToken, { categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, isAvailable: row.isAvailable });
+      }
       setCsvRows([]);
     } catch (cause) { setError(cause instanceof Error ? `Не удалось импортировать CSV: ${cause.message}` : "Не удалось импортировать CSV."); }
     finally { setBusy(false); }
@@ -232,7 +206,7 @@ function StaffScreen() {
     <main className="staff-menu">
       <header>
         <h1>Меню в наличии</h1>
-        <button onClick={() => { auth.signOut(); setVenueId(null); }}>Выйти</button>
+        <button onClick={() => { sessionStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
       </header>
       <nav className="staff-tabs">
         <button className={tab === "availability" ? "active" : ""} onClick={() => setTab("availability")}>Наличие</button>
@@ -256,7 +230,7 @@ function StaffScreen() {
         <section>
           <h2>Категории</h2>
           <div className="form-row"><input placeholder="Новая категория" value={newCategory} onChange={event => setNewCategory(event.target.value)} /><button onClick={saveCategory}>Добавить</button></div>
-          {categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button onClick={() => deleteDoc(doc(db, "categories", category.id))}>Удалить</button></label>)}
+          {categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button onClick={() => void api.deleteCategory(sessionToken, category.id)}>Удалить</button></label>)}
         </section>
       )}
       {tab === "items" && (
@@ -273,7 +247,7 @@ function StaffScreen() {
             <small>Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.</small>
             {csvRows.length > 0 && <button onClick={importCsv} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>
-          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button onClick={() => deleteDoc(doc(db, "items", item.id))}>Удалить</button></label>)}
+          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button onClick={() => void api.deleteItem(sessionToken, item.id)}>Удалить</button></label>)}
         </section>
       )}
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
@@ -350,22 +324,20 @@ function ConnectScreen() {
     let poll: number | undefined;
     (async () => {
       try {
-        const create = httpsCallable<{ displayBaseUrl: string }, { pairingToken: string; displayBaseUrl: string; expiresInSeconds: number }>(functions, "createDisplayPairing");
-        const response = await create({ displayBaseUrl: currentDisplayBaseUrl() });
-        const pairingUrl = `${response.data.displayBaseUrl}/pair#${response.data.pairingToken}`;
+        const response = await api.createPairing();
+        const pairingUrl = `${response.displayBaseUrl}/pair#${response.pairingToken}`;
         const dataUrl = await QRCode.toDataURL(pairingUrl, { margin: 2, width: 420 });
         if (!cancelled) {
           setQr(dataUrl);
           setNow(Date.now());
-          setExpiresAt(Date.now() + response.data.expiresInSeconds * 1000);
+          setExpiresAt(Date.now() + response.expiresInSeconds * 1000);
         }
-        const status = httpsCallable<{ pairingToken: string }, { status: string; displayUrl?: string | null }>(functions, "getDisplayPairingStatus");
         poll = window.setInterval(async () => {
           try {
-            const result = await status({ pairingToken: response.data.pairingToken });
-            if (result.data.status === "used" && result.data.displayUrl) {
+            const result = await api.pairingStatus(response.pairingToken);
+            if (result.status === "complete" && result.displayUrl) {
               if (poll !== undefined) window.clearInterval(poll);
-              window.location.href = result.data.displayUrl;
+              window.location.href = result.displayUrl;
             }
           } catch { /* the QR remains visible until it expires */ }
         }, 2000);
@@ -398,8 +370,7 @@ function PairScreen() {
   const complete = async () => {
     setBusy(true); setError("");
     try {
-      const call = httpsCallable<{ pairingToken: string; venueCode: string; pin: string }, { displayUrl: string }>(functions, "completeDisplayPairing");
-      const response = await call({ pairingToken: token, venueCode: code.trim().toLowerCase(), pin });
+      await api.completePairing(token, code.trim().toLowerCase(), pin);
       saveVenueCredentials(code, pin);
       window.location.href = `${window.location.origin}/staff`;
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Ссылка подключения недействительна"); }

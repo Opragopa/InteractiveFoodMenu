@@ -130,7 +130,7 @@ private fun ConfigurationMissing() = Column(
     verticalArrangement = Arrangement.Center,
     horizontalAlignment = Alignment.CenterHorizontally,
 ) {
-    Text("Firebase не настроен", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+    Text("Backend API не настроен", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(12.dp))
     Text("Добавьте android/google-services.json и пересоберите приложение.")
 }

@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functions } from "./firebase";
+import { api } from "./api";
 
 type Level = "info" | "warn" | "error";
 type Details = Record<string, string | number | boolean | undefined>;
@@ -20,7 +19,8 @@ function safeDetails(details: Details = {}) {
 
 export function reportClientLog(level: Level, event: string, message = "", details: Details = {}) {
   console[level](`[${event}]`, message, safeDetails(details));
-  void httpsCallable(functions, "reportClientLog")({ level, event, message: redact(message), details: safeDetails(details) }).catch(() => undefined);
+  const token = sessionStorage.getItem("ifm-staff-session");
+  if (token) void api.clientLog(token, level, `${event}: ${redact(message)}`, safeDetails(details)).catch(() => undefined);
 }
 
 export function reportClientError(event: string, error: unknown, details: Details = {}) {

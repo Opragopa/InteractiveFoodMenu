@@ -1,33 +1,10 @@
 import java.util.Properties
 
-val googleServicesFile = file("google-services.json")
-val firebasePackageNames = if (googleServicesFile.exists()) {
-    Regex(""""package_name"\s*:\s*"([^"]+)"""")
-        .findAll(googleServicesFile.readText())
-        .map { it.groupValues[1] }
-        .toSet()
-} else {
-    emptySet()
-}
-val firebaseApplicationId = firebasePackageNames.firstOrNull() ?: "ru.interactivefoodmenu.staff"
-val debugApplicationId = "$firebaseApplicationId.debug"
-val useFirebaseEmulatorsOverride = providers.gradleProperty("useFirebaseEmulators").orNull?.toBooleanStrictOrNull()
-val firebaseEmulatorHost = providers.gradleProperty("firebaseEmulatorHost").orNull ?: "127.0.0.1"
-val displayBaseUrlOverride = providers.gradleProperty("displayBaseUrl").orNull?.trim()?.removeSuffix("/")
-val debugUsesEmulators = useFirebaseEmulatorsOverride ?: true
-val debugDisplayBaseUrl = displayBaseUrlOverride ?: if (debugUsesEmulators && firebaseEmulatorHost !in setOf("localhost", "127.0.0.1", "::1")) {
-    "http://$firebaseEmulatorHost:5173"
-} else {
-    ""
-}
+val backendApiUrl = providers.gradleProperty("backendApiUrl").orNull?.trim()?.removeSuffix("/") ?: "https://api.foodmenu.cloudopragopa.online/api"
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
-}
-
-if (googleServicesFile.exists()) {
-    apply(plugin = "com.google.gms.google-services")
 }
 
 android {
@@ -35,18 +12,14 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = firebaseApplicationId
+        applicationId = "ru.interactivefoodmenu.staff"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
-        buildConfigField("boolean", "HAS_FIREBASE_CONFIG", googleServicesFile.exists().toString())
-        buildConfigField("boolean", "USE_FIREBASE_EMULATORS", "false")
-        buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$firebaseEmulatorHost\"")
-        buildConfigField("String", "DISPLAY_BASE_URL", "\"\"")
-        buildConfigField("String", "FUNCTIONS_REGION", "\"europe-west1\"")
+        buildConfigField("String", "BACKEND_API_URL", "\"$backendApiUrl\"")
     }
 
     signingConfigs {
@@ -64,12 +37,7 @@ android {
 
     buildTypes {
         debug {
-            if (!googleServicesFile.exists() || debugApplicationId in firebasePackageNames) {
-                applicationIdSuffix = ".debug"
-            }
-            buildConfigField("boolean", "USE_FIREBASE_EMULATORS", (useFirebaseEmulatorsOverride ?: true).toString())
-            buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$firebaseEmulatorHost\"")
-            buildConfigField("String", "DISPLAY_BASE_URL", "\"$debugDisplayBaseUrl\"")
+            applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
         release {
@@ -77,9 +45,6 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (signingConfigs.names.contains("release")) signingConfig = signingConfigs.getByName("release")
-            buildConfigField("boolean", "USE_FIREBASE_EMULATORS", "false")
-            buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$firebaseEmulatorHost\"")
-            buildConfigField("String", "DISPLAY_BASE_URL", "\"${displayBaseUrlOverride ?: ""}\"")
         }
     }
 
@@ -106,13 +71,6 @@ dependencies {
     implementation("com.google.zxing:core:3.5.4")
     implementation("com.google.mlkit:text-recognition:16.0.1")
 
-    implementation(platform("com.google.firebase:firebase-bom:34.18.0"))
-    implementation("com.google.firebase:firebase-auth")
-    implementation("com.google.firebase:firebase-firestore")
-    implementation("com.google.firebase:firebase-functions")
-    implementation("com.google.firebase:firebase-storage")
-    implementation("com.google.firebase:firebase-appcheck-playintegrity")
-    implementation("com.google.firebase:firebase-appcheck-debug")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")

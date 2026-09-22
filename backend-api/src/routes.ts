@@ -83,6 +83,27 @@ async function ownedRow(services: AppwriteServices, config: BackendConfig, table
   return row;
 }
 
+function displayUrl(config: BackendConfig, tokenId: string, secret: string) {
+  return `${config.displayBaseUrl}/#${tokenId}.${secret}`;
+}
+
+async function createDisplayToken(services: AppwriteServices, config: BackendConfig, venueId: string) {
+  const tokenId = ID.unique();
+  const secret = opaqueToken();
+  await services.tables.createRow({
+    databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: tokenId,
+    data: { venueId, tokenHash: await hashSecret(secret), active: true, createdAt: new Date().toISOString() },
+  });
+  return { tokenId, secret, url: displayUrl(config, tokenId, secret) };
+}
+
+async function audit(services: AppwriteServices, config: BackendConfig, action: string, venueId: string | undefined, details: Record<string, unknown> = {}) {
+  await services.tables.createRow({
+    databaseId: config.appwriteDatabaseId, tableId: "admin_audit_logs", rowId: ID.unique(),
+    data: { venueId, action, actor: "backend-hub", detailsJson: JSON.stringify(details), createdAt: new Date().toISOString() },
+  });
+}
+
 export function createApiRouter(services: AppwriteServices, config: BackendConfig): Router {
   const router = Router();
   const databaseId = config.appwriteDatabaseId;
@@ -97,13 +118,26 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
 
   router.get("/hub/overview", asyncRoute(async (request, response) => {
     requireRole(request, config, ["hub"]);
-    const [venues, categories, items, logs] = await Promise.all([
+    const [venues, categories, items, displays, logs, auditLogs] = await Promise.all([
       services.tables.listRows<RowData>({ databaseId, tableId: "venues", queries: [Query.orderAsc("name"), Query.limit(200)] }),
       services.tables.listRows<RowData>({ databaseId, tableId: "categories", queries: [Query.limit(1)], total: true }),
       services.tables.listRows<RowData>({ databaseId, tableId: "items", queries: [Query.limit(1)], total: true }),
+      services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("active", [true]), Query.limit(1)], total: true }),
       services.tables.listRows<RowData>({ databaseId, tableId: "client_logs", queries: [Query.orderDesc("createdAt"), Query.limit(30)] }),
+      services.tables.listRows<RowData>({ databaseId, tableId: "admin_audit_logs", queries: [Query.orderDesc("createdAt"), Query.limit(20)] }),
     ]);
-    response.json({ venues: venues.rows.map(publicRow), counts: { venues: venues.total, categories: categories.total, items: items.total }, logs: logs.rows.map(publicRow) });
+    response.json({
+      generatedAt: new Date().toISOString(),
+      totals: { venues: venues.total, categories: categories.total, items: items.total, activeDisplays: displays.total },
+      venues: venues.rows.map(publicRow),
+      functions: [
+        { name: "auth/staff", area: "Доступ", access: "Публичная", purpose: "Вход сотрудника по коду точки и PIN" },
+        { name: "display/pairings", area: "Экраны", access: "Публичная", purpose: "Одноразовое подключение ТВ через QR-код" },
+        { name: "menu", area: "Меню", access: "Сессия", purpose: "Выдача актуального меню клиентам" },
+      ],
+      clientLogs: logs.rows.map(row => ({ ...publicRow(row), event: row.message, role: row.client })),
+      auditLogs: auditLogs.rows.map(publicRow),
+    });
   }));
 
   router.post("/hub/venues", asyncRoute(async (request, response) => {
@@ -125,7 +159,40 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
         updatedAt: now, updatedBy: "backend-hub",
       },
     });
-    response.status(201).json({ venue: publicRow(row) });
+    const screen = await createDisplayToken(services, config, row.$id);
+    await audit(services, config, "venue_created", row.$id, { code });
+    response.status(201).json({ venue: publicRow(row), venueId: row.$id, displayUrl: screen.url });
+  }));
+
+  router.patch("/hub/venues/:id/access", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
+    if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
+    const code = String(request.body?.venueCode ?? "").trim().toLowerCase();
+    const pin = String(request.body?.pin ?? "");
+    if (!VENUE_CODE.test(code) || !PIN.test(pin)) throw new ApiError(400, "invalid_argument", "Проверьте код точки и шестизначный PIN.");
+    const taken = await venueByCode(services, config, code);
+    if (taken && taken.$id !== venueId) throw new ApiError(409, "already_exists", "Этот код точки уже занят.");
+    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: venueId, data: {
+      code, pinHash: await hashSecret(pin), staffVersion: Number(venue.staffVersion ?? 0) + 1,
+      updatedAt: new Date().toISOString(), updatedBy: "backend-hub",
+    } });
+    await audit(services, config, "venue_pin_rotated", venueId, { code });
+    response.json({ updated: true, venue: publicRow(row) });
+  }));
+
+  router.post("/hub/venues/:id/revoke", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
+    if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
+    const now = new Date().toISOString();
+    const existing = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [venueId]), Query.equal("active", [true]), Query.limit(100)] });
+    await Promise.all(existing.rows.map(row => services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: row.$id, data: { active: false, revokedAt: now } })));
+    await services.tables.updateRow({ databaseId, tableId: "venues", rowId: venueId, data: { staffVersion: Number(venue.staffVersion ?? 0) + 1, displayVersion: Number(venue.displayVersion ?? 0) + 1, updatedAt: now, updatedBy: "backend-hub" } });
+    await audit(services, config, "venue_sessions_revoked", venueId, { scope: "all" });
+    response.json({ revoked: true });
   }));
 
   router.post("/auth/staff", asyncRoute(async (request, response) => {
@@ -136,7 +203,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (!venue || venue.active === false || !(await verifySecret(pin, String(venue.pinHash ?? "")))) {
       throw new ApiError(401, "unauthenticated", "Неверный код точки или PIN.");
     }
-    response.json({ token: signSession({ role: "staff", venueId: venue.$id }, config.sessionSecret), venueId: venue.$id });
+    response.json({ token: signSession({ role: "staff", venueId: venue.$id, version: Number(venue.staffVersion ?? 1) }, config.sessionSecret), venueId: venue.$id });
   }));
 
   router.post("/auth/display", asyncRoute(async (request, response) => {
@@ -146,7 +213,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (!token || token.active !== true || !(await verifySecret(secret, String(token.tokenHash ?? "")))) {
       throw new ApiError(401, "unauthenticated", "Ссылка экрана недействительна.");
     }
-    response.json({ token: signSession({ role: "display", venueId: String(token.venueId) }, config.sessionSecret, "30d"), venueId: token.venueId });
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: String(token.venueId) });
+    response.json({ token: signSession({ role: "display", venueId: String(token.venueId), version: Number(venue.displayVersion ?? 1) }, config.sessionSecret, "30d"), venueId: token.venueId });
   }));
 
   router.get("/menu", asyncRoute(async (request, response) => {
@@ -157,6 +225,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       services.tables.listRows<RowData>({ databaseId, tableId: "categories", queries: [Query.equal("venueId", [claims.venueId]), Query.orderAsc("sortOrder"), Query.limit(500)] }),
       services.tables.listRows<RowData>({ databaseId, tableId: "items", queries: [Query.equal("venueId", [claims.venueId]), Query.limit(5000)] }),
     ]);
+    const expectedVersion = claims.role === "staff" ? venue.staffVersion : venue.displayVersion;
+    if (claims.version !== Number(expectedVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните вход заново.");
     response.json({ venue: publicRow(venue), categories: categories.rows.map(publicRow), items: items.rows.map(publicRow) });
   }));
 
@@ -186,6 +256,17 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data: { venueId: claims.venueId, name: text(request.body?.name, 160), sortOrder: integer(request.body?.sortOrder ?? 0, 0, 100000), updatedAt: new Date().toISOString(), updatedBy: "staff-api" },
     });
     response.status(201).json({ category: publicRow(row) });
+  }));
+
+  router.patch("/categories/:id", asyncRoute(async (request, response) => {
+    const claims = requireRole(request, config, ["staff"]);
+    const rowId = routeId(request.params.id);
+    await ownedRow(services, config, "categories", rowId, claims.venueId!);
+    const data: Record<string, unknown> = { updatedAt: new Date().toISOString(), updatedBy: "staff-api" };
+    if (request.body?.name !== undefined) data.name = text(request.body.name, 160);
+    if (request.body?.sortOrder !== undefined) data.sortOrder = integer(request.body.sortOrder, 0, 100000);
+    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "categories", rowId, data });
+    response.json({ category: publicRow(row) });
   }));
 
   router.delete("/categories/:id", asyncRoute(async (request, response) => {
@@ -236,13 +317,43 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
 
   router.post("/display/rotate", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff"]);
-    const tokenId = ID.unique();
-    const secret = opaqueToken();
     const existing = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [claims.venueId!]), Query.equal("active", [true]), Query.limit(100)] });
     await Promise.all(existing.rows.map(row => services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: row.$id, data: { active: false, revokedAt: new Date().toISOString() } })));
-    await services.tables.createRow({ databaseId, tableId: "display_tokens", rowId: tokenId, data: { venueId: claims.venueId, tokenHash: await hashSecret(secret), active: true, createdAt: new Date().toISOString() } });
-    const displayUrl = `${config.displayBaseUrl}/display/${tokenId}.${secret}`;
-    response.status(201).json({ displayUrl });
+    const next = await createDisplayToken(services, config, claims.venueId!);
+    response.status(201).json({ displayUrl: next.url });
+  }));
+
+  router.post("/display/pairings", asyncRoute(async (_request, response) => {
+    const tokenId = ID.unique();
+    const secret = opaqueToken();
+    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+    await services.tables.createRow({ databaseId, tableId: "display_pairings", rowId: tokenId, data: { tokenHash: await hashSecret(secret), status: "pending", expiresAt, createdAt: new Date().toISOString() } });
+    response.status(201).json({ pairingToken: `${tokenId}.${secret}`, displayBaseUrl: config.displayBaseUrl, expiresInSeconds: 300 });
+  }));
+
+  router.post("/display/pairings/complete", asyncRoute(async (request, response) => {
+    const match = /^([A-Za-z0-9_-]{12,40})\.([A-Za-z0-9_-]{32,80})$/.exec(String(request.body?.pairingToken ?? ""));
+    const code = String(request.body?.venueCode ?? "").trim().toLowerCase();
+    const pin = String(request.body?.pin ?? "");
+    if (!match || !VENUE_CODE.test(code) || !PIN.test(pin)) throw new ApiError(400, "invalid_argument", "Некорректные данные подключения.");
+    const pairing = await services.tables.getRow<RowData>({ databaseId, tableId: "display_pairings", rowId: match[1] }).catch(() => null);
+    if (!pairing || pairing.status !== "pending" || new Date(String(pairing.expiresAt)).getTime() < Date.now() || !(await verifySecret(match[2], String(pairing.tokenHash ?? "")))) throw new ApiError(401, "unauthenticated", "QR-код подключения недействителен или истёк.");
+    const venue = await venueByCode(services, config, code);
+    if (!venue || !(await verifySecret(pin, String(venue.pinHash ?? "")))) throw new ApiError(401, "unauthenticated", "Неверный код заведения или PIN.");
+    const screen = await createDisplayToken(services, config, venue.$id);
+    await services.tables.updateRow({ databaseId, tableId: "display_pairings", rowId: pairing.$id, data: { status: "complete", venueId: venue.$id, displayUrl: screen.url } });
+    response.json({ displayUrl: screen.url, venueId: venue.$id });
+  }));
+
+  router.get("/display/pairings/:id", asyncRoute(async (request, response) => {
+    const secret = String(request.query.secret ?? "");
+    const pairing = await services.tables.getRow<RowData>({ databaseId, tableId: "display_pairings", rowId: routeId(request.params.id) }).catch(() => null);
+    if (!pairing || !(await verifySecret(secret, String(pairing.tokenHash ?? "")))) throw new ApiError(401, "unauthenticated", "QR-код подключения недействителен.");
+    if (pairing.status === "pending" && new Date(String(pairing.expiresAt)).getTime() < Date.now()) {
+      response.json({ status: "expired", displayUrl: null });
+      return;
+    }
+    response.json({ status: pairing.status, displayUrl: pairing.displayUrl ?? null });
   }));
 
   router.post("/client-logs", asyncRoute(async (request, response) => {

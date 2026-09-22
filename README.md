@@ -31,11 +31,11 @@ cp .firebaserc.example .firebaserc
 cp web-display/.env.example web-display/.env.local
 ```
 
-Заполните в `web-display/.env.local` значения `VITE_FIREBASE_*`, затем включите эмуляторы:
+Для web-клиента укажите адрес backend API в `web-display/.env.local`:
 
 ```env
 VITE_USE_EMULATORS=true
-VITE_FIREBASE_EMULATOR_HOST=127.0.0.1
+VITE_BACKEND_API_URL=http://127.0.0.1:8091/api
 ```
 
 В первом терминале, из корня репозитория, запустите Firebase Emulator Suite:
@@ -118,7 +118,7 @@ adb reverse tcp:9199 tcp:9199
 npm run web:dev:lan
 ```
 
-В `.env.local` задайте LAN-IP в `VITE_FIREBASE_EMULATOR_HOST` и `VITE_DISPLAY_BASE_URL`. Для старых webOS/Tizen включите server-rendered экран в `functions/.env`:
+В `.env.local` задайте доступный телевизору адрес API в `VITE_BACKEND_API_URL`. Для старых webOS/Tizen используется отдельная legacy-страница подключения, которая также работает через `/api`.
 
 ```env
 DISPLAY_RENDERER=server
@@ -157,7 +157,7 @@ npx firebase deploy --only firestore:rules,storage,functions,hosting
 
 ### Self-hosted web в Docker
 
-Docker-стек содержит `web` и `proxy`; Firebase Auth, Firestore, Storage и Functions остаются облачными. Создайте `.env.deploy` по шаблону `docker/.env.deploy.example`, укажите Firebase Web config и публичный HTTPS-адрес в `VITE_DISPLAY_BASE_URL`.
+Docker-стек содержит `api`, `web` и `proxy`; клиентские приложения обращаются только к нейтральному API, а данные хранятся в self-hosted Appwrite. Создайте `.env.deploy` по шаблону `docker/.env.deploy.example`; значение `VITE_BACKEND_API_URL=/api` подходит для стандартной конфигурации Nginx.
 
 ```bash
 docker compose --env-file .env.deploy up --build -d

@@ -9,20 +9,20 @@ export function startLegacyConnect(qrCode) {
     statusElement.textContent = message;
   }
 
-  function callable(name, data, callback) {
+  function api(path, method, data, callback) {
     var request = new XMLHttpRequest();
-    request.open("POST", "/interactivefoodmenu/europe-west1/" + name, true);
+    request.open(method, "/api" + path, true);
     request.timeout = 15000;
     request.setRequestHeader("Content-Type", "application/json");
     request.onreadystatechange = function () {
       if (request.readyState !== 4) return;
       var body = null;
       try { body = JSON.parse(request.responseText); } catch (ignore) {}
-      if (request.status >= 200 && request.status < 300 && body && body.result) {
-        callback(null, body.result);
+      if (request.status >= 200 && request.status < 300 && body) {
+        callback(null, body);
         return;
       }
-      var message = body && body.error && body.error.message;
+      var message = body && body.message;
       callback(new Error(message || ("HTTP " + request.status + " — проверьте сеть и сервер")));
     };
     request.onerror = function () { callback(new Error("Нет связи с сервером меню.")); };
@@ -40,16 +40,17 @@ export function startLegacyConnect(qrCode) {
     return;
   }
 
-  callable("createDisplayPairing", { displayBaseUrl: window.location.origin }, function (error, pairing) {
+  api("/display/pairings", "POST", {}, function (error, pairing) {
     if (error) { showError(error); return; }
     var pairingUrl = pairing.displayBaseUrl + "/pair#" + pairing.pairingToken;
     qrCode.toCanvas(canvas, pairingUrl, { width: 360, margin: 2, errorCorrectionLevel: "M" }, function (qrError) {
       if (qrError) { showError(qrError); return; }
       setStatus("Откройте на телефоне сотрудника и отсканируйте QR-код. Ожидаем подключение…", false);
       pollTimer = window.setInterval(function () {
-        callable("getDisplayPairingStatus", { pairingToken: pairing.pairingToken }, function (pollError, result) {
+        var parts = pairing.pairingToken.split(".");
+        api("/display/pairings/" + encodeURIComponent(parts[0]) + "?secret=" + encodeURIComponent(parts[1] || ""), "GET", null, function (pollError, result) {
           if (pollError) return;
-          if (result.status === "used" && result.displayUrl) {
+          if (result.status === "complete" && result.displayUrl) {
             window.clearInterval(pollTimer);
             setStatus("Подключено. Загружаем меню…", false);
             window.location.replace(result.displayUrl);
