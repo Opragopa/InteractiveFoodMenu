@@ -5,7 +5,7 @@
 - self-hosted Appwrite хранит данные и файлы;
 - `backend-api` — единственная точка входа для web и Android, поэтому клиенты не зависят от конкретной базы данных.
 
-Appwrite и API слушают только loopback-порты сервера. Публичный HTTPS завершается host Nginx на `https://api.foodmenu.cloudopragopa.online:8443`.
+Appwrite и API слушают только loopback-порты сервера. Публичный HTTPS завершается host Nginx на `https://api.foodmenu.cloudopragopa.online`.
 
 ## 1. Требования к серверу
 
@@ -13,7 +13,7 @@ Appwrite и API слушают только loopback-порты сервера. 
 - не менее 2 CPU, 4 GB RAM и 2 GB swap;
 - DNS A-запись `api.foodmenu.cloudopragopa.online`, направленная на сервер;
 - DNS A-запись должна указывать на внешний WAN-IP, а не LAN-IP `192.168.x.x`;
-- на роутере пробросьте WAN `8090` и `8443` на те же порты Windows-сервера;
+- на роутере пробросьте WAN `80` и `443` на те же порты Windows-сервера;
 - не публикуйте в интернет порты 8089, 8091 и 20080.
 
 ## 2. Установка Appwrite
@@ -79,13 +79,13 @@ curl.exe http://127.0.0.1:8091/ready
 
 ## 4. Nginx и HTTPS
 
-Скопируйте server block из `docker/host-nginx-appwrite.conf.example` в конфигурацию host Nginx, замените пути к сертификату и ключу, затем проверьте конфигурацию и перезагрузите Nginx.
+Добавьте точные server blocks из `docker/host-nginx-appwrite.conf.example` в конфигурацию host Nginx. Они имеют приоритет над wildcard-маршрутом Jellyfin и не мешают ему. Сначала добавьте HTTP block и получите сертификат для `api.foodmenu.cloudopragopa.online`; затем добавьте HTTPS block, проверьте конфигурацию и перезагрузите Nginx.
 
 Публичная проверка:
 
 ```powershell
-curl.exe -k https://api.foodmenu.cloudopragopa.online:8443/health
-curl.exe -k https://api.foodmenu.cloudopragopa.online:8443/ready
+curl.exe https://api.foodmenu.cloudopragopa.online/health
+curl.exe https://api.foodmenu.cloudopragopa.online/ready
 ```
 
 ## 5. Обновление

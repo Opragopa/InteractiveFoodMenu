@@ -1,20 +1,29 @@
-# Public Appwrite/API endpoint. TLS is terminated by the existing host Nginx.
-# Appwrite itself is expected on 127.0.0.1:8089 and the application API on
-# 127.0.0.1:8091. The public ports are non-standard because 80/443 belong to
-# another service on this host.
+# Add these two exact-host server blocks inside nginx.conf's http { ... }.
+# They win over the Jellyfin wildcard block, so Jellyfin remains available.
 server {
-    listen 8090;
+    listen 80;
     server_name api.foodmenu.cloudopragopa.online;
-    return 301 https://$host:8443$request_uri;
+
+    location /.well-known/acme-challenge/ {
+        root C:/nginx-1.31.1/html;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 server {
-    listen 8443 ssl;
+    listen 443 ssl;
     server_name api.foodmenu.cloudopragopa.online;
 
-    ssl_certificate     C:/nginx/certs/api.foodmenu.cloudopragopa.online/fullchain.pem;
-    ssl_certificate_key C:/nginx/certs/api.foodmenu.cloudopragopa.online/privkey.pem;
-
+    # This certificate must be issued for api.foodmenu.cloudopragopa.online.
+    ssl_certificate     C:/Certbot/live/api.foodmenu.cloudopragopa.online/fullchain.pem;
+    ssl_certificate_key C:/Certbot/live/api.foodmenu.cloudopragopa.online/privkey.pem;
+    ssl_session_cache shared:SSL:1m;
+    ssl_session_timeout 5m;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
     client_max_body_size 5m;
 
     location /v1/ {
@@ -24,6 +33,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $http_host;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 3600s;
@@ -46,5 +56,10 @@ server {
     location = /ready {
         proxy_pass http://127.0.0.1:8091/ready;
         proxy_set_header Host $http_host;
+    }
+
+    # Appwrite Console stays reachable only from the server via localhost.
+    location / {
+        return 404;
     }
 }
