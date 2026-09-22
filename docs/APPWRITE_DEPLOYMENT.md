@@ -60,10 +60,10 @@ $bytes = New-Object byte[] 48
 Соберите API и один раз создайте структуру базы:
 
 ```powershell
-docker compose --env-file .env.deploy build api
-docker compose --env-file .env.deploy run --rm api npm run bootstrap
-docker compose --env-file .env.deploy up -d api
-docker compose --env-file .env.deploy logs --tail 100 api
+docker compose -f compose.backend.yaml build api
+docker compose -f compose.backend.yaml run --rm api npm run bootstrap
+docker compose -f compose.backend.yaml up -d api
+docker compose -f compose.backend.yaml logs --tail 100 api
 ```
 
 Локальная проверка на сервере:
@@ -90,9 +90,9 @@ curl.exe https://api.foodmenu.cloudopragopa.online/ready
 
 ```powershell
 git pull
-docker compose --env-file .env.deploy build api
-docker compose --env-file .env.deploy run --rm api npm run bootstrap
-docker compose --env-file .env.deploy up -d api
+docker compose -f compose.backend.yaml build api
+docker compose -f compose.backend.yaml run --rm api npm run bootstrap
+docker compose -f compose.backend.yaml up -d api
 ```
 
 `bootstrap` идемпотентен: существующие database, tables и bucket не удаляются.

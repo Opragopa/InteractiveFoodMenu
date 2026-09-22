@@ -143,7 +143,7 @@ npm --prefix web-display test
 
 ## Production
 
-Новый бесплатный backend разворачивается на своём сервере через Appwrite и отдельный API. Пошаговая инструкция: [`docs/APPWRITE_DEPLOYMENT.md`](docs/APPWRITE_DEPLOYMENT.md). Firebase-конфигурация ниже временно сохранена для локальной разработки и плавного переноса существующих клиентов.
+Новый бесплатный backend разворачивается на своём сервере через Appwrite и отдельный API (`compose.backend.yaml`). Пошаговая инструкция: [`docs/APPWRITE_DEPLOYMENT.md`](docs/APPWRITE_DEPLOYMENT.md). Firebase-конфигурация ниже временно сохранена для локальной разработки и плавного переноса существующих клиентов.
 
 Старый Firebase-вариант требует Blaze. Он не является целевым production backend после перехода на Appwrite.
 
