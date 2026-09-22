@@ -104,7 +104,7 @@ async function audit(services: AppwriteServices, config: BackendConfig, action: 
   });
 }
 
-async function deleteVenueRows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string) {
+async function deleteVenueRows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string, onRow?: (row: RowData) => void) {
   // The project schema scopes every dependent row by venueId. Read the page
   // before deleting it, then repeat: deleting while using an offset may skip
   // rows as the remaining set shifts.
@@ -113,6 +113,7 @@ async function deleteVenueRows(services: AppwriteServices, databaseId: string, t
       databaseId, tableId, queries: [Query.equal("venueId", [venueId]), Query.limit(100)],
     });
     if (!rows.rows.length) return;
+    rows.rows.forEach(row => onRow?.(row));
     await Promise.all(rows.rows.map(row => services.tables.deleteRow({ databaseId, tableId, rowId: row.$id })));
   }
 }
@@ -213,13 +214,18 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const venueId = routeId(request.params.id);
     const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
     if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
+    const assetIds = new Set<string>();
+    if (typeof venue.logoFileId === "string" && venue.logoFileId) assetIds.add(venue.logoFileId);
 
     // Child data must be removed before its parent so a deleted venue cannot
     // leave usable display links, menu rows, or diagnostic data behind.
     for (const tableId of ["items", "categories", "display_tokens", "display_pairings", "client_logs", "admin_audit_logs"]) {
-      await deleteVenueRows(services, databaseId, tableId, venueId);
+      await deleteVenueRows(services, databaseId, tableId, venueId, row => {
+        if (tableId === "items" && typeof row.imageFileId === "string" && row.imageFileId) assetIds.add(row.imageFileId);
+      });
     }
     await services.tables.deleteRow({ databaseId, tableId: "venues", rowId: venueId });
+    await Promise.all([...assetIds].map(fileId => services.storage.deleteFile({ bucketId: config.appwriteBucketId, fileId }).catch(() => undefined)));
     response.status(204).end();
   }));
 
