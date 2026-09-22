@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { createAppwriteServices } from "./appwrite.js";
 import { loadConfig } from "./config.js";
 import { ApiError, createApiRouter } from "./routes.js";
+import { TABLES } from "./schema.js";
 
 const config = loadConfig();
 const services = createAppwriteServices(config);
@@ -28,7 +29,11 @@ app.get("/health", (_request, response) => {
 
 app.get("/ready", async (_request, response) => {
   try {
-    await services.tables.get({ databaseId: config.appwriteDatabaseId });
+    await Promise.all([
+      services.tables.get({ databaseId: config.appwriteDatabaseId }),
+      ...TABLES.map(table => services.tables.getTable({ databaseId: config.appwriteDatabaseId, tableId: table.id })),
+      services.storage.getBucket({ bucketId: config.appwriteBucketId }),
+    ]);
     response.json({ status: "ready", datastore: "appwrite" });
   } catch (error) {
     console.error("Appwrite readiness check failed", error);
