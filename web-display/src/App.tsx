@@ -12,6 +12,7 @@ import { parseMenuCsv, type CsvMenuRow } from "./csv";
 import { currentDisplayBaseUrl } from "./displayBaseUrl";
 import { forgetVenueCredentials, saveVenueCredentials, savedVenueCredentials } from "./venueCredentials";
 import { reportClientError } from "./clientLogger";
+import { BackendHub } from "./BackendHub";
 
 function installationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -28,6 +29,7 @@ function parseDisplayHash() {
 }
 
 export function App() {
+  if (window.location.pathname === "/hub") return <BackendHub />;
   if (window.location.pathname === "/connect") return <ConnectScreen />;
   if (window.location.pathname === "/staff") return <StaffScreen />;
   if (window.location.pathname === "/pair") return <PairScreen />;

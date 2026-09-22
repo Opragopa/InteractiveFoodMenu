@@ -13,6 +13,7 @@ web-display/public/legacy-connect.js
 *.tsbuildinfo
 functions/lib/
 functions/.env*
+functions/.secret.local
 **/.env.local
 .env.deploy
 .firebase/

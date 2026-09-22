@@ -39,7 +39,9 @@ if (appCheckKey && !isLegacyTv) {
 export const auth = getAuth(firebaseApp);
 // Keep the staff session across page reloads and browser restarts. Explicitly
 // setting this is important for Safari/iOS where the default can vary by mode.
-void setPersistence(auth, isLegacyTv ? inMemoryPersistence : browserLocalPersistence);
+// Persistence can be unavailable in private/restricted browser contexts. Auth
+// still works in memory, so this must not abort the whole application.
+void setPersistence(auth, isLegacyTv ? inMemoryPersistence : browserLocalPersistence).catch(() => undefined);
 // Old TV browsers can expose incomplete IndexedDB implementations. The TV can
 // re-authenticate from its display link, so durable local cache is unnecessary.
 export const db = isLegacyTv

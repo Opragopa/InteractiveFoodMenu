@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase-admin/app";
+import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { logger } from "firebase-functions";
@@ -15,7 +15,15 @@ import {
 import { displayBaseUrl, displayUrl, normalizeDisplayBaseUrl } from "./displayUrl.js";
 import { paginateLegacyDisplay } from "./legacyDisplay.js";
 
-initializeApp();
+export {
+  createVenueFromHub,
+  getBackendHubOverview,
+  loginBackendHub,
+  revokeVenueSessionsFromHub,
+  rotateVenuePinFromHub,
+} from "./backendHub.js";
+
+if (!getApps().length) initializeApp();
 const db = getFirestore();
 const enforceAppCheck = process.env.ENFORCE_APP_CHECK !== "false";
 const callableOptions = { region: "europe-west1", enforceAppCheck, timeoutSeconds: 30 } as const;
