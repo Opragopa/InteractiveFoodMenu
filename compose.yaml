@@ -21,12 +21,10 @@ services:
     tmpfs:
       - /tmp
 
-  # Public entry point for this Compose project. It is bound to loopback only:
-  # the existing host Nginx owns ports 80/443 and proxies to this port.
+  # Internal web proxy retained for container-to-container development only.
+  # On Windows the host Nginx connects directly to the web container below.
   proxy:
     image: nginx:1.28-alpine
-    ports:
-      - "127.0.0.1:${MENU_PROXY_PORT:-8088}:80"
     volumes:
       - ./docker/nginx/menu-proxy.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
@@ -50,6 +48,10 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_BACKEND_API_URL: ${VITE_BACKEND_API_URL:-/api}
+    # The host Nginx owns public 80/443 and forwards the site here. Publishing
+    # this directly avoids an unreliable extra Docker port forward on Windows.
+    ports:
+      - "127.0.0.1:${MENU_PROXY_PORT:-8088}:8080"
     networks:
       - menu_internal
     restart: unless-stopped
