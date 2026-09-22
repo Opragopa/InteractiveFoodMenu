@@ -1,12 +1,13 @@
 # Меню в наличии
 
-Система меню для заведения: Android-приложение сотрудника, веб-кабинет, экран для ТВ и Firebase backend. Сотрудник управляет категориями и позициями, отмечает недоступные блюда, импортирует CSV и выпускает ссылку/QR для экрана.
+Система меню для заведения: Android-приложение сотрудника, веб-кабинет, экран для ТВ и выделенный backend. Сотрудник управляет категориями и позициями, отмечает недоступные блюда, импортирует CSV и выпускает ссылку/QR для экрана.
 
 ## Состав проекта
 
 - `android/` — Kotlin и Jetpack Compose, приложение сотрудника.
 - `web-display/` — React/Vite: веб-кабинет (`/staff`) и экран ТВ (`/connect`).
 - `functions/` — Firebase Functions: вход, pairing, server-rendered экран и диагностические события.
+- `backend-api/` — backend-neutral Node.js API для бесплатного self-hosted Appwrite.
 - `/hub` — защищённый операторский хаб: точки, серверные функции, ошибки клиентов и аудит действий.
 - `firestore.rules`, `storage.rules` — доступ к данным по ролям сотрудника и экрана.
 - `compose.yaml` — production web/proxy и изолированный профиль локальных эмуляторов.
@@ -16,7 +17,7 @@
 - Node.js 22 и npm — для локальной разработки без Docker.
 - JDK 17+ и Android SDK 37 — для Android.
 - Docker Desktop — для Docker-режимов.
-- Firebase-проект на Blaze plan — для production Functions.
+- Self-hosted Appwrite — бесплатный production backend; инструкция в `docs/APPWRITE_DEPLOYMENT.md`.
 
 ## Быстрый локальный запуск
 
@@ -142,7 +143,9 @@ npm --prefix web-display test
 
 ## Production
 
-Firebase остаётся production backend. Перед deploy настройте Firebase Auth, Firestore, Storage, Functions, Hosting и App Check, а также production-конфигурацию Android и web-приложения.
+Новый бесплатный backend разворачивается на своём сервере через Appwrite и отдельный API. Пошаговая инструкция: [`docs/APPWRITE_DEPLOYMENT.md`](docs/APPWRITE_DEPLOYMENT.md). Firebase-конфигурация ниже временно сохранена для локальной разработки и плавного переноса существующих клиентов.
+
+Старый Firebase-вариант требует Blaze. Он не является целевым production backend после перехода на Appwrite.
 
 Развёртывание Firebase:
 

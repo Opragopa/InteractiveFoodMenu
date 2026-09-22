@@ -1,4 +1,26 @@
 services:
+  # Backend-neutral API. Appwrite is installed separately on the host and is
+  # reachable only through its loopback port and this private container link.
+  api:
+    build:
+      context: ./backend-api
+    env_file:
+      - .env.backend
+    ports:
+      - "127.0.0.1:${MENU_API_PORT:-8090}:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - menu_internal
+      - backend_outbound
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
   # Public entry point for this Compose project. It is bound to loopback only:
   # the existing host Nginx owns ports 80/443 and proxies to this port.
   proxy:
@@ -76,6 +98,7 @@ services:
 networks:
   menu_internal:
     internal: true
+  backend_outbound:
 
 volumes:
   firebase-emulator-data:

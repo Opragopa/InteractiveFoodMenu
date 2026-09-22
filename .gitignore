@@ -16,6 +16,9 @@ functions/.env*
 functions/.secret.local
 **/.env.local
 .env.deploy
+.env.backend
+appwrite/
+backend-api/dist/
 .firebase/
 .firebase-data/
 firebase-debug.log
