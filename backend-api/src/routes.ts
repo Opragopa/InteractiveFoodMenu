@@ -104,6 +104,19 @@ async function audit(services: AppwriteServices, config: BackendConfig, action: 
   });
 }
 
+async function deleteVenueRows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string) {
+  // The project schema scopes every dependent row by venueId. Read the page
+  // before deleting it, then repeat: deleting while using an offset may skip
+  // rows as the remaining set shifts.
+  while (true) {
+    const rows = await services.tables.listRows<RowData>({
+      databaseId, tableId, queries: [Query.equal("venueId", [venueId]), Query.limit(100)],
+    });
+    if (!rows.rows.length) return;
+    await Promise.all(rows.rows.map(row => services.tables.deleteRow({ databaseId, tableId, rowId: row.$id })));
+  }
+}
+
 export function createApiRouter(services: AppwriteServices, config: BackendConfig): Router {
   const router = Router();
   const databaseId = config.appwriteDatabaseId;
@@ -193,6 +206,21 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     await services.tables.updateRow({ databaseId, tableId: "venues", rowId: venueId, data: { staffVersion: Number(venue.staffVersion ?? 0) + 1, displayVersion: Number(venue.displayVersion ?? 0) + 1, updatedAt: now, updatedBy: "backend-hub" } });
     await audit(services, config, "venue_sessions_revoked", venueId, { scope: "all" });
     response.json({ revoked: true });
+  }));
+
+  router.delete("/hub/venues/:id", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
+    if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
+
+    // Child data must be removed before its parent so a deleted venue cannot
+    // leave usable display links, menu rows, or diagnostic data behind.
+    for (const tableId of ["items", "categories", "display_tokens", "display_pairings", "client_logs", "admin_audit_logs"]) {
+      await deleteVenueRows(services, databaseId, tableId, venueId);
+    }
+    await services.tables.deleteRow({ databaseId, tableId: "venues", rowId: venueId });
+    response.status(204).end();
   }));
 
   router.post("/auth/staff", asyncRoute(async (request, response) => {

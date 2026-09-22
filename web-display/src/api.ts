@@ -43,4 +43,5 @@ export const api = {
   hubCreateVenue: (token: string, data: { name: string; venueCode: string; pin: string }) => request<any>("/hub/venues", { method: "POST", body: JSON.stringify({ name: data.name, code: data.venueCode, pin: data.pin }) }, token),
   hubRotatePin: (token: string, id: string, venueCode: string, pin: string) => request<any>(`/hub/venues/${id}/access`, { method: "PATCH", body: JSON.stringify({ venueCode, pin }) }, token),
   hubRevoke: (token: string, id: string) => request<any>(`/hub/venues/${id}/revoke`, { method: "POST" }, token),
+  hubDeleteVenue: (token: string, id: string) => request<void>(`/hub/venues/${id}`, { method: "DELETE" }, token),
 };

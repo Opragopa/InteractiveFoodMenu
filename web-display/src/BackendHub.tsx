@@ -36,7 +36,7 @@ export function BackendHub() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [newVenue, setNewVenue] = useState({ venueId: "", venueCode: "", name: "", pin: "" });
+  const [newVenue, setNewVenue] = useState({ venueCode: "", name: "", pin: "" });
   const [createdDisplayUrl, setCreatedDisplayUrl] = useState("");
 
   const loadOverview = useCallback(async () => {
@@ -66,7 +66,7 @@ export function BackendHub() {
       const response = await api.hubCreateVenue(hubToken, newVenue);
       setCreatedDisplayUrl(response.displayUrl);
       setNotice(`Точка «${newVenue.name}» создана.`);
-      setNewVenue({ venueId: "", venueCode: "", name: "", pin: "" });
+      setNewVenue({ venueCode: "", name: "", pin: "" });
       await loadOverview();
     } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
@@ -94,6 +94,16 @@ export function BackendHub() {
     } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
 
+  const deleteVenue = async (venueId: string, name: string) => {
+    if (!window.confirm(`Полностью удалить точку «${name}», её меню, ссылки экранов и журналы? Это действие нельзя отменить.`)) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api.hubDeleteVenue(hubToken, venueId);
+      setNotice(`Точка «${name}» полностью удалена.`);
+      await loadOverview();
+    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
+  };
+
   const groupedFunctions = useMemo(() => {
     const groups = new Map<string, HubOverview["functions"]>();
     overview?.functions.forEach(entry => groups.set(entry.area, [...(groups.get(entry.area) ?? []), entry]));
@@ -112,8 +122,8 @@ export function BackendHub() {
       {overview && <>
         <div className="hub-metrics"><article><small>Точек</small><strong>{overview.totals.venues}</strong></article><article><small>Категорий</small><strong>{overview.totals.categories}</strong></article><article><small>Позиций</small><strong>{overview.totals.items}</strong></article><article><small>Активных экранов</small><strong>{overview.totals.activeDisplays}</strong></article></div>
         {tab === "venues" && <div className="hub-grid">
-          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{overview.venues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{overview.venues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button className="danger" onClick={() => void revokeSessions(venue.id)}>Отозвать</button></td></tr>)}</tbody></table></div></section>
-          <section className="hub-card hub-create"><h3>Новая точка</h3><label>ID<input placeholder="coffee-nevsky" value={newVenue.venueId} onChange={event => setNewVenue({ ...newVenue, venueId: event.target.value.toLowerCase() })} /></label><label>Название<input placeholder="Кофейня на Невском" value={newVenue.name} onChange={event => setNewVenue({ ...newVenue, name: event.target.value })} /></label><label>Код для входа<input placeholder="nevsky" value={newVenue.venueCode} onChange={event => setNewVenue({ ...newVenue, venueCode: event.target.value.toLowerCase() })} /></label><label>PIN<input type="password" inputMode="numeric" maxLength={6} placeholder="6 цифр" value={newVenue.pin} onChange={event => setNewVenue({ ...newVenue, pin: event.target.value.replace(/\D/g, "") })} /></label><button disabled={busy || !newVenue.venueId || !newVenue.name || !newVenue.venueCode || newVenue.pin.length !== 6} onClick={() => void createVenue()}>Создать точку</button>{createdDisplayUrl && <div className="hub-secret"><b>Ссылка первого экрана</b><p>Она показывается только сейчас. Сохраните её безопасно.</p><textarea readOnly value={createdDisplayUrl} /><button onClick={() => void navigator.clipboard.writeText(createdDisplayUrl)}>Скопировать</button></div>}</section>
+          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{overview.venues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{overview.venues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button className="danger" onClick={() => void revokeSessions(venue.id)}>Отозвать</button><button className="danger" onClick={() => void deleteVenue(venue.id, venue.name)}>Удалить</button></td></tr>)}</tbody></table></div></section>
+          <section className="hub-card hub-create"><h3>Новая точка</h3><label>Название<input placeholder="Кофейня на Невском" value={newVenue.name} onChange={event => setNewVenue({ ...newVenue, name: event.target.value })} /></label><label>Код для входа<input placeholder="nevsky" pattern="[a-z0-9-]{3,32}" value={newVenue.venueCode} onChange={event => setNewVenue({ ...newVenue, venueCode: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} /><small>3–32 латинских символа, цифры или дефис.</small></label><label>PIN<input type="password" inputMode="numeric" maxLength={6} placeholder="6 цифр" value={newVenue.pin} onChange={event => setNewVenue({ ...newVenue, pin: event.target.value.replace(/\D/g, "") })} /></label><button disabled={busy || !newVenue.name || newVenue.venueCode.length < 3 || newVenue.pin.length !== 6} onClick={() => void createVenue()}>Создать точку</button>{createdDisplayUrl && <div className="hub-secret"><b>Ссылка первого экрана</b><p>Она показывается только сейчас. Сохраните её безопасно.</p><textarea readOnly value={createdDisplayUrl} /><button onClick={() => void navigator.clipboard.writeText(createdDisplayUrl)}>Скопировать</button></div>}</section>
         </div>}
         {tab === "functions" && <div className="hub-function-groups">{groupedFunctions.map(([area, entries]) => <section className="hub-card" key={area}><div className="hub-card-title"><h3>{area}</h3><small>{entries.length}</small></div>{entries.map(entry => <article className="hub-function" key={entry.name}><div><code>{entry.name}</code><p>{entry.purpose}</p></div><span>{entry.access}</span></article>)}</section>)}</div>}
         {tab === "logs" && <section className="hub-card"><div className="hub-card-title"><h3>Последние события</h3><small>до 30 записей</small></div><div className="hub-log-list">{overview.clientLogs.length ? overview.clientLogs.map(entry => <article key={entry.id} className={`hub-log ${entry.level}`}><div><b>{entry.event}</b><span>{entry.venueId} · {entry.role}</span></div><p>{entry.message || "Без описания"}</p><time>{dateTime(entry.createdAt)}</time></article>) : <p className="hub-empty">Ошибок пока нет.</p>}</div></section>}
