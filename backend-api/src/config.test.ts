@@ -9,6 +9,7 @@ test("backend refuses short secrets", () => {
     PUBLIC_URL: "https://api.example.test",
     DISPLAY_BASE_URL: "https://menu.example.test",
     APPWRITE_ENDPOINT: "http://appwrite/v1",
+    APPWRITE_SELF_SIGNED: "false",
     APPWRITE_PROJECT_ID: "menu",
     APPWRITE_API_KEY: "short",
     BACKEND_SESSION_SECRET: "short",

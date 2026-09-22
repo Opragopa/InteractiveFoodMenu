@@ -49,7 +49,7 @@ Copy-Item .\docker\backend-api.env.example .\.env.backend
 notepad .\.env.backend
 ```
 
-Заполните `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`, публичный адрес web/ТВ в `DISPLAY_BASE_URL` и тот же origin в `CORS_ORIGINS`. Для двух backend-секретов создайте разные случайные значения:
+Заполните `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`, публичный адрес web/ТВ в `DISPLAY_BASE_URL` и тот же origin в `CORS_ORIGINS`. Для Appwrite, установленного с HTTPS, сохраните значения `APPWRITE_ENDPOINT=https://host.docker.internal:8433/v1` и `APPWRITE_SELF_SIGNED=true`: это внутреннее соединение API с Appwrite внутри Docker-хоста. Для двух backend-секретов создайте разные случайные значения:
 
 ```powershell
 $bytes = New-Object byte[] 48

@@ -3,6 +3,7 @@ export type BackendConfig = {
   publicUrl: string;
   displayBaseUrl: string;
   appwriteEndpoint: string;
+  appwriteSelfSigned: boolean;
   appwriteProjectId: string;
   appwriteApiKey: string;
   appwriteDatabaseId: string;
@@ -26,6 +27,7 @@ export function loadConfig(): BackendConfig {
     publicUrl: required("PUBLIC_URL").replace(/\/$/, ""),
     displayBaseUrl: required("DISPLAY_BASE_URL").replace(/\/$/, ""),
     appwriteEndpoint: required("APPWRITE_ENDPOINT").replace(/\/$/, ""),
+    appwriteSelfSigned: process.env.APPWRITE_SELF_SIGNED === "true",
     appwriteProjectId: required("APPWRITE_PROJECT_ID"),
     appwriteApiKey: required("APPWRITE_API_KEY", 20),
     appwriteDatabaseId: process.env.APPWRITE_DATABASE_ID?.trim() || "interactive-food-menu",

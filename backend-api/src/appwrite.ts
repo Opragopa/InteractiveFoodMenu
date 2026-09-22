@@ -11,7 +11,11 @@ export function createAppwriteServices(config: BackendConfig): AppwriteServices 
   const client = new Client()
     .setEndpoint(config.appwriteEndpoint)
     .setProject(config.appwriteProjectId)
-    .setKey(config.appwriteApiKey);
+    .setKey(config.appwriteApiKey)
+    // Appwrite's Traefik uses a local certificate on the Docker host. This
+    // connection never leaves the host network; public client traffic still
+    // terminates at Nginx with a normal trusted certificate.
+    .setSelfSigned(config.appwriteSelfSigned);
 
   return {
     client,
