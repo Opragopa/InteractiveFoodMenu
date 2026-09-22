@@ -54,6 +54,10 @@ services:
       - "127.0.0.1:${MENU_PROXY_PORT:-8088}:8080"
     networks:
       - menu_internal
+      # Docker Desktop for Windows does not publish a host port from a service
+      # connected exclusively to an `internal: true` network. This is still
+      # private: the port above is bound only to host loopback.
+      - backend_outbound
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
