@@ -1,4 +1,4 @@
-import { AppwriteException, type Storage, type TablesDB } from "node-appwrite";
+import { AppwriteException, Query, type Storage, type TablesDB } from "node-appwrite";
 import type { BackendConfig } from "./config.js";
 import type { AppwriteServices } from "./appwrite.js";
 
@@ -164,7 +164,7 @@ async function ensureTable(tables: TablesDB, databaseId: string, definition: Tab
  * fresh installation and an installation upgraded from an earlier release.
  */
 async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
-  const columns = await tables.listColumns({ databaseId, tableId: "display_pairings", queries: ["limit(100)"] });
+  const columns = await tables.listColumns({ databaseId, tableId: "display_pairings", queries: [Query.limit(100)] });
   if (!columns.columns.some(column => column.key === "displayUrl")) {
     await tables.createVarcharColumn({ databaseId, tableId: "display_pairings", key: "displayUrl", size: 500, required: false });
   }
