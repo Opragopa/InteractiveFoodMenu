@@ -165,6 +165,17 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .hub-settings-actions button, .hub-venue-settings .hub-card-title button { padding: 10px 13px; border: 1px solid #b9d0bc; border-radius: 8px; color: #285d36; background: #fff; font: 700 13px inherit; cursor: pointer; }
 .hub-settings-actions button:last-child { color: #fff; background: #56965b; border-color: #56965b; }
 .hub-venue-settings .hub-error { grid-column: 1 / -1; margin: 0; padding: 10px; border-radius: 8px; }
+.hub-displays-overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.hub-displays { padding: 14px; border: 1px solid #d8e7d9; border-radius: 12px; background: #fbfefb; }
+.hub-displays-head, .hub-display-list > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hub-displays-head button, .hub-display-list button { padding: 7px 9px; border: 1px solid #b9d0bc; border-radius: 7px; color: #285d36; background: #fff; font: 650 12px inherit; cursor: pointer; }
+.hub-display-list { display: grid; gap: 8px; margin-top: 10px; }
+.hub-display-list > div { align-items: flex-start; padding-top: 8px; border-top: 1px solid #e5eee6; }
+.hub-display-list > div > span { min-width: 0; display: grid; gap: 3px; }
+.hub-display-list small { color: #6d8272; font-size: 11px; }
+.hub-display-list input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid #b9d0bc; border-radius: 6px; font: inherit; }
+.hub-display-list .revoked { opacity: .58; }
+.hub-display-list .danger { color: #9c3333; border-color: #e2bcbc; }
 .hub-logo-controls { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; border: 1px solid #d8e7d9; border-radius: 10px; color: #4d6372; font-size: 13px; }
 .hub-logo-controls > span { color: #6d8272; }
 .hub-logo-controls button, .hub-upload-button { padding: 9px 12px; border: 1px solid #b9d0bc; border-radius: 8px; color: #285d36; background: #fff; font: 700 13px inherit; cursor: pointer; }
