@@ -183,7 +183,7 @@ function StaffScreen() {
       row.style.transform = "translateY(0)";
     })));
   }, [items]);
-  if (!sessionToken) return <main className="staff-login"><h1>Меню в наличии</h1><h2>Кабинет сотрудника</h2><input placeholder="Код заведения" value={code} onChange={e => setCode(e.target.value)} /><input placeholder="PIN-код" type="password" value={pin} onChange={e => setPin(e.target.value)} /><button onClick={login} disabled={busy}>{busy ? "Входим…" : "Войти"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN — до закрытия браузера.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть данные точки</button>{error && <p className="status-error">{error}</p>}</main>;
+  if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
   const grouped = categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: items.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) }));
   const toggleAvailability = async (item: MenuItem, unavailable: boolean) => {
     const root = availabilityListRef.current;
@@ -396,10 +396,10 @@ function ConnectScreen() {
     })();
     return () => { cancelled = true; if (poll !== undefined) window.clearInterval(poll); };
   }, [refreshKey]);
-  return <main className="status connect-screen">
-    <h1>Подключение телевизора</h1>
+  return <main className="status connect-screen"><section className="connect-card">
+    <span className="auth-kicker">InteractiveFoodMenu</span><h1>Подключение телевизора</h1>
     {qr ? <><img src={qr} alt="QR-код подключения телевизора" /><p>Отсканируйте QR-код телефоном сотрудника и введите код точки и PIN.</p><p className={expired ? "pairing-expired" : "pairing-timer"}>{expired ? "Срок действия ключа истёк." : `До замены ключа: ${formatCountdown(secondsLeft)}`}</p>{expired && <button onClick={() => { setQr(""); setExpiresAt(null); setError(""); setRefreshKey(value => value + 1); }}>Обновить QR-код</button>}</> : <p>{error || "Создаём одноразовый QR-код…"}</p>}
-  </main>;
+  </section></main>;
 }
 
 function formatCountdown(seconds: number) {
@@ -425,7 +425,7 @@ function PairScreen() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Ссылка подключения недействительна"); }
     finally { setBusy(false); }
   };
-  return <main className="staff-login"><h1>Подключить телевизор</h1><h2>Введите данные точки</h2><input placeholder="Код заведения" value={code} onChange={e => setCode(e.target.value)} /><input placeholder="PIN-код" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /><button onClick={complete} disabled={busy || !token}>{busy ? "Подключаем…" : "Подключить телевизор"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN — до закрытия браузера.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть данные точки</button>{error && <p className="status-error">{error}</p>}</main>;
+  return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Подключение экрана</h1><p className="auth-lead">Введите данные точки, чтобы привязать этот телевизор.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button onClick={complete} disabled={busy || !token || pin.length !== 6}>{busy ? "Подключаем…" : "Подключить экран"}</button><small className="saved-credentials">После подключения экран будет получать обновления автоматически.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
 }
 
 function Status({ text, error = false }: { text: string; error?: boolean }) {

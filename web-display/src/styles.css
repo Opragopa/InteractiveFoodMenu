@@ -1,5 +1,5 @@
 @font-face { font-family: Onest; src: url("/fonts/onest-variable.ttf") format("truetype"); font-style: normal; font-weight: 100 900; font-display: swap; }
-:root { font-family: Onest, Arial, sans-serif; color: #201f1c; background: #f7f4ee; font-synthesis: none; }
+:root { font-family: Onest, Arial, sans-serif; color: #183b24; background: #f4f8f4; font-synthesis: none; --green-900: #183b24; --green-700: #285d36; --green-500: #56965b; --surface: #fff; --surface-soft: #f4f8f4; --line: #d8e7d9; --muted: #607568; }
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .startup-status { width: 100%; height: 100%; margin: 0; padding: 32px; display: flex; align-items: center; justify-content: center; color: #4b463e; background: #f7f4ee; font: 600 32px/1.25 Onest, Arial, sans-serif; text-align: center; }
@@ -43,7 +43,19 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .connection.offline::before { background: #b36b00; }
 .status { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 32px; background: #f7f4ee; color: #4b463e; text-align: center; font: 600 32px/1.25 Arial, sans-serif; font: 600 clamp(24px, 3vw, 48px)/1.25 system-ui, sans-serif; }
 .status-error { color: #8c2f20; }
-.connect-screen { flex-direction: column; gap: 16px; }
+.connect-screen { flex-direction: column; gap: 16px; padding: 24px; background: linear-gradient(145deg, #f4f8f4, #eaf3eb); }
+.connect-card { width: min(100%, 620px); display: grid; justify-items: center; gap: 14px; padding: clamp(24px, 5vw, 44px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,.94); box-shadow: 0 22px 55px rgba(40,93,54,.12); }
+.connect-card h1 { color: var(--green-900); font-size: clamp(30px, 5vw, 52px); text-align: center; }
+.auth-shell { min-height: 100%; display: grid; place-items: center; padding: clamp(18px, 4vw, 56px); background: radial-gradient(circle at 20% 0%, #dfeee1, transparent 45%), #f4f8f4; }
+.auth-card { width: min(100%, 500px); display: grid; gap: 14px; padding: clamp(24px, 5vw, 46px); border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,.96); box-shadow: 0 24px 60px rgba(40,93,54,.12); }
+.auth-kicker { color: var(--green-500); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.auth-card h1 { color: var(--green-900); font-size: clamp(34px, 6vw, 58px); letter-spacing: -.04em; }
+.auth-lead { margin: -4px 0 10px; color: var(--muted); line-height: 1.5; }
+.auth-card label { display: grid; gap: 7px; color: var(--green-700); font-size: 14px; font-weight: 700; }
+.auth-card input { width: 100%; padding: 14px 15px; border: 1px solid #b9d0bc; border-radius: 11px; color: var(--green-900); background: #fbfefb; font: inherit; font-size: 16px; }
+.auth-card input:focus { outline: 3px solid rgba(86,150,91,.22); border-color: var(--green-500); }
+.auth-card > button:not(.link-button) { min-height: 48px; padding: 13px 18px; border: 0; border-radius: 11px; color: #fff; background: var(--green-500); font: 800 15px inherit; cursor: pointer; }
+.auth-card > button:disabled { opacity: .55; cursor: not-allowed; }
 .connect-screen img { width: 70vw; width: min(70vw, 420px); height: auto; background: white; padding: 12px; }
 .connect-screen p { margin: 0; max-width: 720px; font-size: clamp(18px, 2vw, 28px); }
 .pairing-timer { color: #4b463e; font-variant-numeric: tabular-nums; }
@@ -57,8 +69,9 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .staff-login button, .staff-menu header button { padding: 14px 24px; border: 0; border-radius: 999px; color: white; background: #9c3d24; font: 700 18px inherit; cursor: pointer; }
 .saved-credentials { color: #6c655d; font-size: 14px; }
 .staff-login .link-button { padding: 0; border: 0; border-radius: 0; color: #70412f; background: transparent; font: inherit; text-decoration: underline; text-align: left; }
-.staff-menu header { justify-content: space-between; }
-.staff-tabs { display: flex; flex-wrap: wrap; gap: 8px; max-width: 900px; margin: 20px auto; border-bottom: 1px solid #d8d0c4; }
+.staff-menu header { position: sticky; top: 0; z-index: 3; justify-content: space-between; gap: 12px; padding: 14px 0; background: rgba(247,244,238,.94); backdrop-filter: blur(12px); }
+.staff-menu header h1 { font-size: clamp(28px, 4vw, 48px); }
+.staff-tabs { position: sticky; top: 76px; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; max-width: 900px; margin: 10px auto 20px; padding: 8px 0; border-bottom: 1px solid #d8d0c4; background: rgba(247,244,238,.94); backdrop-filter: blur(12px); }
 .staff-tabs button, .form-row button { padding: 10px 16px; border: 1px solid #c7bdb0; border-radius: 8px; background: white; font: inherit; cursor: pointer; }
 .staff-tabs button.active { color: white; background: #9c3d24; }
 .form-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
@@ -97,7 +110,7 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 @keyframes item-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes item-in-unavailable { from { opacity: 0; transform: translateY(10px); } to { opacity: .38; transform: translateY(0); } }
 @media (max-width: 899px) { .display { padding: 24px; } .continued { display: none; } }
-@media (max-width: 600px) { .staff-menu { padding: 20px; } .venue-settings { padding: 16px; } .setting-field, .duration-setting { grid-template-columns: 1fr; } .duration-setting small { grid-column: 1; } }
+@media (max-width: 600px) { .staff-menu { padding: 14px; } .staff-menu header { align-items: flex-start; flex-wrap: wrap; } .staff-menu header > button { flex: 1 1 auto; min-height: 42px; } .staff-tabs { top: 114px; overflow-x: auto; flex-wrap: nowrap; } .staff-tabs button { min-height: 42px; white-space: nowrap; } .venue-settings { padding: 16px; } .setting-field, .duration-setting { grid-template-columns: 1fr; } .duration-setting small { grid-column: 1; } }
 @media (prefers-reduced-motion: reduce) { .page, .page-transition, .menu-item-enter { animation: none; } .availability-list label { transition: none !important; } }
 
 /* Backend Hub is intentionally visually isolated from the customer-facing menu. */
