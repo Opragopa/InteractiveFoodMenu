@@ -84,8 +84,8 @@ export function autoScaleForMenu(categories: Category[], items: MenuItem[], widt
 }
 
 export function itemNameScale(name: string) {
-  if (name.length > 60) return 0.68;
-  if (name.length > 42) return 0.78;
-  if (name.length > 28) return 0.88;
+  if (name.length > 54) return 0.62;
+  if (name.length > 38) return 0.72;
+  if (name.length > 24) return 0.84;
   return 1;
 }
