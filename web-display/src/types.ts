@@ -9,6 +9,8 @@ export type Venue = {
   logoInsetPercent?: number;
   logoScalePercent?: number;
   logoVisible?: boolean;
+  menuRefreshSeconds?: number;
+  menuVersion?: number;
   pageDurationSeconds: number;
   displayScalePercent?: number;
 };

@@ -13,6 +13,7 @@ describe("venue appearance editor", () => {
       logoInsetPercent: 8,
       logoScalePercent: 145,
       logoVisible: false,
+      menuRefreshSeconds: 45,
     });
     expect(settings).toMatchObject({
       backgroundColor: "#56965B",
@@ -23,6 +24,7 @@ describe("venue appearance editor", () => {
       logoInsetPercent: 8,
       logoScalePercent: 145,
       logoVisible: false,
+      menuRefreshSeconds: 45,
     });
   });
 
@@ -53,5 +55,6 @@ describe("venue appearance editor", () => {
     expect(settings.logoInsetPercent).toBe(3);
     expect(settings.logoScalePercent).toBe(100);
     expect(settings.logoVisible).toBe(true);
+    expect(settings.menuRefreshSeconds).toBe(15);
   });
 });

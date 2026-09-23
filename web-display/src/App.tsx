@@ -34,9 +34,11 @@ export function App() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [connected, setConnected] = useState(navigator.onLine);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [menuRefreshSeconds, setMenuRefreshSeconds] = useState(15);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const hasLoadedMenuRef = useRef(false);
+  const menuVersionRef = useRef<number | null>(null);
 
   useEffect(() => {
     const online = () => setConnected(true);
@@ -79,6 +81,8 @@ export function App() {
         const menu = await api.menu(sessionToken);
         if (!cancelled) {
           hasLoadedMenuRef.current = true;
+          menuVersionRef.current = Number((menu.venue as Venue).menuVersion ?? 1);
+          setMenuRefreshSeconds(Math.min(300, Math.max(5, Number((menu.venue as Venue).menuRefreshSeconds ?? 15))));
           setVenue(menu.venue as Venue); setCategories(menu.categories as Category[]); setItems(menu.items as MenuItem[]);
           setLastUpdatedAt(Date.now()); setConnected(true); setError(""); setLoading(false);
         }
@@ -90,9 +94,17 @@ export function App() {
       }
     };
     void load();
-    const timer = window.setInterval(() => void load(), 3000);
+    const timer = window.setInterval(async () => {
+      try {
+        const version = await api.menuVersion(sessionToken);
+        if (version.version !== menuVersionRef.current) await load();
+        else setConnected(true);
+      } catch {
+        if (!cancelled) setConnected(false);
+      }
+    }, menuRefreshSeconds * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [sessionToken]);
+  }, [sessionToken, menuRefreshSeconds]);
 
   if (loading) return <Status text="Подключаем меню…" />;
   if (error) return <Status text={error} error />;

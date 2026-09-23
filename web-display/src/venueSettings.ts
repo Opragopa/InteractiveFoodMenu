@@ -11,6 +11,7 @@ export type VenueAppearance = {
   logoInsetPercent: number;
   logoScalePercent: number;
   logoVisible?: boolean;
+  menuRefreshSeconds?: number;
 };
 
 export const polytechAppearance = { backgroundColor: "#56965B", accentColor: "#FFFFFF" };
@@ -38,5 +39,6 @@ export function normalizeVenueAppearance(value: VenueAppearance): VenueAppearanc
     logoInsetPercent: clampInteger(value.logoInsetPercent, 0, 20, 3),
     logoScalePercent: clampInteger(value.logoScalePercent, 50, 200, 100),
     logoVisible: value.logoVisible !== false,
+    menuRefreshSeconds: clampInteger(value.menuRefreshSeconds, 5, 300, 15),
   };
 }

@@ -1,4 +1,4 @@
-import { AppwriteException, Query, type Storage, type TablesDB } from "node-appwrite";
+import { AppwriteException, Query, type Models, type Storage, type TablesDB } from "node-appwrite";
 import type { BackendConfig } from "./config.js";
 import type { AppwriteServices } from "./appwrite.js";
 
@@ -34,6 +34,8 @@ export const TABLES: TableDefinition[] = [
       { key: "displayScalePercent", type: "integer", required: true, min: 50, max: 160 },
       { key: "staffVersion", type: "integer", required: true },
       { key: "displayVersion", type: "integer", required: true },
+      { key: "menuVersion", type: "integer", required: false, min: 1 },
+      { key: "menuRefreshSeconds", type: "integer", required: false, min: 5, max: 300 },
       { key: "active", type: "boolean", required: true },
       ...commonAuditColumns,
     ],
@@ -185,6 +187,23 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   if (!venueColumns.columns.some(column => column.key === "logoVisible")) {
     await tables.createBooleanColumn({ databaseId, tableId: "venues", key: "logoVisible", required: false });
   }
+  if (!venueColumns.columns.some(column => column.key === "menuVersion")) {
+    await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "menuVersion", required: false, min: 1 });
+  }
+  if (!venueColumns.columns.some(column => column.key === "menuRefreshSeconds")) {
+    await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "menuRefreshSeconds", required: false, min: 5, max: 300 });
+  }
+  const venues = await tables.listRows<Models.Row & Record<string, unknown>>({ databaseId, tableId: "venues", queries: [Query.limit(200)] });
+  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined).map(row => tables.updateRow({
+    databaseId,
+    tableId: "venues",
+    rowId: String(row.$id),
+    data: {
+      ...(row.menuVersion === undefined ? { menuVersion: 1 } : {}),
+      ...(row.menuRefreshSeconds === undefined ? { menuRefreshSeconds: 15 } : {}),
+      ...(row.logoVisible === undefined ? { logoVisible: true } : {}),
+    },
+  })));
 }
 
 async function ensureBucket(storage: Storage, config: BackendConfig) {

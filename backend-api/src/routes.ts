@@ -113,6 +113,10 @@ async function audit(services: AppwriteServices, config: BackendConfig, action: 
   });
 }
 
+async function bumpMenuVersion(services: AppwriteServices, databaseId: string, venueId: string) {
+  await services.tables.incrementRowColumn({ databaseId, tableId: "venues", rowId: venueId, column: "menuVersion", value: 1 });
+}
+
 async function deleteVenueRows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string, onRow?: (row: RowData) => void) {
   // The project schema scopes every dependent row by venueId. Read the page
   // before deleting it, then repeat: deleting while using an offset may skip
@@ -178,7 +182,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
         backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
-        displayScalePercent: 100, staffVersion: 1, displayVersion: 1, active: true,
+        displayScalePercent: 100, staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
         updatedAt: now, updatedBy: "backend-hub",
       },
     });
@@ -235,11 +239,13 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.logoInsetPercent !== undefined) data.logoInsetPercent = integer(request.body.logoInsetPercent, 0, 20);
     if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
     if (request.body?.logoVisible !== undefined) data.logoVisible = Boolean(request.body.logoVisible);
+    if (request.body?.menuRefreshSeconds !== undefined) data.menuRefreshSeconds = integer(request.body.menuRefreshSeconds, 5, 300);
     const removeLogoFileId = request.body?.logoFileId === null && typeof venue.logoFileId === "string" ? venue.logoFileId : "";
     if (request.body?.logoFileId === null) data.logoFileId = null;
     data.updatedAt = new Date().toISOString();
     data.updatedBy = "backend-hub";
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: venueId, data });
+    await bumpMenuVersion(services, databaseId, venueId);
     if (removeLogoFileId) await services.storage.deleteFile({ bucketId: config.appwriteBucketId, fileId: removeLogoFileId }).catch(() => undefined);
     await audit(services, config, "venue_settings_updated", venueId, data);
     response.json({ venue: publicRow(row) });
@@ -264,6 +270,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: venueId, data: {
       logoFileId: file.$id, updatedAt: new Date().toISOString(), updatedBy: "backend-hub",
     } });
+    await bumpMenuVersion(services, databaseId, venueId);
     if (typeof venue.logoFileId === "string" && venue.logoFileId) await services.storage.deleteFile({ bucketId: config.appwriteBucketId, fileId: venue.logoFileId }).catch(() => undefined);
     await audit(services, config, "venue_logo_uploaded", venueId, { fileId: file.$id, mimeType });
     response.status(201).json({ venue: publicRow(row) });
@@ -345,6 +352,14 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     response.json({ venue: publicRow(venue), categories: categories.rows.map(publicRow), items: items.rows.map(publicRow) });
   }));
 
+  router.get("/menu/version", asyncRoute(async (request, response) => {
+    const claims = requireRole(request, config, ["display"]);
+    if (!claims.venueId) throw new ApiError(403, "forbidden", "Сессия не привязана к точке.");
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId });
+    if (claims.version !== Number(venue.displayVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните подключение заново.");
+    response.json({ version: Number(venue.menuVersion ?? 1), refreshSeconds: integer(venue.menuRefreshSeconds ?? 15, 5, 300) });
+  }));
+
   router.patch("/venue", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff"]);
     const data: Record<string, unknown> = {};
@@ -363,6 +378,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     data.updatedAt = new Date().toISOString();
     data.updatedBy = "staff-api";
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId!, data });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.json({ venue: publicRow(row) });
   }));
 
@@ -372,6 +388,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       databaseId, tableId: "categories", rowId: ID.unique(),
       data: { venueId: claims.venueId, name: text(request.body?.name, 160), sortOrder: integer(request.body?.sortOrder ?? 0, 0, 100000), updatedAt: new Date().toISOString(), updatedBy: "staff-api" },
     });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.status(201).json({ category: publicRow(row) });
   }));
 
@@ -383,6 +400,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.name !== undefined) data.name = text(request.body.name, 160);
     if (request.body?.sortOrder !== undefined) data.sortOrder = integer(request.body.sortOrder, 0, 100000);
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "categories", rowId, data });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.json({ category: publicRow(row) });
   }));
 
@@ -393,6 +411,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const children = await services.tables.listRows<RowData>({ databaseId, tableId: "items", queries: [Query.equal("categoryId", [rowId]), Query.limit(1)] });
     if (children.rows.length) throw new ApiError(409, "not_empty", "Сначала удалите позиции этой категории.");
     await services.tables.deleteRow({ databaseId, tableId: "categories", rowId });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.status(204).end();
   }));
 
@@ -408,6 +427,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
         isAvailable: request.body?.isAvailable !== false, updatedAt: new Date().toISOString(), updatedBy: "staff-api",
       },
     });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.status(201).json({ item: publicRow(row) });
   }));
 
@@ -421,6 +441,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.priceMinor !== undefined) data.priceMinor = integer(request.body.priceMinor, 0, 2_000_000_000);
     if (request.body?.sortOrder !== undefined) data.sortOrder = integer(request.body.sortOrder, 0, 100000);
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "items", rowId, data });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.json({ item: publicRow(row) });
   }));
 
@@ -429,6 +450,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const rowId = routeId(request.params.id);
     await ownedRow(services, config, "items", rowId, claims.venueId!);
     await services.tables.deleteRow({ databaseId, tableId: "items", rowId });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.status(204).end();
   }));
 
