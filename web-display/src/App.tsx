@@ -180,7 +180,10 @@ function StaffScreen() {
     previousRowsRef.current = new Map(Array.from(root?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
     setItems(current => current.map(value => value.id === item.id ? { ...value, isAvailable: !unavailable } : value));
     try {
-      await api.updateItem(sessionToken, item.id, { isAvailable: !unavailable });
+      const result = await api.updateItem(sessionToken, item.id, { isAvailable: !unavailable });
+      // Use the persisted value returned by Appwrite. This prevents a later
+      // render/sort from restoring the stale checkbox state from the closure.
+      setItems(current => current.map(value => value.id === item.id ? result.item as MenuItem : value));
     } catch (cause) {
       const currentRoot = availabilityListRef.current;
       previousRowsRef.current = new Map(Array.from(currentRoot?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
