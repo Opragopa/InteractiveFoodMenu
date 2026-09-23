@@ -350,6 +350,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     ]);
     const expectedVersion = claims.role === "staff" ? venue.staffVersion : venue.displayVersion;
     if (claims.version !== Number(expectedVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните вход заново.");
+    response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     response.json({ venue: publicRow(venue), categories: categories.rows.map(publicRow), items: items.rows.map(publicRow) });
   }));
 

@@ -68,7 +68,7 @@ function logoContentBase64(file: File): Promise<string> {
 export const api = {
   staffLogin: (venueCode: string, pin: string) => request<ApiSession>("/auth/staff", { method: "POST", body: JSON.stringify({ venueCode, pin }) }),
   displayLogin: (tokenId: string, secret: string) => request<ApiSession>("/auth/display", { method: "POST", body: JSON.stringify({ tokenId, secret }) }),
-  menu: (token: string) => request<{ venue: any; categories: any[]; items: any[] }>("/menu", {}, token),
+  menu: (token: string) => request<{ venue: any; categories: any[]; items: any[] }>(`/menu?ts=${Date.now()}`, {}, token),
   menuVersion: (token: string) => request<{ version: number; refreshSeconds: number }>(`/menu/version?ts=${Date.now()}`, {}, token),
   updateVenue: (token: string, data: unknown) => request<{ venue: any }>("/venue", { method: "PATCH", body: JSON.stringify(data) }, token),
   createCategory: (token: string, data: unknown) => request<{ category: any }>("/categories", { method: "POST", body: JSON.stringify(data) }, token),
