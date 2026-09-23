@@ -115,7 +115,16 @@ async function audit(services: AppwriteServices, config: BackendConfig, action: 
 }
 
 async function bumpMenuVersion(services: AppwriteServices, databaseId: string, venueId: string) {
-  await services.tables.incrementRowColumn({ databaseId, tableId: "venues", rowId: venueId, column: "menuVersion", value: 1 });
+  // Keep this compatible with self-hosted Appwrite versions where the
+  // increment endpoint can acknowledge the request without updating the
+  // row used by display polling.
+  const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId });
+  await services.tables.updateRow({
+    databaseId,
+    tableId: "venues",
+    rowId: venueId,
+    data: { menuVersion: Number(venue.menuVersion ?? 1) + 1 },
+  });
 }
 
 async function deleteVenueRows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string, onRow?: (row: RowData) => void) {
