@@ -33,8 +33,9 @@ h2 { margin: 8px 0 4px; padding-bottom: 7px; border-bottom: 3px solid #9c3d24; b
 .menu-item .dots { margin-left: 10px; margin-right: 10px; }
 .price { flex: 0 0 8em; width: 8em; align-self: end; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
 .break-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-.break-card { text-align: center; padding: 8vh 10vw; border: 2px solid currentColor; border-radius: 24px; }
-.break-card strong { display: block; font-size: clamp(4rem, 15vw, 12rem); line-height: 1; }
+.break-card { width: min(80vw, 560px); min-height: 310px; display: grid; align-content: center; justify-items: center; gap: 18px; text-align: center; padding: clamp(32px, 7vh, 72px) clamp(24px, 6vw, 64px); border: 2px solid currentColor; border-radius: 24px; }
+.break-card h1, .break-card p { width: 100%; margin: 0; }
+.break-card strong { display: block; width: 8ch; font-size: clamp(4rem, 15vw, 12rem); line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .unavailable { opacity: .38; }
 .unavailable .item-name, .unavailable .price { text-decoration: line-through; text-decoration-thickness: 2px; }
 .empty { display: flex; align-items: center; justify-content: center; color: #77716a; color: color-mix(in srgb, currentColor 50%, transparent); font-size: 36px; font-size: clamp(28px, 3vw, 48px); }
