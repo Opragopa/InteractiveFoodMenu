@@ -102,7 +102,7 @@ async function createDisplayToken(services: AppwriteServices, config: BackendCon
   const secret = opaqueToken();
   await services.tables.createRow({
     databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: tokenId,
-    data: { venueId, tokenHash: await hashSecret(secret), active: true, createdAt: new Date().toISOString() },
+    data: { venueId, tokenHash: await hashSecret(secret), active: true, label: `Экран ${tokenId.slice(-4)}`, createdAt: new Date().toISOString() },
   });
   return { tokenId, secret, url: displayUrl(config, tokenId, secret) };
 }
@@ -192,7 +192,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
         backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
-        displayScalePercent: 100, staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
+        displayScalePercent: 100, displayScaleMode: "auto", breakActive: false, breakDurationMinutes: 10, staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
         updatedAt: now, updatedBy: "backend-hub",
       },
     });
@@ -245,6 +245,11 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     }
     if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 60);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
+    if (request.body?.displayScaleMode !== undefined) {
+      const mode = String(request.body.displayScaleMode);
+      if (mode !== "auto" && mode !== "manual") throw new ApiError(400, "invalid_argument", "Некорректный режим масштаба.");
+      data.displayScaleMode = mode;
+    }
     if (request.body?.logoPosition !== undefined) data.logoPosition = logoPosition(request.body.logoPosition);
     if (request.body?.logoInsetPercent !== undefined) data.logoInsetPercent = integer(request.body.logoInsetPercent, 0, 20);
     if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
@@ -307,6 +312,37 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     response.json({ revoked: true });
   }));
 
+  router.get("/hub/venues/:id/displays", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id);
+    const result = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [venueId]), Query.orderDesc("createdAt"), Query.limit(200)] });
+    response.json({ displays: result.rows.map(publicRow) });
+  }));
+  router.patch("/hub/venues/:id/displays/:tokenId", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id); const tokenId = routeId(request.params.tokenId);
+    await ownedRow(services, config, "display_tokens", tokenId, venueId);
+    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "display_tokens", rowId: tokenId, data: { label: text(request.body?.label, 80) } });
+    response.json({ display: publicRow(row) });
+  }));
+  router.post("/hub/venues/:id/displays/:tokenId/revoke", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id); const tokenId = routeId(request.params.tokenId);
+    await ownedRow(services, config, "display_tokens", tokenId, venueId);
+    await services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: tokenId, data: { active: false, revokedAt: new Date().toISOString() } });
+    await audit(services, config, "display_session_revoked", venueId, { tokenId });
+    response.json({ revoked: true });
+  }));
+  router.post("/hub/venues/:id/displays/revoke-all", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id); const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId });
+    const now = new Date().toISOString();
+    const active = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [venueId]), Query.equal("active", [true]), Query.limit(200)] });
+    await Promise.all(active.rows.map(row => services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: row.$id, data: { active: false, revokedAt: now } })));
+    await services.tables.updateRow({ databaseId, tableId: "venues", rowId: venueId, data: { displayVersion: Number(venue.displayVersion ?? 0) + 1, updatedAt: now, updatedBy: "backend-hub" } });
+    response.json({ revoked: active.rows.length });
+  }));
+
   router.delete("/hub/venues/:id", asyncRoute(async (request, response) => {
     requireRole(request, config, ["hub"]);
     const venueId = routeId(request.params.id);
@@ -346,12 +382,17 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       throw new ApiError(401, "unauthenticated", "Ссылка экрана недействительна.");
     }
     const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: String(token.venueId) });
-    response.json({ token: signSession({ role: "display", venueId: String(token.venueId), version: Number(venue.displayVersion ?? 1) }, config.sessionSecret, "30d"), venueId: token.venueId });
+    response.json({ token: signSession({ role: "display", venueId: String(token.venueId), displayTokenId: token.$id, version: Number(venue.displayVersion ?? 1) }, config.sessionSecret, "30d"), venueId: token.venueId });
   }));
 
   router.get("/menu", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff", "display"]);
     if (!claims.venueId) throw new ApiError(403, "forbidden", "Сессия не привязана к точке.");
+    if (claims.role === "display" && claims.displayTokenId) {
+      const token = await services.tables.getRow<RowData>({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId }).catch(() => null);
+      if (!token || token.active !== true || token.venueId !== claims.venueId) throw new ApiError(401, "session_revoked", "Сессия экрана отозвана.");
+      await services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId, data: { lastSeenAt: new Date().toISOString() } });
+    }
     const [venue, categories, items] = await Promise.all([
       services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId }),
       services.tables.listRows<RowData>({ databaseId, tableId: "categories", queries: [Query.equal("venueId", [claims.venueId]), Query.orderAsc("sortOrder"), Query.limit(500)] }),
@@ -360,6 +401,11 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const expectedVersion = claims.role === "staff" ? venue.staffVersion : venue.displayVersion;
     if (claims.version !== Number(expectedVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните вход заново.");
     response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    const expiredBreak = venue.breakActive === true && venue.breakEndsAt && new Date(String(venue.breakEndsAt)).getTime() <= Date.now();
+    if (expiredBreak) {
+      await services.tables.updateRow({ databaseId, tableId: "venues", rowId: claims.venueId, data: { breakActive: false, breakEndsAt: null } });
+      venue.breakActive = false; venue.breakEndsAt = null;
+    }
     response.json({ venue: publicRow(venue), categories: categories.rows.map(publicRow), items: items.rows.map(publicRow) });
   }));
 
@@ -367,6 +413,11 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const claims = requireRole(request, config, ["display"]);
     if (!claims.venueId) throw new ApiError(403, "forbidden", "Сессия не привязана к точке.");
     const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId });
+    if (claims.displayTokenId) {
+      const token = await services.tables.getRow<RowData>({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId }).catch(() => null);
+      if (!token || token.active !== true) throw new ApiError(401, "session_revoked", "Сессия экрана отозвана.");
+      await services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId, data: { lastSeenAt: new Date().toISOString() } });
+    }
     if (claims.version !== Number(venue.displayVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните подключение заново.");
     response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     response.json({ version: Number(venue.menuVersion ?? 1), refreshSeconds: integer(venue.menuRefreshSeconds ?? 15, 5, 300) });
@@ -390,6 +441,20 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     data.updatedAt = new Date().toISOString();
     data.updatedBy = "staff-api";
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId!, data });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
+    response.json({ venue: publicRow(row) });
+  }));
+
+  router.post("/venue/break/start", asyncRoute(async (request, response) => {
+    const claims = requireRole(request, config, ["staff"]);
+    const duration = integer(request.body?.durationMinutes ?? 10, 1, 60);
+    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId!, data: { breakActive: true, breakDurationMinutes: duration, breakEndsAt: new Date(Date.now() + duration * 60_000).toISOString(), updatedAt: new Date().toISOString(), updatedBy: "staff-api" } });
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
+    response.json({ venue: publicRow(row) });
+  }));
+  router.post("/venue/break/stop", asyncRoute(async (request, response) => {
+    const claims = requireRole(request, config, ["staff"]);
+    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId!, data: { breakActive: false, breakEndsAt: null, updatedAt: new Date().toISOString(), updatedBy: "staff-api" } });
     await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.json({ venue: publicRow(row) });
   }));

@@ -135,6 +135,7 @@ function StaffScreen() {
   const [newCategory, setNewCategory] = useState("");
   const [newItem, setNewItem] = useState({ name: "", price: "", categoryId: "" });
   const [csvRows, setCsvRows] = useState<CsvMenuRow[]>([]);
+  const [breakDuration, setBreakDuration] = useState(10);
   const availabilityListRef = useRef<HTMLDivElement | null>(null);
   const previousRowsRef = useRef<Map<string, number> | null>(null);
   const login = async () => {
@@ -156,6 +157,7 @@ function StaffScreen() {
     setVenue(menu.venue as Venue);
     setCategories(menu.categories as Category[]);
     setItems(menu.items as MenuItem[]);
+    setBreakDuration(Number(menu.venue.breakDurationMinutes ?? 10));
   }, [sessionToken]);
   useEffect(() => {
     if (!sessionToken) return;
@@ -233,6 +235,8 @@ function StaffScreen() {
     } catch (cause) { setError(cause instanceof Error ? `Не удалось импортировать CSV: ${cause.message}` : "Не удалось импортировать CSV."); }
     finally { setBusy(false); }
   };
+  const startBreak = async () => { setBusy(true); try { const result = await api.startBreak(sessionToken, Math.min(60, Math.max(1, breakDuration))); setVenue(result.venue as Venue); } finally { setBusy(false); } };
+  const stopBreak = async () => { setBusy(true); try { const result = await api.stopBreak(sessionToken); setVenue(result.venue as Venue); } finally { setBusy(false); } };
   const selectCsv = async (file: File | undefined) => {
     if (!file) return;
     setError("");
@@ -245,6 +249,7 @@ function StaffScreen() {
         <h1>Меню в наличии</h1>
         <button onClick={() => void loadMenu().then(() => setError("")).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось обновить меню."))}>Обновить</button>
         <button onClick={() => { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
+        {venue?.breakActive ? <button onClick={() => void stopBreak()} disabled={busy}>Завершить перерыв</button> : <span className="break-control"><input aria-label="Длительность перерыва" type="number" min={1} max={60} value={breakDuration} onChange={e => setBreakDuration(Number(e.target.value))} /><button onClick={() => void startBreak()} disabled={busy}>Перерыв</button></span>}
       </header>
       <nav className="staff-tabs">
         <button className={tab === "availability" ? "active" : ""} onClick={() => setTab("availability")}>Наличие</button>

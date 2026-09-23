@@ -70,6 +70,8 @@ export const api = {
   displayLogin: (tokenId: string, secret: string) => request<ApiSession>("/auth/display", { method: "POST", body: JSON.stringify({ tokenId, secret }) }),
   menu: (token: string) => request<{ venue: any; categories: any[]; items: any[] }>(`/menu?ts=${Date.now()}`, {}, token),
   menuVersion: (token: string) => request<{ version: number; refreshSeconds: number }>(`/menu/version?ts=${Date.now()}`, {}, token),
+  startBreak: (token: string, durationMinutes: number) => request<{ venue: any }>("/venue/break/start", { method: "POST", body: JSON.stringify({ durationMinutes }) }, token),
+  stopBreak: (token: string) => request<{ venue: any }>("/venue/break/stop", { method: "POST" }, token),
   updateVenue: (token: string, data: unknown) => request<{ venue: any }>("/venue", { method: "PATCH", body: JSON.stringify(data) }, token),
   createCategory: (token: string, data: unknown) => request<{ category: any }>("/categories", { method: "POST", body: JSON.stringify(data) }, token),
   deleteCategory: (token: string, id: string) => request<void>(`/categories/${id}`, { method: "DELETE" }, token),
@@ -92,5 +94,9 @@ export const api = {
   hubRotatePin: (token: string, id: string, venueCode: string, pin: string) => request<any>(`/hub/venues/${id}/access`, { method: "PATCH", body: JSON.stringify({ venueCode, pin }) }, token),
   hubCreateDisplayLink: (token: string, id: string) => request<{ displayUrl: string }>(`/hub/venues/${id}/display`, { method: "POST" }, token),
   hubRevoke: (token: string, id: string) => request<any>(`/hub/venues/${id}/revoke`, { method: "POST" }, token),
+  hubDisplays: (token: string, id: string) => request<{ displays: any[] }>(`/hub/venues/${id}/displays`, {}, token),
+  hubUpdateDisplay: (token: string, id: string, tokenId: string, label: string) => request<any>(`/hub/venues/${id}/displays/${tokenId}`, { method: "PATCH", body: JSON.stringify({ label }) }, token),
+  hubRevokeDisplay: (token: string, id: string, tokenId: string) => request<any>(`/hub/venues/${id}/displays/${tokenId}/revoke`, { method: "POST" }, token),
+  hubRevokeAllDisplays: (token: string, id: string) => request<any>(`/hub/venues/${id}/displays/revoke-all`, { method: "POST" }, token),
   hubDeleteVenue: (token: string, id: string) => request<void>(`/hub/venues/${id}`, { method: "DELETE" }, token),
 };

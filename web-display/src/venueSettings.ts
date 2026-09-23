@@ -7,6 +7,7 @@ export type VenueAppearance = {
   accentColor: string;
   pageDurationSeconds: number;
   displayScalePercent: number;
+  displayScaleMode?: "auto" | "manual";
   logoPosition: LogoPosition;
   logoInsetPercent: number;
   logoScalePercent: number;
@@ -35,6 +36,7 @@ export function normalizeVenueAppearance(value: VenueAppearance): VenueAppearanc
     accentColor,
     pageDurationSeconds: clampInteger(value.pageDurationSeconds, 5, 60, 10),
     displayScalePercent: clampInteger(value.displayScalePercent, 50, 160, 100),
+    displayScaleMode: value.displayScaleMode === "manual" ? "manual" : "auto",
     logoPosition: value.logoPosition,
     logoInsetPercent: clampInteger(value.logoInsetPercent, 0, 20, 3),
     logoScalePercent: clampInteger(value.logoScalePercent, 50, 200, 100),

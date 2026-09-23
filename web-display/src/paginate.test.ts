@@ -27,21 +27,18 @@ describe("paginateMenu", () => {
     expect(paginateMenu(categories, [], 5, 3)).toEqual([]);
   });
 
-  it("retains unavailable positions and sorts them after available positions", () => {
+  it("hides unavailable positions", () => {
     const items = [
       { ...itemsFixture("off", false), sortOrder: 0 },
       { ...itemsFixture("on", true), sortOrder: 1 },
     ];
     const pages = paginateMenu(categories, items, 5, 1);
-    expect(pages[0].columns[0].map((entry) => entry.kind === "item" ? [entry.item.id, entry.item.isAvailable] : entry.kind))
-      .toEqual(["category", ["on", true], ["off", false]]);
+    expect(pages[0].columns[0].map((entry) => entry.kind === "item" ? entry.item.id : entry.kind)).toEqual(["category", "on"]);
   });
 
-  it("retains a category when every position is unavailable", () => {
+  it("removes categories when every position is unavailable", () => {
     const pages = paginateMenu(categories, [itemsFixture("off-1", false), itemsFixture("off-2", false)], 5, 1);
-    expect(pages[0].columns[0]).toHaveLength(3);
-    expect(pages[0].columns[0][0]).toMatchObject({ kind: "category", name: "Кухня" });
-    expect(pages[0].columns[0].filter((entry) => entry.kind === "item")).toHaveLength(2);
+    expect(pages).toEqual([]);
   });
 
   it("uses three columns for Full HD and two for 1366 wide", () => {

@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 const scrypt = promisify(scryptCallback);
 
 export type SessionRole = "staff" | "display" | "hub";
-export type SessionClaims = { role: SessionRole; venueId?: string; version?: number };
+export type SessionClaims = { role: SessionRole; venueId?: string; version?: number; displayTokenId?: string };
 
 export async function hashSecret(secret: string): Promise<string> {
   const salt = randomBytes(16);
@@ -42,5 +42,6 @@ export function verifySession(token: string, secret: string): SessionClaims {
   const result: SessionClaims = { role: claims.role as SessionRole };
   if (typeof claims.venueId === "string") result.venueId = claims.venueId;
   if (typeof claims.version === "number") result.version = claims.version;
+  if (typeof claims.displayTokenId === "string") result.displayTokenId = claims.displayTokenId;
   return result;
 }

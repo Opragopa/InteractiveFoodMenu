@@ -19,6 +19,7 @@ type HubVenue = {
   accentColor: string;
   pageDurationSeconds: number;
   displayScalePercent: number;
+  displayScaleMode?: "auto" | "manual";
   logoFileId?: string | null;
   logoPosition?: LogoPosition;
   logoInsetPercent?: number;
@@ -61,6 +62,7 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
   const [accentColor, setAccentColor] = useState(venue.accentColor);
   const [duration, setDuration] = useState(venue.pageDurationSeconds);
   const [displayScale, setDisplayScale] = useState(venue.displayScalePercent);
+  const [displayScaleMode, setDisplayScaleMode] = useState<"auto" | "manual">(venue.displayScaleMode ?? "auto");
   const [logoPosition, setLogoPosition] = useState<LogoPosition>(venue.logoPosition ?? "top-right");
   const [logoInset, setLogoInset] = useState(venue.logoInsetPercent ?? 3);
   const [logoScale, setLogoScale] = useState(venue.logoScalePercent ?? 100);
@@ -70,13 +72,13 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
 
   useEffect(() => {
     setName(venue.name); setBackgroundColor(venue.backgroundColor); setAccentColor(venue.accentColor);
-    setDuration(venue.pageDurationSeconds); setDisplayScale(venue.displayScalePercent); setLogoPosition(venue.logoPosition ?? "top-right"); setLogoInset(venue.logoInsetPercent ?? 3); setLogoScale(venue.logoScalePercent ?? 100); setLogoVisible(venue.logoVisible !== false); setMenuRefreshSeconds(venue.menuRefreshSeconds ?? 15); setError("");
+    setDuration(venue.pageDurationSeconds); setDisplayScale(venue.displayScalePercent); setDisplayScaleMode(venue.displayScaleMode ?? "auto"); setLogoPosition(venue.logoPosition ?? "top-right"); setLogoInset(venue.logoInsetPercent ?? 3); setLogoScale(venue.logoScalePercent ?? 100); setLogoVisible(venue.logoVisible !== false); setMenuRefreshSeconds(venue.menuRefreshSeconds ?? 15); setError("");
   }, [venue]);
 
   const save = async () => {
     try {
       setError("");
-      await onSave(normalizeVenueAppearance({ name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale, logoVisible, menuRefreshSeconds }));
+      await onSave(normalizeVenueAppearance({ name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale, displayScaleMode, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale, logoVisible, menuRefreshSeconds }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
 
@@ -87,6 +89,7 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
     <HubColorField label="Цвет текста и заголовков" value={accentColor} onChange={setAccentColor} />
     <HubNumberControl label="Смена страниц, сек." value={duration} minimum={5} maximum={60} step={1} onChange={setDuration} />
     <HubNumberControl label="Масштаб меню ТВ, %" value={displayScale} minimum={50} maximum={160} step={5} onChange={setDisplayScale} />
+    <label>Режим масштаба<select value={displayScaleMode} onChange={event => setDisplayScaleMode(event.target.value as "auto" | "manual")}><option value="auto">Авто (до двух страниц)</option><option value="manual">Ручной масштаб</option></select></label>
     <label>Расположение логотипа<select value={logoPosition} onChange={event => setLogoPosition(event.target.value as LogoPosition)}>{logoPositions.map(position => <option key={position} value={position}>{({ "top-right": "Справа сверху", "top-left": "Слева сверху", "bottom-right": "Справа снизу", "bottom-left": "Слева снизу" } as Record<LogoPosition, string>)[position]}</option>)}</select></label>
     <HubNumberControl label="Отступ логотипа от краёв, %" value={logoInset} minimum={0} maximum={20} step={1} onChange={setLogoInset} />
     <HubNumberControl label="Масштаб логотипа, %" value={logoScale} minimum={50} maximum={200} step={5} onChange={setLogoScale} />
@@ -105,6 +108,14 @@ function HubColorField({ label, value, onChange }: { label: string; value: strin
 
 function HubNumberControl({ label, value, minimum, maximum, step, onChange }: { label: string; value: number; minimum: number; maximum: number; step: number; onChange: (value: number) => void }) {
   return <label>{label}<span className="hub-number"><button type="button" aria-label={`${label}: уменьшить`} disabled={value <= minimum} onClick={() => onChange(Math.max(minimum, value - step))}>−</button><input type="number" min={minimum} max={maximum} step={step} value={value} onChange={event => onChange(clampInteger(event.target.value, minimum, maximum, value))} /><button type="button" aria-label={`${label}: увеличить`} disabled={value >= maximum} onClick={() => onChange(Math.min(maximum, value + step))}>+</button></span></label>;
+}
+
+function HubDisplays({ token, venue }: { token: string; venue: HubVenue }) {
+  const [displays, setDisplays] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const load = async () => { const result = await api.hubDisplays(token, venue.id); setDisplays(result.displays); setOpen(true); };
+  const revoke = async (id: string) => { await api.hubRevokeDisplay(token, venue.id, id); await load(); };
+  return <div className="hub-displays"><button type="button" onClick={() => void load()}>{open ? "Обновить экраны" : "Активные экраны"}</button>{open && <div className="hub-display-list">{displays.length ? displays.map(display => <div key={display.id}><span><b>{display.label || "Экран"}</b><small>создан: {dateTime(display.createdAt)} · активность: {dateTime(display.lastSeenAt)}</small></span><button className="danger" onClick={() => void revoke(display.id)}>Сбросить</button></div>) : <small>Сессий пока нет.</small>}<button className="danger" onClick={() => void api.hubRevokeAllDisplays(token, venue.id).then(load)}>Сбросить все экраны</button></div>}</div>;
 }
 
 export function BackendHub() {

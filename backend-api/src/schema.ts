@@ -32,6 +32,10 @@ export const TABLES: TableDefinition[] = [
       { key: "logoScalePercent", type: "integer", required: false, min: 50, max: 200 },
       { key: "logoVisible", type: "boolean", required: false },
       { key: "displayScalePercent", type: "integer", required: true, min: 50, max: 160 },
+      { key: "displayScaleMode", type: "varchar", size: 8, required: false },
+      { key: "breakActive", type: "boolean", required: false },
+      { key: "breakEndsAt", type: "datetime", required: false },
+      { key: "breakDurationMinutes", type: "integer", required: false, min: 1, max: 60 },
       { key: "staffVersion", type: "integer", required: true },
       { key: "displayVersion", type: "integer", required: true },
       { key: "menuVersion", type: "integer", required: false, min: 1 },
@@ -82,6 +86,8 @@ export const TABLES: TableDefinition[] = [
       { key: "tokenHash", type: "text", required: true },
       { key: "active", type: "boolean", required: true },
       { key: "createdAt", type: "datetime", required: true },
+      { key: "label", type: "varchar", size: 80, required: false },
+      { key: "lastSeenAt", type: "datetime", required: false },
       { key: "revokedAt", type: "datetime", required: false },
     ],
     indexes: [{ key: "display_tokens_by_venue", type: "key", attributes: ["venueId", "active"] }],
@@ -193,8 +199,15 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   if (!venueColumns.columns.some(column => column.key === "menuRefreshSeconds")) {
     await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "menuRefreshSeconds", required: false, min: 5, max: 300 });
   }
+  if (!venueColumns.columns.some(column => column.key === "displayScaleMode")) await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "displayScaleMode", size: 8, required: false });
+  if (!venueColumns.columns.some(column => column.key === "breakActive")) await tables.createBooleanColumn({ databaseId, tableId: "venues", key: "breakActive", required: false });
+  if (!venueColumns.columns.some(column => column.key === "breakEndsAt")) await tables.createDatetimeColumn({ databaseId, tableId: "venues", key: "breakEndsAt", required: false });
+  if (!venueColumns.columns.some(column => column.key === "breakDurationMinutes")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakDurationMinutes", required: false, min: 1, max: 60 });
+  const displayColumns = await tables.listColumns({ databaseId, tableId: "display_tokens", queries: [Query.limit(100)] });
+  if (!displayColumns.columns.some(column => column.key === "label")) await tables.createVarcharColumn({ databaseId, tableId: "display_tokens", key: "label", size: 80, required: false });
+  if (!displayColumns.columns.some(column => column.key === "lastSeenAt")) await tables.createDatetimeColumn({ databaseId, tableId: "display_tokens", key: "lastSeenAt", required: false });
   const venues = await tables.listRows<Models.Row & Record<string, unknown>>({ databaseId, tableId: "venues", queries: [Query.limit(200)] });
-  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined).map(row => tables.updateRow({
+  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined).map(row => tables.updateRow({
     databaseId,
     tableId: "venues",
     rowId: String(row.$id),
@@ -202,6 +215,9 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
       ...(row.menuVersion === undefined ? { menuVersion: 1 } : {}),
       ...(row.menuRefreshSeconds === undefined ? { menuRefreshSeconds: 15 } : {}),
       ...(row.logoVisible === undefined ? { logoVisible: true } : {}),
+      ...(row.displayScaleMode === undefined ? { displayScaleMode: "auto" } : {}),
+      ...(row.breakActive === undefined ? { breakActive: false } : {}),
+      ...(row.breakDurationMinutes === undefined ? { breakDurationMinutes: 10 } : {}),
     },
   })));
 }

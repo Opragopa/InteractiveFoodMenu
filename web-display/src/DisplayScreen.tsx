@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { layoutForViewport, paginateMenu } from "./paginate";
+import { autoScaleForMenu, itemNameScale, layoutForViewport, paginateMenu } from "./paginate";
 import type { Category, MenuItem, Venue } from "./types";
 import { formatRussianText } from "./typography";
+import { remainingBreakSeconds } from "./break";
 
 const money = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2 });
 
@@ -29,16 +30,25 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const logoPosition = venue.logoPosition ?? "top-right";
   const logoInset = Math.min(20, Math.max(0, venue.logoInsetPercent ?? 3));
   const logoScale = Math.min(200, Math.max(50, venue.logoScalePercent ?? 100)) / 100;
-  const scale = Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) / 100;
   const backgroundColor = /^#[0-9a-f]{6}$/i.test(venue.backgroundColor) ? venue.backgroundColor : "#56965B";
   const accentColor = /^#[0-9a-f]{6}$/i.test(venue.accentColor) ? venue.accentColor : "#FFFFFF";
   const foregroundColor = contrastForeground(backgroundColor);
   const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }));
+  const [now, setNow] = useState(Date.now());
+  const breakSeconds = remainingBreakSeconds(venue.breakActive, venue.breakEndsAt, now);
+  useEffect(() => {
+    if (!venue.breakActive) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [venue.breakActive, venue.breakEndsAt]);
   useEffect(() => {
     const resize = () => setViewport({ width: innerWidth, height: innerHeight });
     addEventListener("resize", resize);
     return () => removeEventListener("resize", resize);
   }, []);
+  const scale = useMemo(() => venue.displayScaleMode === "manual"
+    ? Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100
+    : autoScaleForMenu(categories, items, viewport.width, viewport.height), [venue.displayScaleMode, venue.displayScalePercent, categories, items, viewport]);
   const pages = useMemo(() => {
     const layout = layoutForViewport(viewport.width / scale, viewport.height / scale);
     return paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount);
@@ -51,6 +61,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   }, [pages.length, venue.pageDurationSeconds]);
 
   const page = pages[pageIndex];
+  if (breakSeconds > 0) return <main className="display break-screen" style={{ backgroundColor, color: foregroundColor }}><div className="break-card"><h1>Перерыв</h1><strong>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong><p>Работа возобновится автоматически</p></div></main>;
   return (
     <main className={`display logo-${logoPosition}`} lang="ru" style={{
       zoom: scale,
@@ -72,7 +83,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
                 <h2 key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor }}>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</h2>
               ) : (
                 <div className={`menu-item menu-item-enter ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms` } as React.CSSProperties}>
-                  <span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" /><span className="price">{money.format(entry.item.priceMinor / 100)}</span>
+                  <span className="item-name" style={{ fontSize: `${itemNameScale(entry.item.name)}em` }}>{formatRussianText(entry.item.name)}</span><span className="dots" /><span className="price">{money.format(entry.item.priceMinor / 100)}</span>
                 </div>
               ))}
             </div>

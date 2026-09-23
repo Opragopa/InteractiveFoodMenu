@@ -28,10 +28,13 @@ h2 { margin: 8px 0 4px; padding-bottom: 7px; border-bottom: 3px solid #9c3d24; b
 .page-transition { animation: page-in 520ms cubic-bezier(.2,.8,.2,1); }
 .menu-item-enter { animation: item-in 420ms both; animation-delay: var(--row-delay, 0ms); }
 .menu-item.unavailable.menu-item-enter { animation-name: item-in-unavailable; }
-.item-name { min-width: 0; overflow-wrap: break-word; hyphens: auto; word-break: normal; }
+.item-name { min-width: 0; overflow-wrap: break-word; hyphens: auto; word-break: normal; overflow: hidden; max-height: 2.45em; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .dots { flex: 1; align-self: end; min-width: 14px; margin: 0 10px .24em; border-bottom: 2px dotted #a9a39a; border-bottom-color: color-mix(in srgb, currentColor 30%, transparent); }
 .menu-item .dots { margin-left: 10px; margin-right: 10px; }
 .price { flex: 0 0 8em; width: 8em; align-self: end; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.break-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.break-card { text-align: center; padding: 8vh 10vw; border: 2px solid currentColor; border-radius: 24px; }
+.break-card strong { display: block; font-size: clamp(4rem, 15vw, 12rem); line-height: 1; }
 .unavailable { opacity: .38; }
 .unavailable .item-name, .unavailable .price { text-decoration: line-through; text-decoration-thickness: 2px; }
 .empty { display: flex; align-items: center; justify-content: center; color: #77716a; color: color-mix(in srgb, currentColor 50%, transparent); font-size: 36px; font-size: clamp(28px, 3vw, 48px); }

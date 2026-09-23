@@ -21,8 +21,8 @@ export function paginateMenu(
     .forEach((category) => {
       const categoryItems = items
         .filter((item) => item.categoryId === category.id)
-        .sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false)
-          || a.sortOrder - b.sortOrder
+        .filter((item) => item.isAvailable !== false)
+        .sort((a, b) => a.sortOrder - b.sortOrder
           || a.name.localeCompare(b.name, "ru"));
       if (!categoryItems.length) return;
 
@@ -52,13 +52,28 @@ export function paginateMenu(
 }
 
 export function layoutForViewport(width: number, height: number) {
-  const columnCount = width >= 1500 ? 3 : width >= 900 ? 2 : 1;
-  const reservedHeight = width >= 900 ? 230 : 190;
-  // A row reserves enough room for a two-line title. Very long names can grow
-  // further instead of being ellipsized, while this keeps normal pages airy.
-  const rowHeight = width >= 1500 ? 86 : 76;
+  const aspect = width / Math.max(1, height);
+  const columnCount = width >= 1500 ? 3 : aspect >= 1.25 ? 2 : 1;
+  const reservedHeight = width >= 900 ? 190 : 150;
+  const rowHeight = width >= 1500 ? 72 : 66;
   return {
     columnCount,
     rowsPerColumn: Math.max(4, Math.floor((height - reservedHeight) / rowHeight)),
   };
+}
+
+export function autoScaleForMenu(categories: Category[], items: MenuItem[], width: number, height: number, maxPages = 2) {
+  for (let percent = 160; percent >= 50; percent -= 5) {
+    const scale = percent / 100;
+    const layout = layoutForViewport(width / scale, height / scale);
+    if (paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount).length <= maxPages) return scale;
+  }
+  return 0.5;
+}
+
+export function itemNameScale(name: string) {
+  if (name.length > 60) return 0.68;
+  if (name.length > 42) return 0.78;
+  if (name.length > 28) return 0.88;
+  return 1;
 }
