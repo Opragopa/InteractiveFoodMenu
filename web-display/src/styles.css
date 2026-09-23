@@ -32,8 +32,8 @@ h2 { margin: 8px 0 4px; padding-bottom: 7px; border-bottom: 3px solid #9c3d24; b
 .dots { flex: 1; align-self: end; min-width: 14px; margin: 0 10px .24em; border-bottom: 2px dotted #a9a39a; border-bottom-color: color-mix(in srgb, currentColor 30%, transparent); }
 .menu-item .dots { margin-left: 10px; margin-right: 10px; }
 .price { flex: 0 0 8em; width: 8em; align-self: end; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
-.break-screen { width: 100%; height: 100%; min-height: 100vh; display: flex !important; align-items: center; justify-content: center; padding: clamp(24px, 5vw, 72px); overflow: hidden; }
-.break-title { position: absolute; top: clamp(28px, 5vh, 72px); left: clamp(28px, 4vw, 72px); right: clamp(28px, 4vw, 72px); margin: 0; font-size: clamp(32px, 5vw, 76px); text-align: center; }
+.break-screen { width: 100%; height: 100%; min-height: 100vh; display: flex !important; align-items: center; justify-content: center; padding: 32px; padding: clamp(24px, 5vw, 72px); overflow: hidden; }
+.break-title { position: absolute; top: 32px; top: clamp(28px, 5vh, 72px); left: 32px; left: clamp(28px, 4vw, 72px); right: 32px; right: clamp(28px, 4vw, 72px); margin: 0; font-size: 52px; font-size: clamp(32px, 5vw, 76px); text-align: center; }
 .break-timer { display: block; width: 8ch; line-height: 1; font-size: 15vw; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
 .unavailable { opacity: .38; }
 .unavailable .item-name, .unavailable .price { text-decoration: line-through; text-decoration-thickness: 2px; }
