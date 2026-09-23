@@ -54,8 +54,11 @@ export function paginateMenu(
 export function layoutForViewport(width: number, height: number) {
   const aspect = width / Math.max(1, height);
   const columnCount = width >= 1500 ? 3 : aspect >= 1.25 ? 2 : 1;
-  const reservedHeight = width >= 900 ? 190 : 150;
-  const rowHeight = width >= 1500 ? 72 : 66;
+  // These are the baseline CSS pixels used by the display. The whole menu is
+  // scaled uniformly, so viewport units here would be multiplied twice by
+  // browser zoom and cause clipping on older TVs.
+  const reservedHeight = width >= 900 ? 230 : 190;
+  const rowHeight = width >= 1500 ? 86 : 78;
   return {
     columnCount,
     rowsPerColumn: Math.max(4, Math.floor((height - reservedHeight) / rowHeight)),

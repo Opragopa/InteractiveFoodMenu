@@ -6,6 +6,11 @@ import { remainingBreakSeconds } from "./break";
 
 const money = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2 });
 
+function readViewport() {
+  const visual = window.visualViewport;
+  return { width: Math.round(visual?.width || document.documentElement.clientWidth || innerWidth), height: Math.round(visual?.height || document.documentElement.clientHeight || innerHeight) };
+}
+
 export function contrastForeground(hex: string) {
   const channels = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255)
     .map((value) => value <= .03928 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
@@ -34,7 +39,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const accentColor = /^#[0-9a-f]{6}$/i.test(venue.accentColor) ? venue.accentColor : "#FFFFFF";
   const foregroundColor = contrastForeground(backgroundColor);
   const breakFontScale = Math.min(200, Math.max(50, venue.breakFontSizePercent ?? 100)) / 100;
-  const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }));
+  const [viewport, setViewport] = useState(readViewport);
   const [now, setNow] = useState(Date.now());
   const breakSeconds = remainingBreakSeconds(venue.breakActive, venue.breakEndsAt, now);
   useEffect(() => {
@@ -43,9 +48,10 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
     return () => clearInterval(timer);
   }, [venue.breakActive, venue.breakEndsAt]);
   useEffect(() => {
-    const resize = () => setViewport({ width: innerWidth, height: innerHeight });
+    const resize = () => setViewport(readViewport());
     addEventListener("resize", resize);
-    return () => removeEventListener("resize", resize);
+    window.visualViewport?.addEventListener("resize", resize);
+    return () => { removeEventListener("resize", resize); window.visualViewport?.removeEventListener("resize", resize); };
   }, []);
   const scale = useMemo(() => venue.displayScaleMode === "manual"
     ? Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100
