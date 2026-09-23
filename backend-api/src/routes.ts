@@ -358,6 +358,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (!claims.venueId) throw new ApiError(403, "forbidden", "Сессия не привязана к точке.");
     const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId });
     if (claims.version !== Number(venue.displayVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните подключение заново.");
+    response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     response.json({ version: Number(venue.menuVersion ?? 1), refreshSeconds: integer(venue.menuRefreshSeconds ?? 15, 5, 300) });
   }));
 
