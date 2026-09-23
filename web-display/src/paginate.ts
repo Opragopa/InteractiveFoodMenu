@@ -63,7 +63,10 @@ export function layoutForViewport(width: number, height: number) {
 }
 
 export function autoScaleForMenu(categories: Category[], items: MenuItem[], width: number, height: number, maxPages = 2) {
-  for (let percent = 160; percent >= 50; percent -= 5) {
+  // Auto mode must remain legible on ordinary 1080p displays. Manual mode can
+  // still use the full 50–160% range, while automatic mode grows only as far
+  // as the viewport can comfortably render.
+  for (let percent = 120; percent >= 50; percent -= 5) {
     const scale = percent / 100;
     const layout = layoutForViewport(width / scale, height / scale);
     if (paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount).length <= maxPages) return scale;

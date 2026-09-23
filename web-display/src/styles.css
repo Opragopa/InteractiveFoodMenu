@@ -28,7 +28,7 @@ h2 { margin: 8px 0 4px; padding-bottom: 7px; border-bottom: 3px solid #9c3d24; b
 .page-transition { animation: page-in 520ms cubic-bezier(.2,.8,.2,1); }
 .menu-item-enter { animation: item-in 420ms both; animation-delay: var(--row-delay, 0ms); }
 .menu-item.unavailable.menu-item-enter { animation-name: item-in-unavailable; }
-.item-name { min-width: 0; overflow-wrap: break-word; hyphens: auto; word-break: normal; overflow: hidden; max-height: 2.45em; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.item-name { min-width: 0; overflow-wrap: normal; hyphens: none; word-break: normal; overflow: hidden; max-height: 2.45em; line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .dots { flex: 1; align-self: end; min-width: 14px; margin: 0 10px .24em; border-bottom: 2px dotted #a9a39a; border-bottom-color: color-mix(in srgb, currentColor 30%, transparent); }
 .menu-item .dots { margin-left: 10px; margin-right: 10px; }
 .price { flex: 0 0 8em; width: 8em; align-self: end; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }

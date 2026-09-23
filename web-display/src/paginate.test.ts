@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { layoutForViewport, paginateMenu } from "./paginate";
+import { autoScaleForMenu, itemNameScale, layoutForViewport, paginateMenu } from "./paginate";
 import { contrastForeground } from "./DisplayScreen";
 import type { Category, MenuItem } from "./types";
 
@@ -44,6 +44,11 @@ describe("paginateMenu", () => {
   it("uses three columns for Full HD and two for 1366 wide", () => {
     expect(layoutForViewport(1920, 1080).columnCount).toBe(3);
     expect(layoutForViewport(1366, 768).columnCount).toBe(2);
+  });
+
+  it("keeps automatic scale in a legible range", () => {
+    expect(autoScaleForMenu(categories, items, 1920, 1080)).toBeLessThanOrEqual(1.2);
+    expect(itemNameScale("Очень длинное название блюда с большим количеством слов")).toBeLessThan(1);
   });
 });
 
