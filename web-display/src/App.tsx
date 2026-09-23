@@ -353,12 +353,18 @@ function ConnectScreen() {
       try {
         const response = await api.createPairing();
         const pairingUrl = `${response.displayBaseUrl}/pair#${response.pairingToken}`;
-        const dataUrl = await QRCode.toDataURL(pairingUrl, { margin: 2, width: 420 });
-        if (!cancelled) {
+        // Use the callback form: it also works in older WebKit builds where
+        // qrcode's Promise-based overload is unavailable or unreliable.
+        QRCode.toDataURL(pairingUrl, { margin: 2, width: 420 }, (qrError, dataUrl) => {
+          if (cancelled) return;
+          if (qrError) {
+            setError(qrError instanceof Error ? qrError.message : "Не удалось нарисовать QR-код.");
+            return;
+          }
           setQr(dataUrl);
           setNow(Date.now());
           setExpiresAt(Date.now() + response.expiresInSeconds * 1000);
-        }
+        });
         poll = window.setInterval(async () => {
           try {
             const result = await api.pairingStatus(response.pairingToken);
