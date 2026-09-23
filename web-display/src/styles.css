@@ -4,13 +4,13 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .startup-status { width: 100%; height: 100%; margin: 0; padding: 32px; display: flex; align-items: center; justify-content: center; color: #4b463e; background: #f7f4ee; font: 600 32px/1.25 Onest, Arial, sans-serif; text-align: center; }
 .startup-error { color: #8c2f20; }
-.display { --background: #56965b; --accent: #fff; --foreground: #fff; position: relative; min-height: 100%; padding: 32px; padding: clamp(24px, 3vw, 56px); color: #fff; color: var(--foreground); background: #56965b; background: var(--background); display: flex; flex-direction: column; display: grid; grid-template-rows: auto 1fr auto; gap: 24px; gap: clamp(18px, 2vh, 32px); text-wrap: pretty; hyphens: auto; }
+.display { --background: #56965b; --accent: #fff; --foreground: #fff; --logo-inset: 3%; --logo-scale: 1; position: relative; min-height: 100%; padding: 32px; padding: clamp(24px, 3vw, 56px); color: #fff; color: var(--foreground); background: #56965b; background: var(--background); display: flex; flex-direction: column; display: grid; grid-template-rows: auto 1fr auto; gap: 24px; gap: clamp(18px, 2vh, 32px); text-wrap: pretty; hyphens: auto; }
 header { display: flex; align-items: center; gap: 24px; min-height: 74px; }
-.logo { position: absolute; z-index: 1; width: clamp(150px, 18vw, 260px); height: clamp(82px, 11vw, 160px); object-fit: contain; }
-.logo-top-right .logo { top: clamp(24px, 3vw, 56px); right: clamp(24px, 3vw, 56px); }
-.logo-top-left .logo { top: clamp(24px, 3vw, 56px); left: clamp(24px, 3vw, 56px); }
-.logo-bottom-right .logo { right: clamp(24px, 3vw, 56px); bottom: clamp(24px, 3vw, 56px); }
-.logo-bottom-left .logo { bottom: clamp(24px, 3vw, 56px); left: clamp(24px, 3vw, 56px); }
+.logo { position: absolute; z-index: 1; width: calc(clamp(150px, 18vw, 260px) * var(--logo-scale)); height: calc(clamp(82px, 11vw, 160px) * var(--logo-scale)); object-fit: contain; }
+.logo-top-right .logo { top: var(--logo-inset); right: var(--logo-inset); }
+.logo-top-left .logo { top: var(--logo-inset); left: var(--logo-inset); }
+.logo-bottom-right .logo { right: var(--logo-inset); bottom: var(--logo-inset); }
+.logo-bottom-left .logo { bottom: var(--logo-inset); left: var(--logo-inset); }
 .logo-top-left > header { padding-left: clamp(170px, 20vw, 290px); }
 .logo-top-right > header { padding-right: clamp(170px, 20vw, 290px); }
 .logo-bottom-left > footer { padding-left: clamp(170px, 20vw, 290px); }
@@ -139,6 +139,9 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .hub-card code { padding: 3px 6px; border-radius: 5px; color: #285d36; background: #edf7ee; }
 .hub-actions { display: flex; gap: 6px; }
 .hub-actions button, .hub-secret button { padding: 7px 9px; border: 1px solid #b9d0bc; border-radius: 7px; color: #285d36; background: #fff; font: 650 12px inherit; cursor: pointer; white-space: nowrap; }
+.hub-action-link { display: inline-block; padding: 7px 9px; border: 1px solid #b9d0bc; border-radius: 7px; color: #285d36; background: #fff; font: 650 12px inherit; text-decoration: none; white-space: nowrap; }
+.hub-logo-visibility { display: flex !important; grid-template-columns: none !important; align-items: center; gap: 9px !important; }
+.hub-logo-visibility input { width: 18px !important; min-width: 18px !important; height: 18px; }
 .hub-actions button.danger { color: #9c3333; border-color: #e2bcbc; }
 .hub-create { display: grid; gap: 13px; }
 .hub-create label { display: grid; gap: 6px; color: #4d6372; font-size: 13px; font-weight: 700; }

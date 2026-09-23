@@ -28,6 +28,9 @@ export const TABLES: TableDefinition[] = [
       { key: "pageDurationSeconds", type: "integer", required: true, min: 5, max: 60 },
       { key: "logoFileId", type: "varchar", size: 36, required: false },
       { key: "logoPosition", type: "varchar", size: 16, required: false },
+      { key: "logoInsetPercent", type: "integer", required: false, min: 0, max: 20 },
+      { key: "logoScalePercent", type: "integer", required: false, min: 50, max: 200 },
+      { key: "logoVisible", type: "boolean", required: false },
       { key: "displayScalePercent", type: "integer", required: true, min: 50, max: 160 },
       { key: "staffVersion", type: "integer", required: true },
       { key: "displayVersion", type: "integer", required: true },
@@ -172,6 +175,15 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   const venueColumns = await tables.listColumns({ databaseId, tableId: "venues", queries: [Query.limit(100)] });
   if (!venueColumns.columns.some(column => column.key === "logoPosition")) {
     await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "logoPosition", size: 16, required: false });
+  }
+  if (!venueColumns.columns.some(column => column.key === "logoInsetPercent")) {
+    await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "logoInsetPercent", required: false, min: 0, max: 20 });
+  }
+  if (!venueColumns.columns.some(column => column.key === "logoScalePercent")) {
+    await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "logoScalePercent", required: false, min: 50, max: 200 });
+  }
+  if (!venueColumns.columns.some(column => column.key === "logoVisible")) {
+    await tables.createBooleanColumn({ databaseId, tableId: "venues", key: "logoVisible", required: false });
   }
 }
 

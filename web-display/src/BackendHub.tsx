@@ -21,6 +21,9 @@ type HubVenue = {
   displayScalePercent: number;
   logoFileId?: string | null;
   logoPosition?: LogoPosition;
+  logoInsetPercent?: number;
+  logoScalePercent?: number;
+  logoVisible?: boolean;
   staffVersion: number;
   displayVersion: number;
   updatedAt: string | null;
@@ -58,17 +61,20 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
   const [duration, setDuration] = useState(venue.pageDurationSeconds);
   const [displayScale, setDisplayScale] = useState(venue.displayScalePercent);
   const [logoPosition, setLogoPosition] = useState<LogoPosition>(venue.logoPosition ?? "top-right");
+  const [logoInset, setLogoInset] = useState(venue.logoInsetPercent ?? 3);
+  const [logoScale, setLogoScale] = useState(venue.logoScalePercent ?? 100);
+  const [logoVisible, setLogoVisible] = useState(venue.logoVisible !== false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     setName(venue.name); setBackgroundColor(venue.backgroundColor); setAccentColor(venue.accentColor);
-    setDuration(venue.pageDurationSeconds); setDisplayScale(venue.displayScalePercent); setLogoPosition(venue.logoPosition ?? "top-right"); setError("");
+    setDuration(venue.pageDurationSeconds); setDisplayScale(venue.displayScalePercent); setLogoPosition(venue.logoPosition ?? "top-right"); setLogoInset(venue.logoInsetPercent ?? 3); setLogoScale(venue.logoScalePercent ?? 100); setLogoVisible(venue.logoVisible !== false); setError("");
   }, [venue]);
 
   const save = async () => {
     try {
       setError("");
-      await onSave(normalizeVenueAppearance({ name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale, logoPosition }));
+      await onSave(normalizeVenueAppearance({ name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale, logoVisible }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
 
@@ -80,6 +86,9 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
     <HubNumberControl label="Смена страниц, сек." value={duration} minimum={5} maximum={60} step={1} onChange={setDuration} />
     <HubNumberControl label="Масштаб меню ТВ, %" value={displayScale} minimum={50} maximum={160} step={5} onChange={setDisplayScale} />
     <label>Расположение логотипа<select value={logoPosition} onChange={event => setLogoPosition(event.target.value as LogoPosition)}>{logoPositions.map(position => <option key={position} value={position}>{({ "top-right": "Справа сверху", "top-left": "Слева сверху", "bottom-right": "Справа снизу", "bottom-left": "Слева снизу" } as Record<LogoPosition, string>)[position]}</option>)}</select></label>
+    <HubNumberControl label="Отступ логотипа от краёв, %" value={logoInset} minimum={0} maximum={20} step={1} onChange={setLogoInset} />
+    <HubNumberControl label="Масштаб логотипа, %" value={logoScale} minimum={50} maximum={200} step={5} onChange={setLogoScale} />
+    <label className="hub-logo-visibility"><input type="checkbox" checked={logoVisible} onChange={event => setLogoVisible(event.target.checked)} /> Показывать логотип на экране меню</label>
     <div className="hub-logo-controls"><b>Логотип</b><span>{venue.logoFileId ? "Загруженный логотип" : "Стандартный белый логотип Политеха"}</span><label className="hub-upload-button">Загрузить свой<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) void onUploadLogo(file).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось загрузить логотип.")); event.currentTarget.value = ""; }} /></label>{venue.logoFileId && <button type="button" disabled={busy} onClick={() => void onUseDefaultLogo().catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось восстановить логотип."))}>Стандартный логотип</button>}</div>
     <div className="hub-settings-actions"><button type="button" onClick={() => { setBackgroundColor(polytechAppearance.backgroundColor); setAccentColor(polytechAppearance.accentColor); }}>Цвета Политеха</button><button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить"}</button></div>
     {error && <p className="hub-error">{error}</p>}
@@ -162,6 +171,19 @@ export function BackendHub() {
     } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
 
+  const openDisplay = async (venueId: string) => {
+    const displayWindow = window.open("about:blank", "_blank");
+    if (!displayWindow) { setError("Браузер заблокировал новое окно. Разрешите всплывающие окна для хаба."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const response = await api.hubCreateDisplayLink(hubToken, venueId);
+      displayWindow.location.href = response.displayUrl;
+    } catch (cause) {
+      displayWindow.close();
+      setError(errorMessage(cause));
+    } finally { setBusy(false); }
+  };
+
   const deleteVenue = async (venueId: string, name: string) => {
     if (!window.confirm(`Полностью удалить точку «${name}», её меню, ссылки экранов и журналы? Это действие нельзя отменить.`)) return;
     setBusy(true); setError(""); setNotice("");
@@ -220,7 +242,7 @@ export function BackendHub() {
       {overview && <>
         <div className="hub-metrics"><article><small>Точек</small><strong>{overview.totals.venues}</strong></article><article><small>Категорий</small><strong>{overview.totals.categories}</strong></article><article><small>Позиций</small><strong>{overview.totals.items}</strong></article><article><small>Активных экранов</small><strong>{overview.totals.activeDisplays}</strong></article></div>
         {tab === "venues" && <div className="hub-grid">
-          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{overview.venues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{overview.venues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button onClick={() => setEditingVenueId(venue.id)}>Оформление</button><button onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button className="danger" onClick={() => void revokeSessions(venue.id)}>Отозвать</button><button className="danger" onClick={() => void deleteVenue(venue.id, venue.name)}>Удалить</button></td></tr>)}</tbody></table></div>{editingVenue && <HubVenueSettings venue={editingVenue} busy={busy} onClose={() => setEditingVenueId("")} onSave={settings => saveVenueSettings(editingVenue.id, settings)} onUploadLogo={file => uploadVenueLogo(editingVenue.id, file)} onUseDefaultLogo={() => useDefaultLogo(editingVenue.id)} />}</section>
+          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{overview.venues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{overview.venues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button onClick={() => void openDisplay(venue.id)}>Экран меню</button><a className="hub-action-link" href={`${window.location.origin}/staff?venue=${encodeURIComponent(venue.code)}`} target="_blank" rel="noreferrer">Staff</a><button onClick={() => setEditingVenueId(venue.id)}>Оформление</button><button onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button className="danger" onClick={() => void revokeSessions(venue.id)}>Отозвать</button><button className="danger" onClick={() => void deleteVenue(venue.id, venue.name)}>Удалить</button></td></tr>)}</tbody></table></div>{editingVenue && <HubVenueSettings venue={editingVenue} busy={busy} onClose={() => setEditingVenueId("")} onSave={settings => saveVenueSettings(editingVenue.id, settings)} onUploadLogo={file => uploadVenueLogo(editingVenue.id, file)} onUseDefaultLogo={() => useDefaultLogo(editingVenue.id)} />}</section>
           <section className="hub-card hub-create"><h3>Новая точка</h3><label>Название<input placeholder="Кофейня на Невском" value={newVenue.name} onChange={event => setNewVenue({ ...newVenue, name: event.target.value })} /></label><label>Код для входа<input placeholder="nevsky" pattern="[a-z0-9-]{3,32}" value={newVenue.venueCode} onChange={event => setNewVenue({ ...newVenue, venueCode: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} /><small>3–32 латинских символа, цифры или дефис.</small></label><label>PIN<input type="password" inputMode="numeric" maxLength={6} placeholder="6 цифр" value={newVenue.pin} onChange={event => setNewVenue({ ...newVenue, pin: event.target.value.replace(/\D/g, "") })} /></label><button disabled={busy || !newVenue.name || newVenue.venueCode.length < 3 || newVenue.pin.length !== 6} onClick={() => void createVenue()}>Создать точку</button>{createdDisplayUrl && <div className="hub-secret"><b>Ссылка первого экрана</b><p>Она показывается только сейчас. Сохраните её безопасно.</p><textarea readOnly value={createdDisplayUrl} /><button onClick={() => void navigator.clipboard.writeText(createdDisplayUrl)}>Скопировать</button></div>}</section>
         </div>}
         {tab === "functions" && <div className="hub-function-groups">{groupedFunctions.map(([area, entries]) => <section className="hub-card" key={area}><div className="hub-card-title"><h3>{area}</h3><small>{entries.length}</small></div>{entries.map(entry => <article className="hub-function" key={entry.name}><div><code>{entry.name}</code><p>{entry.purpose}</p></div><span>{entry.access}</span></article>)}</section>)}</div>}

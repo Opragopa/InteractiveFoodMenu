@@ -177,7 +177,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       rowId: ID.unique(),
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
-        backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right",
+        backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
         displayScalePercent: 100, staffVersion: 1, displayVersion: 1, active: true,
         updatedAt: now, updatedBy: "backend-hub",
       },
@@ -205,6 +205,16 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     response.json({ updated: true, venue: publicRow(row) });
   }));
 
+  router.post("/hub/venues/:id/display", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
+    if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
+    const screen = await createDisplayToken(services, config, venueId);
+    await audit(services, config, "display_link_created", venueId, { tokenId: screen.tokenId });
+    response.status(201).json({ displayUrl: screen.url });
+  }));
+
   router.patch("/hub/venues/:id", asyncRoute(async (request, response) => {
     requireRole(request, config, ["hub"]);
     const venueId = routeId(request.params.id);
@@ -222,6 +232,9 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 60);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
     if (request.body?.logoPosition !== undefined) data.logoPosition = logoPosition(request.body.logoPosition);
+    if (request.body?.logoInsetPercent !== undefined) data.logoInsetPercent = integer(request.body.logoInsetPercent, 0, 20);
+    if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
+    if (request.body?.logoVisible !== undefined) data.logoVisible = Boolean(request.body.logoVisible);
     const removeLogoFileId = request.body?.logoFileId === null && typeof venue.logoFileId === "string" ? venue.logoFileId : "";
     if (request.body?.logoFileId === null) data.logoFileId = null;
     data.updatedAt = new Date().toISOString();
@@ -345,6 +358,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     }
     if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 60);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
+    if (request.body?.logoInsetPercent !== undefined) data.logoInsetPercent = integer(request.body.logoInsetPercent, 0, 20);
+    if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
     data.updatedAt = new Date().toISOString();
     data.updatedBy = "staff-api";
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId!, data });

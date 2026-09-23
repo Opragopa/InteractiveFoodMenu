@@ -103,7 +103,7 @@ export function App() {
 
 function StaffScreen() {
   const [savedCredentials] = useState(savedVenueCredentials);
-  const [code, setCode] = useState(savedCredentials.code);
+  const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get("venue")?.trim().toLowerCase() || savedCredentials.code);
   const [pin, setPin] = useState(savedCredentials.pin);
   const [sessionToken, setSessionToken] = useState(() => localStorage.getItem("ifm-staff-session") ?? "");
   const [venue, setVenue] = useState<Venue | null>(null);

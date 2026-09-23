@@ -8,6 +8,9 @@ export type VenueAppearance = {
   pageDurationSeconds: number;
   displayScalePercent: number;
   logoPosition: LogoPosition;
+  logoInsetPercent: number;
+  logoScalePercent: number;
+  logoVisible?: boolean;
 };
 
 export const polytechAppearance = { backgroundColor: "#56965B", accentColor: "#FFFFFF" };
@@ -32,5 +35,8 @@ export function normalizeVenueAppearance(value: VenueAppearance): VenueAppearanc
     pageDurationSeconds: clampInteger(value.pageDurationSeconds, 5, 60, 10),
     displayScalePercent: clampInteger(value.displayScalePercent, 50, 160, 100),
     logoPosition: value.logoPosition,
+    logoInsetPercent: clampInteger(value.logoInsetPercent, 0, 20, 3),
+    logoScalePercent: clampInteger(value.logoScalePercent, 50, 200, 100),
+    logoVisible: value.logoVisible !== false,
   };
 }

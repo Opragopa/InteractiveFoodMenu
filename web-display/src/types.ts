@@ -6,6 +6,9 @@ export type Venue = {
   logoPath: string;
   logoFileId?: string | null;
   logoPosition?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
+  logoInsetPercent?: number;
+  logoScalePercent?: number;
+  logoVisible?: boolean;
   pageDurationSeconds: number;
   displayScalePercent?: number;
 };

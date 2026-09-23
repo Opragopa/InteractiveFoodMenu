@@ -27,6 +27,8 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const logoPosition = venue.logoPosition ?? "top-right";
+  const logoInset = Math.min(20, Math.max(0, venue.logoInsetPercent ?? 3));
+  const logoScale = Math.min(200, Math.max(50, venue.logoScalePercent ?? 100)) / 100;
   const scale = Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) / 100;
   const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }));
   useEffect(() => {
@@ -52,9 +54,11 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
       "--background": venue.backgroundColor,
       "--accent": venue.accentColor,
       "--foreground": contrastForeground(venue.backgroundColor),
+      "--logo-inset": `${logoInset}%`,
+      "--logo-scale": logoScale,
     } as React.CSSProperties}>
       <header><h1>{formatRussianText(venue.name)}</h1></header>
-      {logoUrl && <img className="logo" src={logoUrl} alt="Логотип точки" />}
+      {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
       {!page ? <div className="empty">Меню пока не заполнено</div> : (
         <section className="page page-transition" key={`${pageIndex}-${items.filter((item) => item.isAvailable).length}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
           {page.columns.map((column, columnIndex) => (
