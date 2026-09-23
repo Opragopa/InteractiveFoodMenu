@@ -17,6 +17,7 @@ export type Venue = {
   breakActive?: boolean;
   breakEndsAt?: string | null;
   breakDurationMinutes?: number;
+  breakFontSizePercent?: number;
 };
 
 export type Category = { id: string; venueId: string; name: string; sortOrder: number };

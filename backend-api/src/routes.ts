@@ -192,7 +192,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
         backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
-        displayScalePercent: 100, displayScaleMode: "auto", breakActive: false, breakDurationMinutes: 10, staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
+        displayScalePercent: 100, displayScaleMode: "auto", breakActive: false, breakDurationMinutes: 10, breakFontSizePercent: 100, staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
         updatedAt: now, updatedBy: "backend-hub",
       },
     });
@@ -255,6 +255,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
     if (request.body?.logoVisible !== undefined) data.logoVisible = Boolean(request.body.logoVisible);
     if (request.body?.menuRefreshSeconds !== undefined) data.menuRefreshSeconds = integer(request.body.menuRefreshSeconds, 5, 300);
+    if (request.body?.breakFontSizePercent !== undefined) data.breakFontSizePercent = integer(request.body.breakFontSizePercent, 50, 200);
     const removeLogoFileId = request.body?.logoFileId === null && typeof venue.logoFileId === "string" ? venue.logoFileId : "";
     if (request.body?.logoFileId === null) data.logoFileId = null;
     data.updatedAt = new Date().toISOString();

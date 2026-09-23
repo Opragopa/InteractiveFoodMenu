@@ -20,6 +20,7 @@ type HubVenue = {
   pageDurationSeconds: number;
   displayScalePercent: number;
   displayScaleMode?: "auto" | "manual";
+  breakFontSizePercent?: number;
   logoFileId?: string | null;
   logoPosition?: LogoPosition;
   logoInsetPercent?: number;
@@ -68,17 +69,18 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
   const [logoScale, setLogoScale] = useState(venue.logoScalePercent ?? 100);
   const [logoVisible, setLogoVisible] = useState(venue.logoVisible !== false);
   const [menuRefreshSeconds, setMenuRefreshSeconds] = useState(venue.menuRefreshSeconds ?? 15);
+  const [breakFontSize, setBreakFontSize] = useState(venue.breakFontSizePercent ?? 100);
   const [error, setError] = useState("");
 
   useEffect(() => {
     setName(venue.name); setBackgroundColor(venue.backgroundColor); setAccentColor(venue.accentColor);
-    setDuration(venue.pageDurationSeconds); setDisplayScale(venue.displayScalePercent); setDisplayScaleMode(venue.displayScaleMode ?? "auto"); setLogoPosition(venue.logoPosition ?? "top-right"); setLogoInset(venue.logoInsetPercent ?? 3); setLogoScale(venue.logoScalePercent ?? 100); setLogoVisible(venue.logoVisible !== false); setMenuRefreshSeconds(venue.menuRefreshSeconds ?? 15); setError("");
+    setDuration(venue.pageDurationSeconds); setDisplayScale(venue.displayScalePercent); setDisplayScaleMode(venue.displayScaleMode ?? "auto"); setLogoPosition(venue.logoPosition ?? "top-right"); setLogoInset(venue.logoInsetPercent ?? 3); setLogoScale(venue.logoScalePercent ?? 100); setLogoVisible(venue.logoVisible !== false); setMenuRefreshSeconds(venue.menuRefreshSeconds ?? 15); setBreakFontSize(venue.breakFontSizePercent ?? 100); setError("");
   }, [venue]);
 
   const save = async () => {
     try {
       setError("");
-      await onSave(normalizeVenueAppearance({ name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale, displayScaleMode, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale, logoVisible, menuRefreshSeconds }));
+      await onSave(normalizeVenueAppearance({ name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale, displayScaleMode, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale, logoVisible, menuRefreshSeconds, breakFontSizePercent: breakFontSize }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
 
@@ -95,6 +97,7 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
     <HubNumberControl label="Масштаб логотипа, %" value={logoScale} minimum={50} maximum={200} step={5} onChange={setLogoScale} />
     <label className="hub-logo-visibility"><input type="checkbox" checked={logoVisible} onChange={event => setLogoVisible(event.target.checked)} /> Показывать логотип на экране меню</label>
     <HubNumberControl label="Проверять изменения меню, сек." value={menuRefreshSeconds} minimum={5} maximum={300} step={5} onChange={setMenuRefreshSeconds} />
+    <HubNumberControl label="Размер шрифта перерыва, %" value={breakFontSize} minimum={50} maximum={200} step={5} onChange={setBreakFontSize} />
     <div className="hub-logo-controls"><b>Логотип</b><span>{venue.logoFileId ? "Загруженный логотип" : "Стандартный белый логотип Политеха"}</span><label className="hub-upload-button">Загрузить свой<input type="file" accept="image/png,image/jpeg,image/webp" onChange={event => { const file = event.target.files?.[0]; if (file) void onUploadLogo(file).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось загрузить логотип.")); event.currentTarget.value = ""; }} /></label>{venue.logoFileId && <button type="button" disabled={busy} onClick={() => void onUseDefaultLogo().catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось восстановить логотип."))}>Стандартный логотип</button>}</div>
     <div className="hub-settings-actions"><button type="button" onClick={() => { setBackgroundColor(polytechAppearance.backgroundColor); setAccentColor(polytechAppearance.accentColor); }}>Цвета Политеха</button><button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить"}</button></div>
     {error && <p className="hub-error">{error}</p>}

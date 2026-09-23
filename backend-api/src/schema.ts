@@ -36,6 +36,7 @@ export const TABLES: TableDefinition[] = [
       { key: "breakActive", type: "boolean", required: false },
       { key: "breakEndsAt", type: "datetime", required: false },
       { key: "breakDurationMinutes", type: "integer", required: false, min: 1, max: 60 },
+      { key: "breakFontSizePercent", type: "integer", required: false, min: 50, max: 200 },
       { key: "staffVersion", type: "integer", required: true },
       { key: "displayVersion", type: "integer", required: true },
       { key: "menuVersion", type: "integer", required: false, min: 1 },
@@ -203,11 +204,12 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   if (!venueColumns.columns.some(column => column.key === "breakActive")) await tables.createBooleanColumn({ databaseId, tableId: "venues", key: "breakActive", required: false });
   if (!venueColumns.columns.some(column => column.key === "breakEndsAt")) await tables.createDatetimeColumn({ databaseId, tableId: "venues", key: "breakEndsAt", required: false });
   if (!venueColumns.columns.some(column => column.key === "breakDurationMinutes")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakDurationMinutes", required: false, min: 1, max: 60 });
+  if (!venueColumns.columns.some(column => column.key === "breakFontSizePercent")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakFontSizePercent", required: false, min: 50, max: 200 });
   const displayColumns = await tables.listColumns({ databaseId, tableId: "display_tokens", queries: [Query.limit(100)] });
   if (!displayColumns.columns.some(column => column.key === "label")) await tables.createVarcharColumn({ databaseId, tableId: "display_tokens", key: "label", size: 80, required: false });
   if (!displayColumns.columns.some(column => column.key === "lastSeenAt")) await tables.createDatetimeColumn({ databaseId, tableId: "display_tokens", key: "lastSeenAt", required: false });
   const venues = await tables.listRows<Models.Row & Record<string, unknown>>({ databaseId, tableId: "venues", queries: [Query.limit(200)] });
-  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined).map(row => tables.updateRow({
+  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined).map(row => tables.updateRow({
     databaseId,
     tableId: "venues",
     rowId: String(row.$id),
@@ -218,6 +220,7 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
       ...(row.displayScaleMode === undefined ? { displayScaleMode: "auto" } : {}),
       ...(row.breakActive === undefined ? { breakActive: false } : {}),
       ...(row.breakDurationMinutes === undefined ? { breakDurationMinutes: 10 } : {}),
+      ...(row.breakFontSizePercent === undefined ? { breakFontSizePercent: 100 } : {}),
     },
   })));
 }

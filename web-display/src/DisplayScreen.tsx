@@ -33,6 +33,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const backgroundColor = /^#[0-9a-f]{6}$/i.test(venue.backgroundColor) ? venue.backgroundColor : "#56965B";
   const accentColor = /^#[0-9a-f]{6}$/i.test(venue.accentColor) ? venue.accentColor : "#FFFFFF";
   const foregroundColor = contrastForeground(backgroundColor);
+  const breakFontScale = Math.min(200, Math.max(50, venue.breakFontSizePercent ?? 100)) / 100;
   const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }));
   const [now, setNow] = useState(Date.now());
   const breakSeconds = remainingBreakSeconds(venue.breakActive, venue.breakEndsAt, now);
@@ -61,7 +62,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   }, [pages.length, venue.pageDurationSeconds]);
 
   const page = pages[pageIndex];
-  if (breakSeconds > 0) return <main className="display break-screen" style={{ backgroundColor, color: foregroundColor }}><div className="break-card"><h1>Перерыв</h1><strong>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong><p>Работа возобновится автоматически</p></div></main>;
+  if (breakSeconds > 0) return <main className="display break-screen" style={{ backgroundColor, color: foregroundColor }}><h1 className="break-title" style={{ color: accentColor }}>Перерыв</h1><strong className="break-timer" style={{ fontSize: `${15 * breakFontScale}vw` }}>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong></main>;
   return (
     <main className={`display logo-${logoPosition}`} lang="ru" style={{
       zoom: scale,
