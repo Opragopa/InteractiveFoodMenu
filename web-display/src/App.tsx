@@ -110,7 +110,7 @@ export function App() {
       } catch {
         if (!cancelled) setConnected(false);
       }
-    }, menuRefreshSeconds * 1000);
+    }, Math.min(menuRefreshSeconds, 2) * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [sessionToken, menuRefreshSeconds, legacyBrowser]);
 
@@ -186,7 +186,6 @@ function StaffScreen() {
   if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
   const grouped = categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: items.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) }));
   const toggleAvailability = async (item: MenuItem, unavailable: boolean) => {
-    if (!unavailable && !window.confirm(`Вернуть позицию «${item.name}» в меню?`)) return;
     const root = availabilityListRef.current;
     previousRowsRef.current = new Map(Array.from(root?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
     setItems(current => current.map(value => value.id === item.id ? { ...value, isAvailable: !unavailable } : value));
