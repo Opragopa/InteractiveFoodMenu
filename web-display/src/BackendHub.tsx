@@ -29,7 +29,7 @@ function dateTime(value: string | null) {
 }
 
 export function BackendHub() {
-  const [hubToken, setHubToken] = useState(() => sessionStorage.getItem("ifm-hub-session") ?? "");
+  const [hubToken, setHubToken] = useState(() => localStorage.getItem("ifm-hub-session") ?? "");
   const [accessKey, setAccessKey] = useState("");
   const [overview, setOverview] = useState<HubOverview | null>(null);
   const [tab, setTab] = useState<"venues" | "functions" | "logs" | "audit">("venues");
@@ -53,7 +53,7 @@ export function BackendHub() {
     setBusy(true); setError("");
     try {
       const response = await api.hubLogin(accessKey);
-      sessionStorage.setItem("ifm-hub-session", response.token);
+      localStorage.setItem("ifm-hub-session", response.token);
       setHubToken(response.token);
       setAccessKey("");
     } catch (cause) { setError(errorMessage(cause)); }
@@ -115,7 +115,7 @@ export function BackendHub() {
   </main>;
 
   return <main className="backend-hub">
-    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1></div><nav>{([ ["venues", "Точки"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button className="hub-signout" onClick={() => { sessionStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
+    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1></div><nav>{([ ["venues", "Точки"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button className="hub-signout" onClick={() => { localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
     <section className="hub-content">
       <header className="hub-header"><div><span className="hub-kicker">Управление платформой</span><h2>{tab === "venues" ? "Точки и доступ" : tab === "functions" ? "Серверные функции" : tab === "logs" ? "Ошибки клиентов" : "Журнал действий"}</h2></div><button className="hub-refresh" disabled={busy} onClick={() => void loadOverview()}>{busy ? "Обновляем…" : "Обновить"}</button></header>
       {error && <p className="hub-banner hub-error">{error}</p>}{notice && <p className="hub-banner hub-success">{notice}</p>}

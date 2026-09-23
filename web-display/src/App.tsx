@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEffect as useEffectQr } from "react";
 import { DisplayScreen } from "./DisplayScreen";
 import type { Category, MenuItem, Venue } from "./types";
@@ -94,7 +94,7 @@ function StaffScreen() {
   const [savedCredentials] = useState(savedVenueCredentials);
   const [code, setCode] = useState(savedCredentials.code);
   const [pin, setPin] = useState(savedCredentials.pin);
-  const [sessionToken, setSessionToken] = useState(() => sessionStorage.getItem("ifm-staff-session") ?? "");
+  const [sessionToken, setSessionToken] = useState(() => localStorage.getItem("ifm-staff-session") ?? "");
   const [venue, setVenue] = useState<Venue | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -111,7 +111,7 @@ function StaffScreen() {
     try {
       const response = await api.staffLogin(code.trim().toLowerCase(), pin);
       saveVenueCredentials(code, pin);
-      sessionStorage.setItem("ifm-staff-session", response.token);
+      localStorage.setItem("ifm-staff-session", response.token);
       setSessionToken(response.token);
     } catch (cause) {
       reportClientError("staff_login_failed", cause);
@@ -119,16 +119,17 @@ function StaffScreen() {
     }
     finally { setBusy(false); }
   };
+  const loadMenu = useCallback(async () => {
+    if (!sessionToken) return;
+    const menu = await api.menu(sessionToken);
+    setVenue(menu.venue as Venue);
+    setCategories(menu.categories as Category[]);
+    setItems(menu.items as MenuItem[]);
+  }, [sessionToken]);
   useEffect(() => {
     if (!sessionToken) return;
-    let cancelled = false;
-    const load = async () => {
-      try { const menu = await api.menu(sessionToken); if (!cancelled) { setVenue(menu.venue as Venue); setCategories(menu.categories as Category[]); setItems(menu.items as MenuItem[]); } }
-      catch (cause) { if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось загрузить меню."); }
-    };
-    void load(); const timer = window.setInterval(() => void load(), 3000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [sessionToken]);
+    void loadMenu().catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось загрузить меню."));
+  }, [sessionToken, loadMenu]);
   useLayoutEffect(() => {
     const previous = previousRowsRef.current;
     const root = availabilityListRef.current;
@@ -165,12 +166,13 @@ function StaffScreen() {
       setError(cause instanceof Error ? `Не удалось обновить наличие: ${cause.message}` : "Не удалось обновить наличие.");
     }
   };
-  const saveCategory = async () => { const name = newCategory.trim(); if (!name) return; await api.createCategory(sessionToken, { name, sortOrder: categories.length }); setNewCategory(""); };
-  const saveItem = async () => { const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100); if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor)) return; await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true }); setNewItem({ name: "", price: "", categoryId: newItem.categoryId }); };
+  const saveCategory = async () => { const name = newCategory.trim(); if (!name) return; const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length }); setCategories(current => [...current, result.category as Category]); setNewCategory(""); };
+  const saveItem = async () => { const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100); if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor)) return; const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true }); setItems(current => [...current, result.item as MenuItem]); setNewItem({ name: "", price: "", categoryId: newItem.categoryId }); };
   const saveVenueSettings = async (settings: Pick<Venue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent">) => {
     setBusy(true);
     try {
-      await api.updateVenue(sessionToken, settings);
+      const result = await api.updateVenue(sessionToken, settings);
+      setVenue(result.venue as Venue);
     } finally { setBusy(false); }
   };
   const importCsv = async () => {
@@ -193,6 +195,7 @@ function StaffScreen() {
         await api.createItem(sessionToken, { categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, isAvailable: row.isAvailable });
       }
       setCsvRows([]);
+      await loadMenu();
     } catch (cause) { setError(cause instanceof Error ? `Не удалось импортировать CSV: ${cause.message}` : "Не удалось импортировать CSV."); }
     finally { setBusy(false); }
   };
@@ -206,7 +209,8 @@ function StaffScreen() {
     <main className="staff-menu">
       <header>
         <h1>Меню в наличии</h1>
-        <button onClick={() => { sessionStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
+        <button onClick={() => void loadMenu().then(() => setError("")).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось обновить меню."))}>Обновить</button>
+        <button onClick={() => { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
       </header>
       <nav className="staff-tabs">
         <button className={tab === "availability" ? "active" : ""} onClick={() => setTab("availability")}>Наличие</button>
@@ -230,7 +234,7 @@ function StaffScreen() {
         <section>
           <h2>Категории</h2>
           <div className="form-row"><input placeholder="Новая категория" value={newCategory} onChange={event => setNewCategory(event.target.value)} /><button onClick={saveCategory}>Добавить</button></div>
-          {categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button onClick={() => void api.deleteCategory(sessionToken, category.id)}>Удалить</button></label>)}
+          {categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button onClick={() => void api.deleteCategory(sessionToken, category.id).then(() => setCategories(current => current.filter(value => value.id !== category.id))).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось удалить категорию."))}>Удалить</button></label>)}
         </section>
       )}
       {tab === "items" && (
@@ -247,7 +251,7 @@ function StaffScreen() {
             <small>Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.</small>
             {csvRows.length > 0 && <button onClick={importCsv} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>
-          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button onClick={() => void api.deleteItem(sessionToken, item.id)}>Удалить</button></label>)}
+          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button onClick={() => void api.deleteItem(sessionToken, item.id).then(() => setItems(current => current.filter(value => value.id !== item.id))).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось удалить позицию."))}>Удалить</button></label>)}
         </section>
       )}
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}

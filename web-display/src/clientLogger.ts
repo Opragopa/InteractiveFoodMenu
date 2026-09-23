@@ -19,7 +19,7 @@ function safeDetails(details: Details = {}) {
 
 export function reportClientLog(level: Level, event: string, message = "", details: Details = {}) {
   console[level](`[${event}]`, message, safeDetails(details));
-  const token = sessionStorage.getItem("ifm-staff-session");
+  const token = localStorage.getItem("ifm-staff-session");
   if (token) void api.clientLog(token, level, `${event}: ${redact(message)}`, safeDetails(details)).catch(() => undefined);
 }
 
