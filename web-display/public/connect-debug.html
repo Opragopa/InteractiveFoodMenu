@@ -25,14 +25,14 @@
 <body>
   <main>
     <h1>Диагностика подключения ТВ</h1>
-    <p>Отдельная локальная проверка без React и Firebase SDK. Она проверяет, отвечает ли Firebase Function через прокси Vite.</p>
+    <p>Отдельная проверка без React и SDK. Она проверяет, отвечает ли Backend API и Appwrite через host Nginx.</p>
     <p><strong>Адрес:</strong> <span id="address"></span></p>
     <p><strong>Защищённое соединение:</strong> <span id="secure"></span></p>
     <p><strong>Браузер телевизора:</strong></p>
     <div id="ua"></div>
     <button id="run" type="button">Проверить соединение</button>
     <ul id="checks"></ul>
-    <p id="hint">Ожидаемый результат теста Functions: ответ <code>UNAUTHENTICATED</code> для заведомо несуществующего тестового ключа. Это означает, что запрос дошёл до функции и Firestore.</p>
+    <p id="hint">Ожидаемый результат: Backend API возвращает <code>{"status":"ok"}</code>. Это подтверждает, что старый ТВ видит host Nginx и API.</p>
   </main>
   <script>
     (function () {
@@ -58,9 +58,9 @@
         addCheck("XMLHttpRequest", typeof window.XMLHttpRequest === "function" ? "доступен" : "не найден", typeof window.XMLHttpRequest === "function" ? "ok" : "fail");
         addCheck("HTTP", window.location.protocol + " // отдельная проверка TLS/сертификата не выполняется", window.location.protocol === "https:" ? "ok" : "info");
 
-        var endpoint = window.location.origin + "/interactivefoodmenu/europe-west1/getDisplayPairingStatus";
+        var endpoint = window.location.origin + "/api/health";
         var xhr = new XMLHttpRequest();
-        xhr.open("POST", endpoint, true);
+        xhr.open("GET", endpoint, true);
         xhr.timeout = 10000;
         xhr.setRequestHeader("Content-Type", "application/json");
         xhr.onreadystatechange = function () {
@@ -68,27 +68,26 @@
           button.disabled = false;
           var payload = null;
           try { payload = JSON.parse(xhr.responseText); } catch (ignore) {}
-          var status = payload && payload.error && payload.error.status;
-          if (status === "UNAUTHENTICATED") {
-            addCheck("Firebase Functions + Firestore", "доступны; тестовый ключ ожидаемо отклонён (UNAUTHENTICATED)", "ok");
+          if (xhr.status >= 200 && xhr.status < 300 && payload && payload.status === "ok") {
+            addCheck("Backend API", "доступен; health ответил OK", "ok");
           } else {
-            var detail = "HTTP " + xhr.status + (status ? " · " + status : "") + (xhr.responseText ? " · " + xhr.responseText.slice(0, 220) : "");
-            addCheck("Firebase Functions + Firestore", detail || "пустой ответ", "fail");
+            var detail = "HTTP " + xhr.status + (xhr.responseText ? " · " + xhr.responseText.slice(0, 220) : "");
+            addCheck("Backend API", detail || "пустой ответ", "fail");
           }
         };
         xhr.onerror = function () {
           button.disabled = false;
-          addCheck("Firebase Functions + Firestore", "сетевой сбой, CORS или порт недоступен для ТВ", "fail");
+          addCheck("Backend API", "сетевой сбой, CORS или порт недоступен для ТВ", "fail");
         };
         xhr.ontimeout = function () {
           button.disabled = false;
-          addCheck("Firebase Functions + Firestore", "таймаут через 10 секунд; проверьте эмулятор и прокси", "fail");
+          addCheck("Backend API", "таймаут через 10 секунд; проверьте host Nginx и API-контейнер", "fail");
         };
         try {
           xhr.send(JSON.stringify({ data: { pairingToken: "debugtoken123.0123456789abcdef0123456789abcdef" } }));
         } catch (error) {
           button.disabled = false;
-          addCheck("Firebase Functions + Firestore", error.message || "ошибка отправки запроса", "fail");
+          addCheck("Backend API", error.message || "ошибка отправки запроса", "fail");
         }
       }
 

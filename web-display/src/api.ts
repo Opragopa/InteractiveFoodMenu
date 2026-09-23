@@ -6,15 +6,46 @@ export class ApiRequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
 
+function requestWithXhr<T>(url: string, options: RequestInit): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method ?? "GET", url, true);
+    const headers = options.headers as Record<string, string> | undefined;
+    Object.keys(headers ?? {}).forEach((name) => xhr.setRequestHeader(name, headers?.[name] ?? ""));
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== 4) return;
+      if (xhr.status === 204) {
+        resolve(undefined as T);
+        return;
+      }
+      let data: { message?: string } & T = {} as { message?: string } & T;
+      try { data = xhr.responseText ? JSON.parse(xhr.responseText) : data; } catch { /* keep the generic error */ }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new ApiRequestError(data.message ?? "Сервер не выполнил запрос.", xhr.status));
+        return;
+      }
+      resolve(data);
+    };
+    xhr.onerror = () => reject(new ApiRequestError("Не удалось подключиться к серверу.", 0));
+    xhr.send(typeof options.body === "string" ? options.body : null);
+  });
+}
+
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const requestOptions: RequestInit = {
     ...options,
     headers: {
       ...(options.body ? { "content-type": "application/json" } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
-  });
+  };
+  const url = `${baseUrl}${path}`;
+  // Older NetCast/Tizen browsers expose XMLHttpRequest but not fetch.
+  // Keeping the fallback here makes every route (including the display hash)
+  // usable instead of relying only on the connect-page redirect.
+  if (typeof fetch !== "function") return requestWithXhr<T>(url, requestOptions);
+  const response = await fetch(url, requestOptions);
   if (response.status === 204) return undefined as T;
   const data = await response.json().catch(() => ({})) as { message?: string } & T;
   if (!response.ok) throw new ApiRequestError(data.message ?? "Сервер не выполнил запрос.", response.status);

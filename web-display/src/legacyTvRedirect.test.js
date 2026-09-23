@@ -8,15 +8,15 @@ const displayHash = "#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789";
 
 function redirectFor(userAgent, hash = displayHash, pathname = "/") {
   let destination = "";
-  const fakeWindow = { location: { pathname, hash, replace: (url) => { destination = url; } } };
+  const fakeWindow = { fetch: function () {}, location: { pathname, hash, replace: (url) => { destination = url; } } };
   new Function("navigator", "window", script)({ userAgent }, fakeWindow);
   return destination;
 }
 
 describe("legacy TV display fallback", () => {
-  it("opens the static display for Samsung Tizen 5 TVs", () => {
+  it("keeps the Appwrite hash display on Samsung Tizen 5 TVs", () => {
     expect(redirectFor("Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) Chrome/63.0 TV Safari/537.36"))
-      .toBe("/display/pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789");
+      .toBe("");
   });
 
   it("opens the no-SDK pairing page for Samsung Tizen 5 TVs", () => {
@@ -29,9 +29,14 @@ describe("legacy TV display fallback", () => {
       .toBe("");
   });
 
-  it("uses the static display for webOS TVs", () => {
+  it("keeps the Appwrite hash display on webOS TVs", () => {
     expect(redirectFor("Mozilla/5.0 (Web0S; Linux) AppleWebKit/537.36 TV Safari/537.36"))
-      .toContain("/display/pairingtoken123.");
+      .toBe("");
+  });
+
+  it("normalizes old Firebase display links to the Appwrite hash route", () => {
+    expect(redirectFor("Mozilla/5.0 (TV; old WebKit)", "", "/display/pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789"))
+      .toBe("/#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789");
   });
 
   it("does not redirect malformed or ordinary browser URLs", () => {
@@ -43,8 +48,15 @@ describe("legacy TV display fallback", () => {
 
   it("does not treat the phone pairing route as a display link", () => {
     let destination = "";
-    const fakeWindow = { location: { pathname: "/pair", hash: displayHash, replace: (url) => { destination = url; } } };
+    const fakeWindow = { fetch: function () {}, location: { pathname: "/pair", hash: displayHash, replace: (url) => { destination = url; } } };
     new Function("navigator", "window", script)({ userAgent: "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0)" }, fakeWindow);
     expect(destination).toBe("");
+  });
+
+  it("uses the static pairing page when an old browser has no fetch", () => {
+    let destination = "";
+    const fakeWindow = { location: { pathname: "/connect", hash: "", replace: (url) => { destination = url; } } };
+    new Function("navigator", "window", script)({ userAgent: "Mozilla/5.0 (TV; old WebKit)" }, fakeWindow);
+    expect(destination).toBe("/connect-legacy.html");
   });
 });
