@@ -4,10 +4,23 @@ import { api } from "./api";
 type HubOverview = {
   generatedAt: string;
   totals: { venues: number; categories: number; items: number; activeDisplays: number };
-  venues: Array<{ id: string; name: string; code: string; staffVersion: number; displayVersion: number; updatedAt: string | null }>;
+  venues: HubVenue[];
   functions: Array<{ name: string; area: string; access: string; purpose: string }>;
   clientLogs: Array<{ id: string; venueId: string; role: string; level: string; event: string; message: string; createdAt: string | null }>;
   auditLogs: Array<{ id: string; action: string; venueId: string; createdAt: string | null }>;
+};
+
+type HubVenue = {
+  id: string;
+  name: string;
+  code: string;
+  backgroundColor: string;
+  accentColor: string;
+  pageDurationSeconds: number;
+  displayScalePercent: number;
+  staffVersion: number;
+  displayVersion: number;
+  updatedAt: string | null;
 };
 
 function hubInstallationId() {
@@ -28,6 +41,49 @@ function dateTime(value: string | null) {
   return value ? new Date(value).toLocaleString("ru-RU") : "—";
 }
 
+function HubVenueSettings({ venue, busy, onSave, onClose }: {
+  venue: HubVenue;
+  busy: boolean;
+  onSave: (settings: Pick<HubVenue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent">) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(venue.name);
+  const [backgroundColor, setBackgroundColor] = useState(venue.backgroundColor);
+  const [accentColor, setAccentColor] = useState(venue.accentColor);
+  const [duration, setDuration] = useState(venue.pageDurationSeconds);
+  const [displayScale, setDisplayScale] = useState(venue.displayScalePercent);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setName(venue.name); setBackgroundColor(venue.backgroundColor); setAccentColor(venue.accentColor);
+    setDuration(venue.pageDurationSeconds); setDisplayScale(venue.displayScalePercent); setError("");
+  }, [venue]);
+
+  const save = async () => {
+    const normalizedName = name.trim();
+    if (!normalizedName || normalizedName.length > 160) { setError("Название должно содержать от 1 до 160 символов."); return; }
+    if (!/^#[0-9a-f]{6}$/i.test(backgroundColor) || !/^#[0-9a-f]{6}$/i.test(accentColor)) { setError("Укажите цвета в формате #RRGGBB."); return; }
+    setError("");
+    await onSave({ name: normalizedName, backgroundColor: backgroundColor.toUpperCase(), accentColor: accentColor.toUpperCase(), pageDurationSeconds: duration, displayScalePercent: displayScale });
+  };
+
+  return <section className="hub-venue-settings">
+    <div className="hub-card-title"><h3>Оформление: {venue.name}</h3><button onClick={onClose}>Закрыть</button></div>
+    <label>Название точки<input maxLength={160} value={name} onChange={event => setName(event.target.value)} /></label>
+    <HubColorField label="Цвет фона" value={backgroundColor} onChange={setBackgroundColor} />
+    <HubColorField label="Цвет текста и заголовков" value={accentColor} onChange={setAccentColor} />
+    <label>Смена страниц, сек.<input type="number" min="5" max="60" value={duration} onChange={event => setDuration(Math.max(5, Math.min(60, Number(event.target.value) || 5)))} /></label>
+    <label>Масштаб меню ТВ, %<input type="number" min="50" max="160" step="5" value={displayScale} onChange={event => setDisplayScale(Math.max(50, Math.min(160, Number(event.target.value) || 50)))} /></label>
+    <div className="hub-settings-actions"><button type="button" onClick={() => { setBackgroundColor("#56965B"); setAccentColor("#FFFFFF"); }}>Цвета Политеха</button><button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить"}</button></div>
+    {error && <p className="hub-error">{error}</p>}
+  </section>;
+}
+
+function HubColorField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const color = /^#[0-9a-f]{6}$/i.test(value) ? value : "#FFFFFF";
+  return <label>{label}<span className="hub-color"><input aria-label={`${label}: выбрать`} type="color" value={color} onChange={event => onChange(event.target.value.toUpperCase())} /><input aria-label={`${label}: HEX`} maxLength={7} value={value} onChange={event => onChange(event.target.value)} /></span></label>;
+}
+
 export function BackendHub() {
   const [hubToken, setHubToken] = useState(() => localStorage.getItem("ifm-hub-session") ?? "");
   const [accessKey, setAccessKey] = useState("");
@@ -38,6 +94,7 @@ export function BackendHub() {
   const [notice, setNotice] = useState("");
   const [newVenue, setNewVenue] = useState({ venueCode: "", name: "", pin: "" });
   const [createdDisplayUrl, setCreatedDisplayUrl] = useState("");
+  const [editingVenueId, setEditingVenueId] = useState("");
 
   const loadOverview = useCallback(async () => {
     setBusy(true); setError("");
@@ -104,11 +161,21 @@ export function BackendHub() {
     } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
   };
 
+  const saveVenueSettings = async (venueId: string, settings: Pick<HubVenue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent">) => {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api.hubUpdateVenue(hubToken, venueId, settings);
+      setNotice("Настройки точки сохранены. Экран применит их при следующем обновлении.");
+      await loadOverview();
+    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
+  };
+
   const groupedFunctions = useMemo(() => {
     const groups = new Map<string, HubOverview["functions"]>();
     overview?.functions.forEach(entry => groups.set(entry.area, [...(groups.get(entry.area) ?? []), entry]));
     return Array.from(groups.entries());
   }, [overview]);
+  const editingVenue = overview?.venues.find(venue => venue.id === editingVenueId) ?? null;
 
   if (!hubToken) return <main className="hub-login">
     <div className="hub-login-card"><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1><p>Единый центр управления серверной частью.</p><input type="password" autoComplete="current-password" placeholder="Ключ оператора" value={accessKey} onChange={event => setAccessKey(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void login(); }} /><button disabled={busy || !accessKey} onClick={() => void login()}>{busy ? "Проверяем…" : "Войти в хаб"}</button>{error && <p className="hub-error">{error}</p>}</div>
@@ -122,7 +189,7 @@ export function BackendHub() {
       {overview && <>
         <div className="hub-metrics"><article><small>Точек</small><strong>{overview.totals.venues}</strong></article><article><small>Категорий</small><strong>{overview.totals.categories}</strong></article><article><small>Позиций</small><strong>{overview.totals.items}</strong></article><article><small>Активных экранов</small><strong>{overview.totals.activeDisplays}</strong></article></div>
         {tab === "venues" && <div className="hub-grid">
-          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{overview.venues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{overview.venues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button className="danger" onClick={() => void revokeSessions(venue.id)}>Отозвать</button><button className="danger" onClick={() => void deleteVenue(venue.id, venue.name)}>Удалить</button></td></tr>)}</tbody></table></div></section>
+          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{overview.venues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{overview.venues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button onClick={() => setEditingVenueId(venue.id)}>Оформление</button><button onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button className="danger" onClick={() => void revokeSessions(venue.id)}>Отозвать</button><button className="danger" onClick={() => void deleteVenue(venue.id, venue.name)}>Удалить</button></td></tr>)}</tbody></table></div>{editingVenue && <HubVenueSettings venue={editingVenue} busy={busy} onClose={() => setEditingVenueId("")} onSave={settings => saveVenueSettings(editingVenue.id, settings)} />}</section>
           <section className="hub-card hub-create"><h3>Новая точка</h3><label>Название<input placeholder="Кофейня на Невском" value={newVenue.name} onChange={event => setNewVenue({ ...newVenue, name: event.target.value })} /></label><label>Код для входа<input placeholder="nevsky" pattern="[a-z0-9-]{3,32}" value={newVenue.venueCode} onChange={event => setNewVenue({ ...newVenue, venueCode: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} /><small>3–32 латинских символа, цифры или дефис.</small></label><label>PIN<input type="password" inputMode="numeric" maxLength={6} placeholder="6 цифр" value={newVenue.pin} onChange={event => setNewVenue({ ...newVenue, pin: event.target.value.replace(/\D/g, "") })} /></label><button disabled={busy || !newVenue.name || newVenue.venueCode.length < 3 || newVenue.pin.length !== 6} onClick={() => void createVenue()}>Создать точку</button>{createdDisplayUrl && <div className="hub-secret"><b>Ссылка первого экрана</b><p>Она показывается только сейчас. Сохраните её безопасно.</p><textarea readOnly value={createdDisplayUrl} /><button onClick={() => void navigator.clipboard.writeText(createdDisplayUrl)}>Скопировать</button></div>}</section>
         </div>}
         {tab === "functions" && <div className="hub-function-groups">{groupedFunctions.map(([area, entries]) => <section className="hub-card" key={area}><div className="hub-card-title"><h3>{area}</h3><small>{entries.length}</small></div>{entries.map(entry => <article className="hub-function" key={entry.name}><div><code>{entry.name}</code><p>{entry.purpose}</p></div><span>{entry.access}</span></article>)}</section>)}</div>}

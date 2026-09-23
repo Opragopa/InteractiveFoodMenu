@@ -12,12 +12,18 @@ export function contrastForeground(hex: string) {
   return luminance > .45 ? "#201F1C" : "#FFFFFF";
 }
 
-export function DisplayScreen({ venue, categories, items, logoUrl, connected }: {
+function freshnessLabel(updatedAt: number | null) {
+  if (!updatedAt) return "Нет связи · показано последнее меню";
+  return `Нет связи · меню актуально на ${new Date(updatedAt).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })}`;
+}
+
+export function DisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt }: {
   venue: Venue;
   categories: Category[];
   items: MenuItem[];
   logoUrl: string;
   connected: boolean;
+  updatedAt?: number | null;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
   const scale = Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) / 100;
@@ -46,7 +52,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected }: 
       "--accent": venue.accentColor,
       "--foreground": contrastForeground(venue.backgroundColor),
     } as React.CSSProperties}>
-      <header>{logoUrl && <img className="logo" src={logoUrl} alt="" />}<h1>{formatRussianText(venue.name)}</h1></header>
+      <header><h1>{formatRussianText(venue.name)}</h1>{logoUrl && <img className="logo" src={logoUrl} alt="Логотип Политеха" />}</header>
       {!page ? <div className="empty">Меню пока не заполнено</div> : (
         <section className="page page-transition" key={`${pageIndex}-${items.filter((item) => item.isAvailable).length}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
           {page.columns.map((column, columnIndex) => (
@@ -63,7 +69,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected }: 
         </section>
       )}
       <footer>
-        <span className={`connection ${connected ? "online" : "offline"}`}>{connected ? "Актуально" : "Нет связи · показано последнее меню"}</span>
+        {!connected && <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span>}
         {pages.length > 1 && <span>{pageIndex + 1} / {pages.length}</span>}
       </footer>
     </main>

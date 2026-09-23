@@ -33,8 +33,10 @@ export function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [connected, setConnected] = useState(navigator.onLine);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const hasLoadedMenuRef = useRef(false);
 
   useEffect(() => {
     const online = () => setConnected(true);
@@ -75,8 +77,17 @@ export function App() {
     const load = async () => {
       try {
         const menu = await api.menu(sessionToken);
-        if (!cancelled) { setVenue(menu.venue as Venue); setCategories(menu.categories as Category[]); setItems(menu.items as MenuItem[]); setConnected(navigator.onLine); setLoading(false); }
-      } catch (cause) { if (!cancelled) { setConnected(false); setError(cause instanceof Error ? cause.message : "Меню недоступно."); setLoading(false); } }
+        if (!cancelled) {
+          hasLoadedMenuRef.current = true;
+          setVenue(menu.venue as Venue); setCategories(menu.categories as Category[]); setItems(menu.items as MenuItem[]);
+          setLastUpdatedAt(Date.now()); setConnected(true); setError(""); setLoading(false);
+        }
+      } catch (cause) {
+        if (!cancelled) {
+          setConnected(false); setLoading(false);
+          if (!hasLoadedMenuRef.current) setError(cause instanceof Error ? cause.message : "Меню недоступно.");
+        }
+      }
     };
     void load();
     const timer = window.setInterval(() => void load(), 3000);
@@ -87,7 +98,7 @@ export function App() {
   if (error) return <Status text={error} error />;
   if (!venue) return <Status text="Меню пока недоступно. Проверьте подключение." error />;
 
-  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="" connected={connected} />;
+  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="/politech-logo.svg" connected={connected} updatedAt={lastUpdatedAt} />;
 }
 
 function StaffScreen() {

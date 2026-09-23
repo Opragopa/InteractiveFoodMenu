@@ -168,7 +168,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       rowId: ID.unique(),
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
-        backgroundColor: "#F7F4EE", accentColor: "#9C3D24", pageDurationSeconds: 10,
+        backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10,
         displayScalePercent: 100, staffVersion: 1, displayVersion: 1, active: true,
         updatedAt: now, updatedBy: "backend-hub",
       },
@@ -194,6 +194,29 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     } });
     await audit(services, config, "venue_pin_rotated", venueId, { code });
     response.json({ updated: true, venue: publicRow(row) });
+  }));
+
+  router.patch("/hub/venues/:id", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
+    if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
+    const data: Record<string, unknown> = {};
+    if (request.body?.name !== undefined) data.name = text(request.body.name, 160);
+    for (const field of ["backgroundColor", "accentColor"] as const) {
+      if (request.body?.[field] !== undefined) {
+        const value = String(request.body[field]).toUpperCase();
+        if (!HEX_COLOR.test(value)) throw new ApiError(400, "invalid_argument", "Цвет должен быть в формате #RRGGBB.");
+        data[field] = value;
+      }
+    }
+    if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 60);
+    if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
+    data.updatedAt = new Date().toISOString();
+    data.updatedBy = "backend-hub";
+    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: venueId, data });
+    await audit(services, config, "venue_settings_updated", venueId, data);
+    response.json({ venue: publicRow(row) });
   }));
 
   router.post("/hub/venues/:id/revoke", asyncRoute(async (request, response) => {

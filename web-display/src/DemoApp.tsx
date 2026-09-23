@@ -1,7 +1,7 @@
 import { DisplayScreen } from "./DisplayScreen";
 import type { Category, MenuItem, Venue } from "./types";
 
-const venue: Venue = { name: "Кафе Север", currency: "RUB", backgroundColor: "#F7F4EE", accentColor: "#9C3D24", logoPath: "", pageDurationSeconds: 60 };
+const venue: Venue = { name: "Кафе Север", currency: "RUB", backgroundColor: "#56965B", accentColor: "#FFFFFF", logoPath: "", pageDurationSeconds: 60 };
 const categories: Category[] = ["Завтраки", "Супы", "Горячее", "Напитки"].map((name, index) => ({ id: `c${index}`, venueId: "demo", name, sortOrder: index }));
 const names = [
   ["Сырники со сметаной", "Омлет с томатами", "Каша овсяная", "Круассан с лососем"],
@@ -16,5 +16,5 @@ const items: MenuItem[] = names.flatMap((group, categoryIndex) => group.map((nam
 })));
 
 export function DemoApp() {
-  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="" connected />;
+  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="/politech-logo.svg" connected />;
 }
