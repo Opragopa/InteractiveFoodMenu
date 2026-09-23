@@ -27,6 +27,7 @@ export const TABLES: TableDefinition[] = [
       { key: "accentColor", type: "varchar", size: 7, required: true },
       { key: "pageDurationSeconds", type: "integer", required: true, min: 5, max: 60 },
       { key: "logoFileId", type: "varchar", size: 36, required: false },
+      { key: "logoPosition", type: "varchar", size: 16, required: false },
       { key: "displayScalePercent", type: "integer", required: true, min: 50, max: 160 },
       { key: "staffVersion", type: "integer", required: true },
       { key: "displayVersion", type: "integer", required: true },
@@ -164,9 +165,13 @@ async function ensureTable(tables: TablesDB, databaseId: string, definition: Tab
  * fresh installation and an installation upgraded from an earlier release.
  */
 async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
-  const columns = await tables.listColumns({ databaseId, tableId: "display_pairings", queries: [Query.limit(100)] });
-  if (!columns.columns.some(column => column.key === "displayUrl")) {
+  const pairingColumns = await tables.listColumns({ databaseId, tableId: "display_pairings", queries: [Query.limit(100)] });
+  if (!pairingColumns.columns.some(column => column.key === "displayUrl")) {
     await tables.createVarcharColumn({ databaseId, tableId: "display_pairings", key: "displayUrl", size: 500, required: false });
+  }
+  const venueColumns = await tables.listColumns({ databaseId, tableId: "venues", queries: [Query.limit(100)] });
+  if (!venueColumns.columns.some(column => column.key === "logoPosition")) {
+    await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "logoPosition", size: 16, required: false });
   }
 }
 

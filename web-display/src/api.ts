@@ -21,6 +21,19 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   return data;
 }
 
+function logoContentBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл логотипа."));
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? "");
+      const contentBase64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+      contentBase64 ? resolve(contentBase64) : reject(new Error("Не удалось прочитать файл логотипа."));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 export const api = {
   staffLogin: (venueCode: string, pin: string) => request<ApiSession>("/auth/staff", { method: "POST", body: JSON.stringify({ venueCode, pin }) }),
   displayLogin: (tokenId: string, secret: string) => request<ApiSession>("/auth/display", { method: "POST", body: JSON.stringify({ tokenId, secret }) }),
@@ -42,6 +55,8 @@ export const api = {
   hubOverview: (token: string) => request<any>("/hub/overview", {}, token),
   hubCreateVenue: (token: string, data: { name: string; venueCode: string; pin: string }) => request<any>("/hub/venues", { method: "POST", body: JSON.stringify({ name: data.name, code: data.venueCode, pin: data.pin }) }, token),
   hubUpdateVenue: (token: string, id: string, data: unknown) => request<{ venue: any }>(`/hub/venues/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+  hubUploadVenueLogo: async (token: string, id: string, file: File) => request<{ venue: any }>(`/hub/venues/${id}/logo`, { method: "POST", body: JSON.stringify({ name: file.name, mimeType: file.type, contentBase64: await logoContentBase64(file) }) }, token),
+  venueAssetUrl: (fileId: string) => `${baseUrl}/venue-assets/${encodeURIComponent(fileId)}`,
   hubRotatePin: (token: string, id: string, venueCode: string, pin: string) => request<any>(`/hub/venues/${id}/access`, { method: "PATCH", body: JSON.stringify({ venueCode, pin }) }, token),
   hubRevoke: (token: string, id: string) => request<any>(`/hub/venues/${id}/revoke`, { method: "POST" }, token),
   hubDeleteVenue: (token: string, id: string) => request<void>(`/hub/venues/${id}`, { method: "DELETE" }, token),

@@ -4,6 +4,8 @@ export type Venue = {
   backgroundColor: string;
   accentColor: string;
   logoPath: string;
+  logoFileId?: string | null;
+  logoPosition?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
   pageDurationSeconds: number;
   displayScalePercent?: number;
 };

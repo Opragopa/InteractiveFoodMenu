@@ -16,5 +16,5 @@ const items: MenuItem[] = names.flatMap((group, categoryIndex) => group.map((nam
 })));
 
 export function DemoApp() {
-  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="/politech-logo.svg" connected />;
+  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="/politech-logo-white.svg" connected />;
 }

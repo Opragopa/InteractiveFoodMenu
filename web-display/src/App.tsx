@@ -98,7 +98,7 @@ export function App() {
   if (error) return <Status text={error} error />;
   if (!venue) return <Status text="Меню пока недоступно. Проверьте подключение." error />;
 
-  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl="/politech-logo.svg" connected={connected} updatedAt={lastUpdatedAt} />;
+  return <DisplayScreen venue={venue} categories={categories} items={items} logoUrl={venue.logoFileId ? api.venueAssetUrl(venue.logoFileId) : "/politech-logo-white.svg"} connected={connected} updatedAt={lastUpdatedAt} />;
 }
 
 function StaffScreen() {

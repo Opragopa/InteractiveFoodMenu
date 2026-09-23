@@ -4,11 +4,17 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .startup-status { width: 100%; height: 100%; margin: 0; padding: 32px; display: flex; align-items: center; justify-content: center; color: #4b463e; background: #f7f4ee; font: 600 32px/1.25 Onest, Arial, sans-serif; text-align: center; }
 .startup-error { color: #8c2f20; }
-.display { --background: #56965b; --accent: #fff; --foreground: #fff; min-height: 100%; padding: 32px; padding: clamp(24px, 3vw, 56px); color: #fff; color: var(--foreground); background: #56965b; background: var(--background); display: flex; flex-direction: column; display: grid; grid-template-rows: auto 1fr auto; gap: 24px; gap: clamp(18px, 2vh, 32px); text-wrap: pretty; hyphens: auto; }
+.display { --background: #56965b; --accent: #fff; --foreground: #fff; position: relative; min-height: 100%; padding: 32px; padding: clamp(24px, 3vw, 56px); color: #fff; color: var(--foreground); background: #56965b; background: var(--background); display: flex; flex-direction: column; display: grid; grid-template-rows: auto 1fr auto; gap: 24px; gap: clamp(18px, 2vh, 32px); text-wrap: pretty; hyphens: auto; }
 header { display: flex; align-items: center; gap: 24px; min-height: 74px; }
-.display > header { justify-content: space-between; }
-.display > header h1 { flex: 1; }
-.logo { width: clamp(150px, 18vw, 260px); height: clamp(82px, 11vw, 160px); object-fit: contain; }
+.logo { position: absolute; z-index: 1; width: clamp(150px, 18vw, 260px); height: clamp(82px, 11vw, 160px); object-fit: contain; }
+.logo-top-right .logo { top: clamp(24px, 3vw, 56px); right: clamp(24px, 3vw, 56px); }
+.logo-top-left .logo { top: clamp(24px, 3vw, 56px); left: clamp(24px, 3vw, 56px); }
+.logo-bottom-right .logo { right: clamp(24px, 3vw, 56px); bottom: clamp(24px, 3vw, 56px); }
+.logo-bottom-left .logo { bottom: clamp(24px, 3vw, 56px); left: clamp(24px, 3vw, 56px); }
+.logo-top-left > header { padding-left: clamp(170px, 20vw, 290px); }
+.logo-top-right > header { padding-right: clamp(170px, 20vw, 290px); }
+.logo-bottom-left > footer { padding-left: clamp(170px, 20vw, 290px); }
+.logo-bottom-right > footer { padding-right: clamp(170px, 20vw, 290px); }
 h1 { margin: 0; color: #9c3d24; color: var(--accent); font-size: 52px; font-size: clamp(42px, 4vw, 76px); line-height: 1; letter-spacing: -0.035em; text-wrap: balance; }
 .page { display: flex; min-height: 0; animation: page-in 350ms ease-out; }
 .page > .column { margin-right: 32px; }
@@ -145,6 +151,9 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .hub-venue-settings input { width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid #c8d5dd; border-radius: 8px; color: var(--hub-ink); background: #fff; font: inherit; }
 .hub-color { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; }
 .hub-color input[type="color"] { height: 42px; padding: 3px; cursor: pointer; }
+.hub-number { display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; gap: 6px; }
+.hub-number button { border: 1px solid #bad0dc; border-radius: 8px; color: #1e536e; background: #fff; font: 700 21px/1 inherit; cursor: pointer; }
+.hub-number button:disabled { opacity: .45; cursor: not-allowed; }
 .hub-settings-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
 .hub-settings-actions button, .hub-venue-settings .hub-card-title button { padding: 10px 13px; border: 1px solid #bad0dc; border-radius: 8px; color: #1e536e; background: #fff; font: 700 13px inherit; cursor: pointer; }
 .hub-settings-actions button:last-child { color: #061813; background: #61d5b7; border-color: #61d5b7; }

@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import { ID, Query, type Models } from "node-appwrite";
+import { InputFile } from "node-appwrite/file";
 import type { AppwriteServices } from "./appwrite.js";
 import type { BackendConfig } from "./config.js";
 import { hashSecret, opaqueToken, signSession, verifySecret, verifySession, type SessionClaims, type SessionRole } from "./security.js";
@@ -8,6 +9,8 @@ import { hashSecret, opaqueToken, signSession, verifySecret, verifySession, type
 const VENUE_CODE = /^[a-z0-9][a-z0-9-]{2,31}$/;
 const PIN = /^\d{6}$/;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const LOGO_POSITIONS = new Set(["top-right", "top-left", "bottom-right", "bottom-left"]);
+const LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 type RowData = Models.Row & Record<string, unknown>;
 
@@ -58,6 +61,12 @@ function integer(value: unknown, minimum: number, maximum: number): number {
 
 function routeId(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function logoPosition(value: unknown): string {
+  const result = String(value ?? "");
+  if (!LOGO_POSITIONS.has(result)) throw new ApiError(400, "invalid_argument", "Некорректное расположение логотипа.");
+  return result;
 }
 
 function publicRow(row: RowData): Record<string, unknown> {
@@ -168,7 +177,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       rowId: ID.unique(),
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
-        backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10,
+        backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right",
         displayScalePercent: 100, staffVersion: 1, displayVersion: 1, active: true,
         updatedAt: now, updatedBy: "backend-hub",
       },
@@ -212,11 +221,47 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     }
     if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 60);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
+    if (request.body?.logoPosition !== undefined) data.logoPosition = logoPosition(request.body.logoPosition);
+    const removeLogoFileId = request.body?.logoFileId === null && typeof venue.logoFileId === "string" ? venue.logoFileId : "";
+    if (request.body?.logoFileId === null) data.logoFileId = null;
     data.updatedAt = new Date().toISOString();
     data.updatedBy = "backend-hub";
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: venueId, data });
+    if (removeLogoFileId) await services.storage.deleteFile({ bucketId: config.appwriteBucketId, fileId: removeLogoFileId }).catch(() => undefined);
     await audit(services, config, "venue_settings_updated", venueId, data);
     response.json({ venue: publicRow(row) });
+  }));
+
+  router.post("/hub/venues/:id/logo", asyncRoute(async (request, response) => {
+    requireRole(request, config, ["hub"]);
+    const venueId = routeId(request.params.id);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
+    if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
+    const mimeType = String(request.body?.mimeType ?? "").toLowerCase();
+    const name = String(request.body?.name ?? "logo").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+    const contentBase64 = String(request.body?.contentBase64 ?? "");
+    if (!LOGO_MIME_TYPES.has(mimeType) || !/^[A-Za-z0-9+/]+={0,2}$/.test(contentBase64)) {
+      throw new ApiError(400, "invalid_argument", "Загрузите логотип в PNG, JPEG или WebP.");
+    }
+    const content = Buffer.from(contentBase64, "base64");
+    if (!content.length || content.length > 5 * 1024 * 1024) throw new ApiError(400, "invalid_argument", "Размер логотипа должен быть не больше 5 МБ.");
+    const file = await services.storage.createFile({
+      bucketId: config.appwriteBucketId, fileId: ID.unique(), file: InputFile.fromBuffer(content, name), permissions: [],
+    });
+    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: venueId, data: {
+      logoFileId: file.$id, updatedAt: new Date().toISOString(), updatedBy: "backend-hub",
+    } });
+    if (typeof venue.logoFileId === "string" && venue.logoFileId) await services.storage.deleteFile({ bucketId: config.appwriteBucketId, fileId: venue.logoFileId }).catch(() => undefined);
+    await audit(services, config, "venue_logo_uploaded", venueId, { fileId: file.$id, mimeType });
+    response.status(201).json({ venue: publicRow(row) });
+  }));
+
+  router.get("/venue-assets/:id", asyncRoute(async (request, response) => {
+    const fileId = routeId(request.params.id);
+    const file = await services.storage.getFile({ bucketId: config.appwriteBucketId, fileId });
+    const content = await services.storage.getFileDownload({ bucketId: config.appwriteBucketId, fileId });
+    response.setHeader("Cache-Control", "public, max-age=3600");
+    response.type(file.mimeType || "application/octet-stream").send(Buffer.from(content));
   }));
 
   router.post("/hub/venues/:id/revoke", asyncRoute(async (request, response) => {

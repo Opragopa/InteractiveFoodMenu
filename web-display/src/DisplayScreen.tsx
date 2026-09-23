@@ -26,6 +26,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   updatedAt?: number | null;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
+  const logoPosition = venue.logoPosition ?? "top-right";
   const scale = Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) / 100;
   const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }));
   useEffect(() => {
@@ -46,13 +47,14 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
 
   const page = pages[pageIndex];
   return (
-    <main className="display" lang="ru" style={{
+    <main className={`display logo-${logoPosition}`} lang="ru" style={{
       zoom: scale,
       "--background": venue.backgroundColor,
       "--accent": venue.accentColor,
       "--foreground": contrastForeground(venue.backgroundColor),
     } as React.CSSProperties}>
-      <header><h1>{formatRussianText(venue.name)}</h1>{logoUrl && <img className="logo" src={logoUrl} alt="Логотип Политеха" />}</header>
+      <header><h1>{formatRussianText(venue.name)}</h1></header>
+      {logoUrl && <img className="logo" src={logoUrl} alt="Логотип точки" />}
       {!page ? <div className="empty">Меню пока не заполнено</div> : (
         <section className="page page-transition" key={`${pageIndex}-${items.filter((item) => item.isAvailable).length}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
           {page.columns.map((column, columnIndex) => (
