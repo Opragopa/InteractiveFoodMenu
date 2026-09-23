@@ -204,7 +204,9 @@ export function BackendHub() {
   };
 
   const deleteVenue = async (venueId: string, name: string) => {
-    if (!window.confirm(`Полностью удалить точку «${name}», её меню, ссылки экранов и журналы? Это действие нельзя отменить.`)) return;
+    if (!window.confirm(`Удалить точку «${name}» вместе с меню, ссылками экранов и журналами? Это действие необратимо.`)) return;
+    const typedName = window.prompt(`Для подтверждения введите название точки точно:\n${name}`);
+    if (typedName !== name) { setError("Удаление отменено: название точки введено не полностью."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       await api.hubDeleteVenue(hubToken, venueId);
@@ -234,6 +236,7 @@ export function BackendHub() {
   };
 
   const useDefaultLogo = async (venueId: string) => {
+    if (!window.confirm("Заменить загруженный логотип стандартным? Загруженный файл будет удалён.")) return;
     setBusy(true); setError(""); setNotice("");
     try {
       await api.hubUpdateVenue(hubToken, venueId, { logoFileId: null });

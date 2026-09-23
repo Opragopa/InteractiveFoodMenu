@@ -186,6 +186,8 @@ function StaffScreen() {
   if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
   const grouped = categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: items.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) }));
   const toggleAvailability = async (item: MenuItem, unavailable: boolean) => {
+    const action = unavailable ? "убрать позицию из меню" : "вернуть позицию в меню";
+    if (!window.confirm(`${action[0].toUpperCase()}${action.slice(1)} «${item.name}»?`)) return;
     const root = availabilityListRef.current;
     previousRowsRef.current = new Map(Array.from(root?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
     setItems(current => current.map(value => value.id === item.id ? { ...value, isAvailable: !unavailable } : value));
@@ -204,6 +206,16 @@ function StaffScreen() {
   };
   const saveCategory = async () => { const name = newCategory.trim(); if (!name) return; const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length }); setCategories(current => [...current, result.category as Category]); setNewCategory(""); };
   const saveItem = async () => { const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100); if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor)) return; const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true }); setItems(current => [...current, result.item as MenuItem]); setNewItem({ name: "", price: "", categoryId: newItem.categoryId }); };
+  const deleteCategory = async (category: Category) => {
+    if (!window.confirm(`Удалить категорию «${category.name}»? Все её позиции должны быть удалены заранее. Действие необратимо.`)) return;
+    try { await api.deleteCategory(sessionToken, category.id); setCategories(current => current.filter(value => value.id !== category.id)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось удалить категорию."); }
+  };
+  const deleteItem = async (item: MenuItem) => {
+    if (!window.confirm(`Удалить позицию «${item.name}»? Восстановить её автоматически будет нельзя.`)) return;
+    try { await api.deleteItem(sessionToken, item.id); setItems(current => current.filter(value => value.id !== item.id)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось удалить позицию."); }
+  };
   const saveVenueSettings = async (settings: Pick<Venue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent">) => {
     setBusy(true);
     try {
@@ -273,7 +285,7 @@ function StaffScreen() {
         <section>
           <h2>Категории</h2>
           <div className="form-row"><input placeholder="Новая категория" value={newCategory} onChange={event => setNewCategory(event.target.value)} /><button onClick={saveCategory}>Добавить</button></div>
-          {categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button onClick={() => void api.deleteCategory(sessionToken, category.id).then(() => setCategories(current => current.filter(value => value.id !== category.id))).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось удалить категорию."))}>Удалить</button></label>)}
+          {categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button className="danger-action" onClick={() => void deleteCategory(category)}>Удалить</button></label>)}
         </section>
       )}
       {tab === "items" && (
@@ -290,7 +302,7 @@ function StaffScreen() {
             <small>Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.</small>
             {csvRows.length > 0 && <button onClick={importCsv} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>
-          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button onClick={() => void api.deleteItem(sessionToken, item.id).then(() => setItems(current => current.filter(value => value.id !== item.id))).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось удалить позицию."))}>Удалить</button></label>)}
+          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button className="danger-action" onClick={() => void deleteItem(item)}>Удалить</button></label>)}
         </section>
       )}
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
