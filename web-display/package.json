@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run build:legacy-connect && tsc -b && vite build",
-    "build:legacy-connect": "esbuild src/legacy-connect-entry.js --bundle --platform=browser --target=chrome63 --format=iife --outfile=public/legacy-connect.js",
+    "build:legacy-connect": "esbuild src/legacy-connect-entry.js --bundle --platform=browser --target=es2015 --format=iife --outfile=public/legacy-connect.js && node scripts/transpile-legacy-connect.cjs",
     "test": "vitest run",
     "preview": "vite preview",
     "tv": "npm run build && vite preview --host 0.0.0.0 --port 5174 --strictPort"
