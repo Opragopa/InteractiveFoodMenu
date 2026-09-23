@@ -35,34 +35,43 @@ export function startLegacyConnect(qrCode) {
     setStatus("Не удалось подключить ТВ: " + (error && error.message ? error.message : "неизвестная ошибка"), true);
   }
 
-  if (!qrCode || !qrCode.toString) {
-    showError(new Error("не загрузился генератор QR-кода; обновите страницу"));
-    return;
-  }
-
   api("/display/pairings", "POST", {}, function (error, pairing) {
     if (error) { showError(error); return; }
     var pairingUrl = pairing.displayBaseUrl + "/pair#" + pairing.pairingToken;
+    if (pairing.qrSvg) {
+      qrElement.innerHTML = pairing.qrSvg;
+      setStatus("Откройте на телефоне сотрудника и отсканируйте QR-код. Ожидаем подключение…", false);
+      startPolling(pairing);
+      return;
+    }
+    if (!qrCode || !qrCode.toString) {
+      showError(new Error("не загрузился генератор QR-кода; обновите страницу"));
+      return;
+    }
     // SVG avoids canvas limitations in older NetCast/WebKit implementations.
     qrCode.toString(pairingUrl, { type: "svg", width: 360, margin: 2, errorCorrectionLevel: "M" }, function (qrError, svg) {
       if (qrError) { showError(qrError); return; }
       qrElement.innerHTML = svg;
       setStatus("Откройте на телефоне сотрудника и отсканируйте QR-код. Ожидаем подключение…", false);
-      pollTimer = window.setInterval(function () {
-        var parts = pairing.pairingToken.split(".");
-        api("/display/pairings/" + encodeURIComponent(parts[0]) + "?secret=" + encodeURIComponent(parts[1] || ""), "GET", null, function (pollError, result) {
-          if (pollError) return;
-          if (result.status === "complete" && result.displayUrl) {
-            window.clearInterval(pollTimer);
-            setStatus("Подключено. Загружаем меню…", false);
-            window.location.replace(result.displayUrl);
-          } else if (result.status === "expired") {
-            window.clearInterval(pollTimer);
-            setStatus("Код истёк. Обновите страницу, чтобы получить новый QR-код.", true);
-          }
-        });
-      }, 2000);
+      startPolling(pairing);
     });
   });
+
+  function startPolling(pairing) {
+    pollTimer = window.setInterval(function () {
+      var parts = pairing.pairingToken.split(".");
+      api("/display/pairings/" + encodeURIComponent(parts[0]) + "?secret=" + encodeURIComponent(parts[1] || ""), "GET", null, function (pollError, result) {
+        if (pollError) return;
+        if (result.status === "complete" && result.displayUrl) {
+          window.clearInterval(pollTimer);
+          setStatus("Подключено. Загружаем меню…", false);
+          window.location.replace(result.displayUrl);
+        } else if (result.status === "expired") {
+          window.clearInterval(pollTimer);
+          setStatus("Код истёк. Обновите страницу, чтобы получить новый QR-код.", true);
+        }
+      });
+    }, 2000);
+  }
   window.addEventListener("pagehide", function () { if (pollTimer) window.clearInterval(pollTimer); });
 }

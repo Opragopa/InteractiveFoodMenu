@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import { ID, Query, type Models } from "node-appwrite";
 import { InputFile } from "node-appwrite/file";
+import QRCode from "qrcode";
 import type { AppwriteServices } from "./appwrite.js";
 import type { BackendConfig } from "./config.js";
 import { hashSecret, opaqueToken, signSession, verifySecret, verifySession, type SessionClaims, type SessionRole } from "./security.js";
@@ -467,7 +468,10 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const secret = opaqueToken();
     const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
     await services.tables.createRow({ databaseId, tableId: "display_pairings", rowId: tokenId, data: { tokenHash: await hashSecret(secret), status: "pending", expiresAt, createdAt: new Date().toISOString() } });
-    response.status(201).json({ pairingToken: `${tokenId}.${secret}`, displayBaseUrl: config.displayBaseUrl, expiresInSeconds: 300 });
+    const pairingToken = `${tokenId}.${secret}`;
+    const pairingUrl = `${config.displayBaseUrl}/pair#${pairingToken}`;
+    const qrSvg = await QRCode.toString(pairingUrl, { type: "svg", width: 360, margin: 2, errorCorrectionLevel: "M" });
+    response.status(201).json({ pairingToken, displayBaseUrl: config.displayBaseUrl, expiresInSeconds: 300, qrSvg });
   }));
 
   router.post("/display/pairings/complete", asyncRoute(async (request, response) => {
