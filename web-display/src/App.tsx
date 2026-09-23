@@ -39,6 +39,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const hasLoadedMenuRef = useRef(false);
   const menuVersionRef = useRef<number | null>(null);
+  const legacyBrowser = typeof window.fetch !== "function";
 
   useEffect(() => {
     const online = () => setConnected(true);
@@ -96,6 +97,13 @@ export function App() {
     void load();
     const timer = window.setInterval(async () => {
       try {
+        // Chrome 38/NetCast can cache or mishandle lightweight version
+        // requests. Its XHR fallback is reliable, so refresh the full menu
+        // only on legacy TVs; modern browsers keep the cheap version poll.
+        if (legacyBrowser) {
+          await load();
+          return;
+        }
         const version = await api.menuVersion(sessionToken);
         if (version.version !== menuVersionRef.current) await load();
         else setConnected(true);
@@ -104,7 +112,7 @@ export function App() {
       }
     }, menuRefreshSeconds * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
-  }, [sessionToken, menuRefreshSeconds]);
+  }, [sessionToken, menuRefreshSeconds, legacyBrowser]);
 
   if (loading) return <Status text="Подключаем меню…" />;
   if (error) return <Status text={error} error />;
