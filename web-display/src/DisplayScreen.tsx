@@ -30,6 +30,9 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const logoInset = Math.min(20, Math.max(0, venue.logoInsetPercent ?? 3));
   const logoScale = Math.min(200, Math.max(50, venue.logoScalePercent ?? 100)) / 100;
   const scale = Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) / 100;
+  const backgroundColor = /^#[0-9a-f]{6}$/i.test(venue.backgroundColor) ? venue.backgroundColor : "#56965B";
+  const accentColor = /^#[0-9a-f]{6}$/i.test(venue.accentColor) ? venue.accentColor : "#FFFFFF";
+  const foregroundColor = contrastForeground(backgroundColor);
   const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }));
   useEffect(() => {
     const resize = () => setViewport({ width: innerWidth, height: innerHeight });
@@ -51,20 +54,22 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   return (
     <main className={`display logo-${logoPosition}`} lang="ru" style={{
       zoom: scale,
-      "--background": venue.backgroundColor,
-      "--accent": venue.accentColor,
-      "--foreground": contrastForeground(venue.backgroundColor),
+      backgroundColor,
+      color: foregroundColor,
+      "--background": backgroundColor,
+      "--accent": accentColor,
+      "--foreground": foregroundColor,
       "--logo-inset": `${logoInset}%`,
       "--logo-scale": logoScale,
     } as React.CSSProperties}>
-      <header><h1>{formatRussianText(venue.name)}</h1></header>
+      <header><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
       {!page ? <div className="empty">Меню пока не заполнено</div> : (
         <section className="page page-transition" key={`${pageIndex}-${items.filter((item) => item.isAvailable).length}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
           {page.columns.map((column, columnIndex) => (
             <div className="column" key={columnIndex}>
               {column.map((entry, rowIndex) => entry.kind === "category" ? (
-                <h2 key={`${entry.categoryId}-${rowIndex}`}>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</h2>
+                <h2 key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor }}>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</h2>
               ) : (
                 <div className={`menu-item menu-item-enter ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms` } as React.CSSProperties}>
                   <span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" /><span className="price">{money.format(entry.item.priceMinor / 100)}</span>
