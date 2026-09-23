@@ -1,7 +1,7 @@
 /* Old-TV connect flow: intentionally no React or Firebase client SDK. */
 export function startLegacyConnect(qrCode) {
   var statusElement = document.getElementById("status");
-  var canvas = document.getElementById("qr");
+  var qrElement = document.getElementById("qr");
   var pollTimer = null;
 
   function setStatus(message, isError) {
@@ -35,7 +35,7 @@ export function startLegacyConnect(qrCode) {
     setStatus("Не удалось подключить ТВ: " + (error && error.message ? error.message : "неизвестная ошибка"), true);
   }
 
-  if (!qrCode || !qrCode.toCanvas) {
+  if (!qrCode || !qrCode.toString) {
     showError(new Error("не загрузился генератор QR-кода; обновите страницу"));
     return;
   }
@@ -43,8 +43,10 @@ export function startLegacyConnect(qrCode) {
   api("/display/pairings", "POST", {}, function (error, pairing) {
     if (error) { showError(error); return; }
     var pairingUrl = pairing.displayBaseUrl + "/pair#" + pairing.pairingToken;
-    qrCode.toCanvas(canvas, pairingUrl, { width: 360, margin: 2, errorCorrectionLevel: "M" }, function (qrError) {
+    // SVG avoids canvas limitations in older NetCast/WebKit implementations.
+    qrCode.toString(pairingUrl, { type: "svg", width: 360, margin: 2, errorCorrectionLevel: "M" }, function (qrError, svg) {
       if (qrError) { showError(qrError); return; }
+      qrElement.innerHTML = svg;
       setStatus("Откройте на телефоне сотрудника и отсканируйте QR-код. Ожидаем подключение…", false);
       pollTimer = window.setInterval(function () {
         var parts = pairing.pairingToken.split(".");
