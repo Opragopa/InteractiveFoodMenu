@@ -66,10 +66,19 @@ export function autoScaleForMenu(categories: Category[], items: MenuItem[], widt
   // Auto mode must remain legible on ordinary 1080p displays. Manual mode can
   // still use the full 50–160% range, while automatic mode grows only as far
   // as the viewport can comfortably render.
+  const pagesAt = (scale: number) => {
+    const layout = layoutForViewport(width / scale, height / scale);
+    return paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount).length;
+  };
+  // Prefer a single complete screen. A sparse second page is harder to read
+  // and wastes the available display area.
   for (let percent = 120; percent >= 50; percent -= 5) {
     const scale = percent / 100;
-    const layout = layoutForViewport(width / scale, height / scale);
-    if (paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount).length <= maxPages) return scale;
+    if (pagesAt(scale) <= 1) return scale;
+  }
+  for (let percent = 120; percent >= 50; percent -= 5) {
+    const scale = percent / 100;
+    if (pagesAt(scale) <= maxPages) return scale;
   }
   return 0.5;
 }

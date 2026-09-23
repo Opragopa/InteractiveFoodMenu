@@ -50,6 +50,13 @@ describe("paginateMenu", () => {
     expect(autoScaleForMenu(categories, items, 1920, 1080)).toBeLessThanOrEqual(1.2);
     expect(itemNameScale("Очень длинное название блюда с большим количеством слов")).toBeLessThan(1);
   });
+
+  it("prefers one page when shrinking makes the menu fit", () => {
+    const manyItems: MenuItem[] = Array.from({ length: 20 }, (_, index) => ({ ...itemsFixture(`many-${index}`, true), sortOrder: index }));
+    const scale = autoScaleForMenu(categories, manyItems, 1366, 768);
+    const layout = layoutForViewport(1366 / scale, 768 / scale);
+    expect(paginateMenu(categories, manyItems, layout.rowsPerColumn, layout.columnCount)).toHaveLength(1);
+  });
 });
 
 function itemsFixture(id: string, isAvailable: boolean): MenuItem {
