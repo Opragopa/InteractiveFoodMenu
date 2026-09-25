@@ -20,6 +20,8 @@ backend-api/dist/
 # Local residues from pre-Appwrite installations. The application no longer
 # reads or ships any of these files.
 /functions/
+/web-display/functions/
+/web-display/web-display/
 .firebase/
 .firebase-data/
 firebase-debug.log
