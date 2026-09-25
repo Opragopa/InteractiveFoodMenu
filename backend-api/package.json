@@ -9,7 +9,10 @@
     "bootstrap": "node dist/bootstrap.js",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
-    "test": "npm run build && node --test dist/*.test.js"
+    "test": "npm run build && node --test dist/*.test.js",
+    "coverage": "npm run build && c8 --all --src src --exclude '**/*.test.*' --exclude 'src/bootstrap.ts' --reporter=text --reporter=html node --test dist/*.test.js",
+    "integration": "npm run build && node --test dist/integration.test.js",
+    "mutation": "stryker run"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -20,11 +23,14 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/typescript-checker": "^10.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.0",
     "@types/qrcode": "^1.5.6",
+    "c8": "^12.0.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"
   }

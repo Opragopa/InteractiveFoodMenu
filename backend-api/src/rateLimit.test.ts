@@ -18,3 +18,11 @@ test("rate limiter resets after its window", () => {
   pruneRateLimitBuckets(buckets, 2002);
   assert.equal(buckets.size, 0);
 });
+
+test("rate limiter treats the reset boundary as a new window", () => {
+  const buckets = new Map();
+  consumeRateLimit(buckets, "boundary", 0, 1000, 1);
+  assert.equal(consumeRateLimit(buckets, "boundary", 1000, 1000, 1).allowed, true);
+  pruneRateLimitBuckets(buckets, 2000);
+  assert.equal(buckets.size, 0);
+});

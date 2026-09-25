@@ -16,6 +16,8 @@ web-display/public/legacy-connect.js
 .env.backend
 appwrite/
 backend-api/dist/
+**/coverage/
+backend-api/reports/
 
 # Local residues from pre-Appwrite installations. The application no longer
 # reads or ships any of these files.

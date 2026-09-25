@@ -37,5 +37,25 @@ export default defineConfig({
         proxy: emulatorProxy,
     },
     preview: { proxy: emulatorProxy },
-    test: { environment: "jsdom" },
+    test: {
+        environment: "jsdom",
+        coverage: {
+            provider: "v8",
+            reporter: ["text", "html", "json-summary"],
+            exclude: [
+                "**/*.test.*",
+                "src/main.tsx",
+                "src/legacy-connect-entry.js",
+                "src/legacy-connect.js",
+                "src/DemoApp.tsx",
+                "src/types.ts",
+                "public/**",
+                "scripts/**",
+                "**/vite.config.*",
+                "**/dist/**",
+                "**/*.d.ts",
+            ],
+            thresholds: { statements: 30, branches: 70, functions: 40, lines: 30 },
+        },
+    },
 });

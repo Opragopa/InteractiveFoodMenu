@@ -20,6 +20,9 @@ jobs:
       - run: npm ci --prefix backend-api
       - run: npm ci --prefix web-display
       - run: npm test
+      - run: npm run integration
+      - run: npm run coverage
+      - run: npm run mutation
       - run: npm run build
       - run: docker build -t interactivefoodmenu-api:ci backend-api
       - run: docker build -t interactivefoodmenu-web:ci -f Dockerfile.web .
