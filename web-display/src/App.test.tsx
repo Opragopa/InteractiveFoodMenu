@@ -64,6 +64,8 @@ describe("staff application flow", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Поиск по позициям" }), { target: { value: "чай" } });
     expect(screen.getByText("Чай")).toBeTruthy();
     expect(screen.queryByText("Латте")).toBeNull();
+    expect(screen.getByLabelText("Чай: сделать доступной")).toBeTruthy();
+    expect(screen.getByText("Чай").closest("label")).toBeNull();
     fireEvent.click(screen.getByLabelText("Выбрать показанные"));
     const toolbar = screen.getByLabelText("Выбрать показанные").closest("div");
     expect(toolbar).not.toBeNull();

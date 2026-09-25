@@ -90,6 +90,7 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_BACKEND_API_URL: ${VITE_BACKEND_API_URL:-/api}
+        VITE_BUILD_VERSION: ${BUILD_VERSION:-unknown}
     # The host Nginx owns public 80/443 and forwards the site here. Publishing
     # this directly avoids an unreliable extra Docker port forward on Windows.
     ports:

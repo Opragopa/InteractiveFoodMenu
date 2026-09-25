@@ -142,10 +142,12 @@ function StaffScreen() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [menuLoading, setMenuLoading] = useState(() => Boolean(sessionToken));
   const [tab, setTab] = useState<"availability" | "categories" | "items" | "settings" | "experimental">("availability");
   const [newCategory, setNewCategory] = useState("");
   const [newItem, setNewItem] = useState({ name: "", price: "", categoryId: "" });
   const [csvRows, setCsvRows] = useState<CsvMenuRow[]>([]);
+  const [csvProgress, setCsvProgress] = useState<{ current: number; total: number; failed: string[] } | null>(null);
   const [breakDuration, setBreakDuration] = useState(10);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -155,6 +157,7 @@ function StaffScreen() {
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: "category" | "item"; id: string; name: string } | null>(null);
   const availabilityListRef = useRef<HTMLDivElement | null>(null);
   const previousRowsRef = useRef<Map<string, number> | null>(null);
   const login = async () => {
@@ -172,14 +175,19 @@ function StaffScreen() {
   };
   const loadMenu = useCallback(async () => {
     if (!sessionToken) return;
-    const menu = await api.menu(sessionToken);
-    setVenue(menu.venue as Venue);
-    setCategories(menu.categories as Category[]);
-    setItems(menu.items as MenuItem[]);
-    setBreakDuration(Number(menu.venue.breakDurationMinutes ?? 10));
-    setLastUpdatedAt(Date.now());
-    setSelectedIds(new Set());
-    setShowOnboarding(localStorage.getItem(`ifm-staff-onboarding-${code}`) !== "dismissed");
+    setMenuLoading(true);
+    try {
+      const menu = await api.menu(sessionToken);
+      setVenue(menu.venue as Venue);
+      setCategories(menu.categories as Category[]);
+      setItems(menu.items as MenuItem[]);
+      setBreakDuration(Number(menu.venue.breakDurationMinutes ?? 10));
+      setLastUpdatedAt(Date.now());
+      setSelectedIds(new Set());
+      setShowOnboarding(localStorage.getItem(`ifm-staff-onboarding-${code}`) !== "dismissed");
+    } finally {
+      setMenuLoading(false);
+    }
   }, [sessionToken, code]);
   useEffect(() => {
     if (!sessionToken) return;
@@ -205,6 +213,7 @@ function StaffScreen() {
       row.style.transform = "translateY(0)";
     })));
   }, [items]);
+  if (sessionToken && menuLoading && !venue) return <main className="staff-menu staff-dashboard"><div className="loading-panel" role="status" aria-live="polite"><span className="loading-spinner" aria-hidden="true" />Загружаем меню…</div></main>;
   if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button type="button" onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button type="button" className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
   const filteredItems = filterMenuItems(items, search, categoryFilter, availabilityFilter);
   const grouped = [...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: filteredItems.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) })).filter(group => group.items.length);
@@ -290,14 +299,27 @@ function StaffScreen() {
     } finally { setBusy(false); }
   };
   const deleteCategory = async (category: Category) => {
-    if (!window.confirm(`Удалить категорию «${category.name}»? Все её позиции должны быть удалены заранее. Действие необратимо.`)) return;
-    try { await api.deleteCategory(sessionToken, category.id); setCategories(current => current.filter(value => value.id !== category.id)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось удалить категорию."); }
+    setConfirmDelete({ kind: "category", id: category.id, name: category.name });
   };
   const deleteItem = async (item: MenuItem) => {
-    if (!window.confirm(`Удалить позицию «${item.name}»? Восстановить её автоматически будет нельзя.`)) return;
-    try { await api.deleteItem(sessionToken, item.id); setItems(current => current.filter(value => value.id !== item.id)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось удалить позицию."); }
+    setConfirmDelete({ kind: "item", id: item.id, name: item.name });
+  };
+  const performDelete = async () => {
+    if (!confirmDelete) return;
+    setBusy(true); setError("");
+    try {
+      if (confirmDelete.kind === "category") {
+        await api.deleteCategory(sessionToken, confirmDelete.id);
+        setCategories(current => current.filter(value => value.id !== confirmDelete.id));
+      } else {
+        await api.deleteItem(sessionToken, confirmDelete.id);
+        setItems(current => current.filter(value => value.id !== confirmDelete.id));
+      }
+      setConfirmDelete(null);
+      setToastMessage("Удалено. Если это было ошибкой, обновите данные и восстановите позицию вручную.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось удалить объект.");
+    } finally { setBusy(false); }
   };
   const saveVenueSettings = async (settings: Partial<Venue>) => {
     setBusy(true);
@@ -309,24 +331,43 @@ function StaffScreen() {
   const importCsv = async () => {
     if (!csvRows.length) return;
     setBusy(true); setError("");
+    setCsvProgress({ current: 0, total: csvRows.length, failed: [] });
+    const failed: string[] = [];
     try {
       const categoryIds = new Map(categories.map(category => [category.name.trim().toLocaleLowerCase(), category.id]));
       const categoryOrders = new Map(categories.map(category => [category.id, items.filter(item => item.categoryId === category.id).length]));
       for (const [index, name] of csvRows.map(row => row.category).filter((name, index, names) => names.findIndex(other => other.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()) === index).entries()) {
         const key = name.trim().toLocaleLowerCase();
         if (!categoryIds.has(key)) {
-          const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length + index });
-          categoryIds.set(key, result.category.id); categoryOrders.set(result.category.id, 0);
+          try {
+            const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length + index });
+            categoryIds.set(key, result.category.id); categoryOrders.set(result.category.id, 0);
+          } catch {
+            failed.push(`Категория: ${name}`);
+          }
         }
       }
-      for (const row of csvRows) {
-        const categoryId = categoryIds.get(row.category.trim().toLocaleLowerCase())!;
+      for (const [index, row] of csvRows.entries()) {
+        const categoryId = categoryIds.get(row.category.trim().toLocaleLowerCase());
+        if (!categoryId) {
+          failed.push(row.name);
+          setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
+          continue;
+        }
         const sortOrder = categoryOrders.get(categoryId) ?? 0;
         categoryOrders.set(categoryId, sortOrder + 1);
-        await api.createItem(sessionToken, { categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, isAvailable: row.isAvailable });
+        try {
+          await api.createItem(sessionToken, { categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, isAvailable: row.isAvailable });
+        } catch {
+          failed.push(row.name);
+        }
+        setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
       }
-      setCsvRows([]);
+      const failedSet = new Set(failed);
+      setCsvRows(csvRows.filter(row => failedSet.has(row.name)));
       await loadMenu();
+      if (failed.length) setError(`Импорт завершён частично: ошибок ${failed.length}. Исправьте строки и повторите импорт; успешно сохранённые позиции не дублируются автоматически.`);
+      else setCsvRows([]);
     } catch (cause) { setError(cause instanceof Error ? `Не удалось импортировать CSV: ${cause.message}` : "Не удалось импортировать CSV."); }
     finally { setBusy(false); }
   };
@@ -348,7 +389,7 @@ function StaffScreen() {
   };
   const selectCsv = async (file: File | undefined) => {
     if (!file) return;
-    setError("");
+    setError(""); setCsvProgress(null);
     try { setCsvRows(parseMenuCsv(await file.text())); }
     catch (cause) { setCsvRows([]); setError(cause instanceof Error ? cause.message : "Не удалось прочитать CSV."); }
   };
@@ -368,6 +409,7 @@ function StaffScreen() {
         <article><span>Категорий</span><strong>{categories.length}</strong><small>в текущем меню</small></article>
         <article><span>Страниц ТВ</span><strong>{pageEstimate}</strong><small>при 1366 × 768</small></article>
       </section>
+      {error && <p className="staff-error-banner" role="alert">{error}</p>}
       {showOnboarding && <aside className="staff-onboarding" aria-label="Быстрый старт">
         <div><span className="onboarding-kicker">Быстрый старт</span><h2>Меню под контролем</h2><p>Три действия, которые пригодятся каждый день:</p></div>
         <ol><li><b>Наличие</b> — найдите блюдо и выключите его одним переключателем.</li><li><b>Перерыв</b> — задайте минуты сверху и запустите перерыв для экрана.</li><li><b>Настройки</b> — изменяйте оформление и расширенные параметры отдельно.</li></ol>
@@ -380,29 +422,29 @@ function StaffScreen() {
         <section key={group.category.id}>
           <h2>{group.category.name}</h2>
           {group.items.map(item => (
-            <label className={!item.isAvailable ? "unavailable" : ""} data-item-id={item.id} key={item.id}>
-              <input className="item-select" type="checkbox" aria-label={`Выбрать ${item.name}`} checked={selectedIds.has(item.id)} onChange={event => toggleSelection(item.id, event.target.checked)} />
-              <span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span>
-              <input className="availability-toggle" type="checkbox" aria-label={`${item.name}: нет в наличии`} checked={!item.isAvailable} onChange={event => void toggleAvailability(item, event.target.checked)} />
+            <div className={`availability-row ${!item.isAvailable ? "unavailable" : ""}`} data-item-id={item.id} key={item.id}>
+              <label className="item-select-control"><input className="item-select" type="checkbox" aria-label={`Выбрать ${item.name}`} checked={selectedIds.has(item.id)} onChange={event => toggleSelection(item.id, event.target.checked)} /></label>
+              <span className="item-copy"><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span>
+              <label className="availability-control"><input className="availability-toggle" type="checkbox" aria-label={item.isAvailable ? `${item.name}: сделать недоступной` : `${item.name}: сделать доступной`} checked={!item.isAvailable} onChange={event => void toggleAvailability(item, event.target.checked)} /><span className="sr-only">{item.isAvailable ? "Сделать недоступной" : "Сделать доступной"}</span></label>
               <em>{item.isAvailable ? "В наличии" : "Нет в наличии"}</em>
-            </label>
+            </div>
           ))}
         </section>
       )) : <div className="empty-state"><strong>Ничего не найдено</strong><span>Измените запрос или сбросьте фильтры.</span><button type="button" onClick={() => { setSearch(""); setAvailabilityFilter("all"); }}>Сбросить фильтры</button></div>}</div></section>}
       {tab === "categories" && (
         <section>
           <h2>Категории</h2>
-          <div className="form-row"><input placeholder="Новая категория" value={newCategory} onChange={event => setNewCategory(event.target.value)} /><button type="button" disabled={busy} onClick={() => void saveCategory()}>Добавить</button></div>
-          {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteCategory(category)}>Удалить</button></label>)}
+          <div className="form-row"><label><span>Название категории</span><input placeholder="Например, Десерты" value={newCategory} onChange={event => setNewCategory(event.target.value)} /></label><button type="button" disabled={busy} onClick={() => void saveCategory()}>Добавить</button></div>
+          {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => <div className="entity-row" key={category.id}><span><b>{category.name}</b></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteCategory(category)}>Удалить</button></div>)}
         </section>
       )}
       {tab === "items" && (
         <section>
           <h2>Позиции</h2>
           <div className="form-row">
-            <input placeholder="Название" value={newItem.name} onChange={event => setNewItem({ ...newItem, name: event.target.value })} />
-            <input placeholder="Цена" inputMode="decimal" value={newItem.price} onChange={event => setNewItem({ ...newItem, price: event.target.value })} />
-            <select value={newItem.categoryId || categories[0]?.id || ""} onChange={event => setNewItem({ ...newItem, categoryId: event.target.value })}>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
+            <label><span>Название позиции</span><input placeholder="Например, Капучино" value={newItem.name} onChange={event => setNewItem({ ...newItem, name: event.target.value })} /></label>
+            <label><span>Цена, ₽</span><input placeholder="250" inputMode="decimal" value={newItem.price} onChange={event => setNewItem({ ...newItem, price: event.target.value })} /></label>
+            <label><span>Категория</span><select aria-label="Категория позиции" value={newItem.categoryId || categories[0]?.id || ""} onChange={event => setNewItem({ ...newItem, categoryId: event.target.value })}>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
             <button type="button" disabled={busy} onClick={() => void saveItem()}>Добавить</button>
           </div>
           <div className="csv-import">
@@ -410,13 +452,14 @@ function StaffScreen() {
             <small>Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.</small>
             {csvRows.length > 0 && <button type="button" onClick={() => void importCsv()} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>
-          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteItem(item)}>Удалить</button></label>)}
+          {items.map(item => <div className="entity-row" key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteItem(item)}>Удалить</button></div>)}
         </section>
       )}
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
       {tab === "experimental" && venue && <ExperimentalSettings venue={venue} categories={categories} items={items} busy={busy} onSave={saveVenueSettings} />}
       {toast && <p className="staff-toast" role="status" aria-live="polite">{toast}</p>}
-      {error && <p role="alert" className="status-error">{error}</p>}
+      {csvProgress && <p className="staff-import-status" role="status" aria-live="polite">Импорт: {csvProgress.current} из {csvProgress.total}{csvProgress.failed.length ? ` · ошибок: ${csvProgress.failed.length}` : ""}</p>}
+      {confirmDelete && <div className="modal-backdrop" role="presentation"><section className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-delete-title"><h2 id="confirm-delete-title">Удалить {confirmDelete.kind === "category" ? "категорию" : "позицию"}?</h2><p>«{confirmDelete.name}» будет удалено. {confirmDelete.kind === "category" ? "Сначала убедитесь, что в категории не осталось позиций." : "Автоматически восстановить позицию нельзя."}</p><div><button type="button" onClick={() => setConfirmDelete(null)} disabled={busy}>Отмена</button><button type="button" className="danger-action" onClick={() => void performDelete()} disabled={busy}>{busy ? "Удаляем…" : "Удалить"}</button></div></section></div>}
     </main>
   );
 }
@@ -574,6 +617,7 @@ function ColorSetting({ label, value, onChange }: { label: string; value: string
 function ConnectScreen() {
   const [qr, setQr] = useState("");
   const [error, setError] = useState("");
+  const [pairingStage, setPairingStage] = useState<"creating" | "waiting" | "expired" | "error">("creating");
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -598,10 +642,12 @@ function ConnectScreen() {
         QRCode.toDataURL(pairingUrl, { margin: 2, width: 420 }, (qrError, dataUrl) => {
           if (cancelled) return;
           if (qrError) {
+            setPairingStage("error");
             setError(qrError instanceof Error ? qrError.message : "Не удалось нарисовать QR-код.");
             return;
           }
           setQr(dataUrl);
+          setPairingStage("waiting");
           setNow(Date.now());
           setExpiresAt(Date.now() + response.expiresInSeconds * 1000);
         });
@@ -609,20 +655,22 @@ function ConnectScreen() {
           try {
             const result = await api.pairingStatus(response.pairingToken);
             if (result.status === "complete" && result.displayUrl) {
+              setPairingStage("waiting");
               if (poll !== undefined) window.clearInterval(poll);
               window.location.href = result.displayUrl;
             }
           } catch { /* the QR remains visible until it expires */ }
         }, 2000);
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "Не удалось создать QR-код");
+        if (!cancelled) { setPairingStage("error"); setError(cause instanceof Error ? cause.message : "Не удалось создать QR-код"); }
       }
     })();
     return () => { cancelled = true; if (poll !== undefined) window.clearInterval(poll); };
   }, [refreshKey]);
   return <main className="status connect-screen"><section className="connect-card">
     <span className="auth-kicker">InteractiveFoodMenu</span><h1>Подключение телевизора</h1>
-    {qr ? <><img src={qr} alt="QR-код подключения телевизора" /><p>Отсканируйте QR-код телефоном сотрудника и введите код точки и PIN.</p><p className={expired ? "pairing-expired" : "pairing-timer"}>{expired ? "Срок действия ключа истёк." : `До замены ключа: ${formatCountdown(secondsLeft)}`}</p>{expired && <button onClick={() => { setQr(""); setExpiresAt(null); setError(""); setRefreshKey(value => value + 1); }}>Обновить QR-код</button>}</> : <p>{error || "Создаём одноразовый QR-код…"}</p>}
+    <p className="pairing-stage" role="status" aria-live="polite">{expired || pairingStage === "expired" ? "Ключ истёк" : pairingStage === "waiting" ? "Ожидаем подключение" : pairingStage === "error" ? "Не удалось создать подключение" : "Создаём защищённое подключение…"}</p>
+    {qr ? <><img src={qr} alt="QR-код подключения телевизора" /><p>Отсканируйте QR-код телефоном сотрудника и введите код точки и PIN.</p><p className={expired ? "pairing-expired" : "pairing-timer"}>{expired ? "Срок действия ключа истёк." : `До замены ключа: ${formatCountdown(secondsLeft)}`}</p>{expired && <button onClick={() => { setQr(""); setExpiresAt(null); setError(""); setPairingStage("creating"); setRefreshKey(value => value + 1); }}>Обновить QR-код</button>}</> : <><p>{error || "Создаём одноразовый QR-код…"}</p>{error && <button onClick={() => { setError(""); setPairingStage("creating"); setRefreshKey(value => value + 1); }}>Повторить</button>}</>}
   </section></main>;
 }
 

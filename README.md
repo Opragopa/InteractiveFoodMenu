@@ -77,6 +77,7 @@ npm run build
 Создайте `.env.deploy` и `.env.backend` по примерам в `docker/`, затем выполните:
 
 ```bash
+export BUILD_VERSION="$(git rev-parse --short HEAD)"
 docker compose -f compose.yaml --env-file .env.deploy build api web
 docker compose -f compose.yaml --env-file .env.deploy run --rm api npm run bootstrap
 docker compose -f compose.yaml --env-file .env.deploy up -d --force-recreate api web proxy
@@ -93,6 +94,7 @@ curl http://127.0.0.1:8091/ready
 curl http://127.0.0.1:8088/
 curl https://api.foodmenu.cloudopragopa.online/health
 curl https://api.foodmenu.cloudopragopa.online/ready
+curl https://foodmenu.cloudopragopa.online/build-version.txt
 ```
 
 Для release APK передайте публичный адрес API:

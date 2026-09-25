@@ -9,9 +9,12 @@ RUN npm ci
 COPY web-display ./
 
 ARG VITE_BACKEND_API_URL=/api
+ARG VITE_BUILD_VERSION=unknown
 
 ENV VITE_BACKEND_API_URL=$VITE_BACKEND_API_URL
+ENV VITE_BUILD_VERSION=$VITE_BUILD_VERSION
 
+RUN printf '%s' "$VITE_BUILD_VERSION" > public/build-version.txt
 RUN npm run build
 
 FROM nginx:1.28-alpine

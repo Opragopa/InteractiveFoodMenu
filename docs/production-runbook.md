@@ -7,6 +7,7 @@ Run from the physical server terminal where Docker Desktop has an active session
 ```powershell
 git checkout main
 git pull --ff-only origin main
+$env:BUILD_VERSION = git rev-parse --short HEAD
 docker compose -f compose.yaml --env-file .env.deploy build --pull api web
 docker compose -f compose.yaml --env-file .env.deploy up -d --force-recreate api web proxy
 ```
@@ -16,6 +17,7 @@ docker compose -f compose.yaml --env-file .env.deploy up -d --force-recreate api
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/check-production.ps1
 docker compose -f compose.yaml ps
+Invoke-WebRequest https://foodmenu.cloudopragopa.online/build-version.txt | Select-Object -ExpandProperty Content
 ```
 
 The API `/ready` endpoint must report Appwrite readiness, not only process liveness.
