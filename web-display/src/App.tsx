@@ -194,7 +194,7 @@ function StaffScreen() {
     })));
   }, [items]);
   if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
-  const grouped = categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: items.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) }));
+  const grouped = [...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: items.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) }));
   const toggleAvailability = async (item: MenuItem, unavailable: boolean) => {
     const root = availabilityListRef.current;
     previousRowsRef.current = new Map(Array.from(root?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
@@ -212,8 +212,32 @@ function StaffScreen() {
       setError(cause instanceof Error ? `Не удалось обновить наличие: ${cause.message}` : "Не удалось обновить наличие.");
     }
   };
-  const saveCategory = async () => { const name = newCategory.trim(); if (!name) return; const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length }); setCategories(current => [...current, result.category as Category]); setNewCategory(""); };
-  const saveItem = async () => { const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100); if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor)) return; const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true }); setItems(current => [...current, result.item as MenuItem]); setNewItem({ name: "", price: "", categoryId: newItem.categoryId }); };
+  const saveCategory = async () => {
+    const name = newCategory.trim();
+    if (!name) { setError("Введите название категории."); return; }
+    setBusy(true); setError("");
+    try {
+      const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length });
+      setCategories(current => [...current, result.category as Category]);
+      setNewCategory("");
+    } catch (cause) {
+      reportClientError("category_create_failed", cause);
+      setError(cause instanceof Error ? cause.message : "Не удалось добавить категорию.");
+    } finally { setBusy(false); }
+  };
+  const saveItem = async () => {
+    const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100);
+    if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor) || priceMinor < 0) { setError("Заполните название, категорию и корректную цену."); return; }
+    setBusy(true); setError("");
+    try {
+      const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true });
+      setItems(current => [...current, result.item as MenuItem]);
+      setNewItem({ name: "", price: "", categoryId: newItem.categoryId });
+    } catch (cause) {
+      reportClientError("item_create_failed", cause);
+      setError(cause instanceof Error ? cause.message : "Не удалось добавить позицию.");
+    } finally { setBusy(false); }
+  };
   const deleteCategory = async (category: Category) => {
     if (!window.confirm(`Удалить категорию «${category.name}»? Все её позиции должны быть удалены заранее. Действие необратимо.`)) return;
     try { await api.deleteCategory(sessionToken, category.id); setCategories(current => current.filter(value => value.id !== category.id)); }
@@ -255,8 +279,18 @@ function StaffScreen() {
     } catch (cause) { setError(cause instanceof Error ? `Не удалось импортировать CSV: ${cause.message}` : "Не удалось импортировать CSV."); }
     finally { setBusy(false); }
   };
-  const startBreak = async () => { setBusy(true); try { const result = await api.startBreak(sessionToken, Math.min(60, Math.max(1, breakDuration))); setVenue(result.venue as Venue); } finally { setBusy(false); } };
-  const stopBreak = async () => { setBusy(true); try { const result = await api.stopBreak(sessionToken); setVenue(result.venue as Venue); } finally { setBusy(false); } };
+  const startBreak = async () => {
+    setBusy(true); setError("");
+    try { const result = await api.startBreak(sessionToken, Math.min(60, Math.max(1, Number(breakDuration) || 10))); setVenue(result.venue as Venue); }
+    catch (cause) { reportClientError("break_start_failed", cause); setError(cause instanceof Error ? cause.message : "Не удалось начать перерыв."); }
+    finally { setBusy(false); }
+  };
+  const stopBreak = async () => {
+    setBusy(true); setError("");
+    try { const result = await api.stopBreak(sessionToken); setVenue(result.venue as Venue); }
+    catch (cause) { reportClientError("break_stop_failed", cause); setError(cause instanceof Error ? cause.message : "Не удалось завершить перерыв."); }
+    finally { setBusy(false); }
+  };
   const selectCsv = async (file: File | undefined) => {
     if (!file) return;
     setError("");
@@ -267,16 +301,16 @@ function StaffScreen() {
     <main className="staff-menu">
       <header>
         <h1>Меню в наличии</h1>
-        <button onClick={() => void loadMenu().then(() => setError("")).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось обновить меню."))}>Обновить</button>
-        <button onClick={() => { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
-        {venue?.breakActive ? <button onClick={() => void stopBreak()} disabled={busy}>Завершить перерыв</button> : <span className="break-control"><input aria-label="Длительность перерыва" type="number" min={1} max={60} value={breakDuration} onChange={e => setBreakDuration(Number(e.target.value))} /><button onClick={() => void startBreak()} disabled={busy}>Перерыв</button></span>}
+        <button type="button" onClick={() => void loadMenu().then(() => setError("")).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось обновить меню."))}>Обновить</button>
+        <button type="button" onClick={() => { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
+        {venue?.breakActive ? <button type="button" onClick={() => void stopBreak()} disabled={busy}>Завершить перерыв</button> : <span className="break-control"><input aria-label="Длительность перерыва" type="number" min={1} max={60} value={breakDuration} onChange={e => setBreakDuration(Number(e.target.value))} /><button type="button" onClick={() => void startBreak()} disabled={busy}>Перерыв</button></span>}
       </header>
       <nav className="staff-tabs">
-        <button className={tab === "availability" ? "active" : ""} onClick={() => setTab("availability")}>Наличие</button>
-        <button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>Категории</button>
-        <button className={tab === "items" ? "active" : ""} onClick={() => setTab("items")}>Позиции</button>
-        <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Настройки</button>
-        <button className={tab === "experimental" ? "active" : ""} onClick={() => setTab("experimental")}>Экспериментальные функции</button>
+        <button type="button" className={tab === "availability" ? "active" : ""} onClick={() => setTab("availability")}>Наличие</button>
+        <button type="button" className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>Категории</button>
+        <button type="button" className={tab === "items" ? "active" : ""} onClick={() => setTab("items")}>Позиции</button>
+        <button type="button" className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Настройки</button>
+        <button type="button" className={tab === "experimental" ? "active" : ""} onClick={() => setTab("experimental")}>Экспериментальные функции</button>
       </nav>
       {tab === "availability" && <div ref={availabilityListRef} className="availability-list">{grouped.map(group => (
         <section key={group.category.id}>
@@ -293,8 +327,8 @@ function StaffScreen() {
       {tab === "categories" && (
         <section>
           <h2>Категории</h2>
-          <div className="form-row"><input placeholder="Новая категория" value={newCategory} onChange={event => setNewCategory(event.target.value)} /><button onClick={saveCategory}>Добавить</button></div>
-          {categories.sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button className="danger-action" onClick={() => void deleteCategory(category)}>Удалить</button></label>)}
+          <div className="form-row"><input placeholder="Новая категория" value={newCategory} onChange={event => setNewCategory(event.target.value)} /><button type="button" disabled={busy} onClick={() => void saveCategory()}>Добавить</button></div>
+          {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => <label key={category.id}><span><b>{category.name}</b></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteCategory(category)}>Удалить</button></label>)}
         </section>
       )}
       {tab === "items" && (
@@ -304,14 +338,14 @@ function StaffScreen() {
             <input placeholder="Название" value={newItem.name} onChange={event => setNewItem({ ...newItem, name: event.target.value })} />
             <input placeholder="Цена" inputMode="decimal" value={newItem.price} onChange={event => setNewItem({ ...newItem, price: event.target.value })} />
             <select value={newItem.categoryId || categories[0]?.id || ""} onChange={event => setNewItem({ ...newItem, categoryId: event.target.value })}>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
-            <button onClick={saveItem}>Добавить</button>
+            <button type="button" disabled={busy} onClick={() => void saveItem()}>Добавить</button>
           </div>
           <div className="csv-import">
             <label>Загрузить CSV<input type="file" accept=".csv,text/csv" onChange={event => { void selectCsv(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
             <small>Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.</small>
             {csvRows.length > 0 && <button onClick={importCsv} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>
-          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button className="danger-action" onClick={() => void deleteItem(item)}>Удалить</button></label>)}
+          {items.map(item => <label key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteItem(item)}>Удалить</button></label>)}
         </section>
       )}
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}

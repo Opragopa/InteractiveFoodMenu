@@ -77,6 +77,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
     const stateChanged = previousBreakActive.current !== null && previousBreakActive.current !== breakActive;
     previousBreakActive.current = breakActive;
     if (!stateChanged) {
+      shell.classList.remove("morph-active");
       setMorphActive(false);
       morph.className = `break-morph ${breakExpired ? "is-expired" : ""}`;
       return;
@@ -104,10 +105,12 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
     panel.style.opacity = panelInline.opacity;
 
     if (reducedMotion || breakExpired || from.width <= 0 || to.width <= 0) {
+      shell.classList.remove("morph-active");
       setMorphActive(false);
       morph.className = `break-morph ${breakExpired ? "is-expired" : ""}`;
       return;
     }
+    shell.classList.add("morph-active");
     setMorphActive(true);
     morph.className = `break-morph is-visible ${breakActive ? "is-to-timer" : "is-to-clock"}`;
     morph.style.left = `${from.left}px`;
@@ -124,11 +127,15 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
       morph.style.height = `${to.height}px`;
     });
     const timerId = window.setTimeout(() => {
+      shell.classList.remove("morph-active");
       setMorphActive(false);
       morph.className = "break-morph";
       morph.style.transition = "none";
     }, transitionMs + 80);
-    return () => window.clearTimeout(timerId);
+    return () => {
+      window.clearTimeout(timerId);
+      shell.classList.remove("morph-active");
+    };
   }, [breakActive, breakExpired, transitionMs]);
 
   useEffect(() => {
@@ -180,14 +187,14 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
 
   return <main ref={shellRef} className={`display-shell ${breakActive ? "break-active" : ""} ${breakExpired ? "break-expired" : ""} ${morphActive ? "morph-active" : ""}`} lang="ru" style={style}>
     <section className={`display-menu logo-${logoPosition}`} style={{ zoom: scale }}>
-      <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><time ref={clockRef} className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time></header>
+      <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><div className="display-header-meta"><time ref={clockRef} className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time>{pages.length > 1 && <span className="page-indicator" aria-live="polite" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</div></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
       {!page ? <div className="empty">Меню пока не заполнено</div> : <section className="page page-transition" key={`${pageIndex}-${items.length}-${breakActive}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
         {page.columns.map((column, columnIndex) => <div className="column" key={columnIndex}>{column.map((entry, rowIndex) => entry.kind === "category" ?
           <h2 key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor }}>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</h2> :
           <div className={`menu-item menu-item-enter ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" /><span className="price">{money.format(entry.item.priceMinor / 100)}</span></div>)}</div>)}
       </section>}
-      <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}{pages.length > 1 && <span className="page-indicator" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</footer>
+      <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>
     </section>
     <aside ref={panelRef} className="break-panel" aria-hidden={!breakActive} aria-live="polite"><div className="break-state-label">{breakExpired ? "Перерыв завершён" : "Перерыв"}</div>{breakExpired ? <strong ref={timerRef} className="break-expired-text">{formatRussianText(venue.breakExpiredText ?? "Скоро буду")}</strong> : <strong ref={timerRef} className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * breakFontScale, viewport.width * panelWidth / 100 * .22))}px` }}>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong>}</aside>
     <span ref={morphRef} className={`break-morph ${breakExpired ? "is-expired" : ""}`} aria-hidden="true"><span className="break-morph-clock">{formatLocalDateTime(now)}</span><span className="break-morph-timer">{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</span></span>

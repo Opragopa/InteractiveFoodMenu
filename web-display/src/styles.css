@@ -8,6 +8,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .display-menu { position: relative; width: 100%; height: 100%; min-height: 100%; padding: clamp(24px, 3.5vw, 72px); display: grid; grid-template-rows: auto 1fr auto; gap: clamp(16px, 2vw, 32px); text-wrap: pretty; hyphens: none; transform-origin: left center; transition: width var(--break-transition) cubic-bezier(.2,.8,.2,1), opacity var(--break-transition) ease; }
 .display-shell.break-active .display-menu { width: calc(100% - var(--break-panel-width)); opacity: var(--menu-dim-opacity); }
 .display-header { justify-content: space-between; }
+.display-header-meta { display: flex; align-items: center; justify-content: flex-end; gap: clamp(10px, 1.5vw, 24px); margin-left: auto; min-width: 0; }
 .display-header h1 { min-width: 0; }
 .display-clock { margin-left: auto; font-size: clamp(18px, 1.7vw, 30px); font-variant-numeric: tabular-nums; white-space: nowrap; transition: opacity calc(var(--break-transition) * .6) ease, transform var(--break-transition) ease; }
 .display-shell.break-active .display-clock { opacity: 0; transform: translateX(calc(var(--break-panel-width) * .4)); }
@@ -48,6 +49,7 @@ h2 { margin: 8px 0 4px; padding-bottom: 7px; border-bottom: 3px solid #9c3d24; b
 .break-state-label { align-self: start; color: var(--break-label); font-size: clamp(20px, 4vw, 68px); font-weight: 800; line-height: 1; overflow-wrap: anywhere; text-align: center; }
 .break-expired-text { align-self: center; color: var(--break-expired); font-size: clamp(48px, 6vw, 96px); line-height: 1.08; text-align: center; text-wrap: balance; }
 .break-panel .break-timer { align-self: center; max-width: 100%; color: var(--break-ink); }
+.display-shell.morph-active .display-clock,
 .display-shell.morph-active .break-panel .break-timer { opacity: 0; }
 .break-morph { position: fixed; z-index: 10; display: none; align-items: center; justify-content: center; pointer-events: none; color: var(--break-ink); font-size: clamp(18px, 1.7vw, 30px); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .break-morph.is-visible { display: flex; }
