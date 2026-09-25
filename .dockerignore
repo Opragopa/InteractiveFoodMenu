@@ -7,6 +7,10 @@ node_modules
 **/node_modules
 web-display/dist
 **/build
+functions
+.firebase
+.firebase-data
+android/google-services.json
 android/keystore.properties
 *.jks
 *.keystore
