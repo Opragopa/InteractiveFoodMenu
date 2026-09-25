@@ -11,6 +11,14 @@ import { api } from "./api";
 import { displayPresets, normalizeVenueAppearance, type DisplayPreset, type VenueAppearance } from "./venueSettings";
 import { estimateMenuPages } from "./paginate";
 
+const previewSizes = {
+  "1366x768": { width: 1366, height: 768, label: "1366 × 768" },
+  "1920x1080": { width: 1920, height: 1080, label: "1920 × 1080" },
+  "3840x2160": { width: 3840, height: 2160, label: "3840 × 2160" },
+} as const;
+type PreviewSize = keyof typeof previewSizes;
+const previewMoney = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2 });
+
 function installationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
@@ -373,11 +381,14 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
   const [expiredText, setExpiredText] = useState(venue.breakExpiredText ?? "Скоро буду");
   const [testBreak, setTestBreak] = useState(false);
   const [previewPage, setPreviewPage] = useState(0);
+  const [previewSize, setPreviewSize] = useState<PreviewSize>("1366x768");
   const [paused, setPaused] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const previewWidth = 1366 * (testBreak ? (100 - panelWidth) / 100 : 1);
-  const expectedPages = Math.max(1, estimateMenuPages(categories, items, previewWidth, 768, fontSize, itemGap));
+  const selectedPreview = previewSizes[previewSize];
+  const previewWidth = selectedPreview.width * (testBreak ? (100 - panelWidth) / 100 : 1);
+  const expectedPages = Math.max(1, estimateMenuPages(categories, items, previewWidth, selectedPreview.height, fontSize, itemGap));
+  const previewItems = items.slice(0, 8);
 
   useEffect(() => { setPreviewPage((value) => Math.min(value, expectedPages - 1)); }, [expectedPages]);
   useEffect(() => {
@@ -425,7 +436,11 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
       <RangeSetting label="Переход часов и таймера" value={transitionMs} unit="мс" min={200} max={1200} step={100} onChange={setTransitionMs} />
       <label className="experimental-text">Текст после окончания таймера<input maxLength={80} value={expiredText} onChange={event => setExpiredText(event.target.value)} /></label>
     </div>
-    <div className={`experimental-preview ${testBreak ? "is-break" : ""}`} style={{ "--preview-panel": `${panelWidth}%`, "--preview-dim": (100 - dimPercent) / 100, "--preview-transition": `${transitionMs}ms` } as React.CSSProperties}><div className="preview-menu"><b>{venue.name}</b><span>Страница {previewPage + 1} из {expectedPages}</span><small>Названия сохраняют единый размер {fontSize}px</small></div><div className="preview-break"><b>Перерыв</b><strong>09:42</strong></div></div>
+    <label className="preview-resolution">Разрешение предпросмотра<select value={previewSize} onChange={event => setPreviewSize(event.target.value as PreviewSize)}>{Object.entries(previewSizes).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}</select></label>
+    <div className={`experimental-preview ${testBreak ? "is-break" : ""}`} style={{ "--preview-panel": `${panelWidth}%`, "--preview-dim": (100 - dimPercent) / 100, "--preview-transition": `${transitionMs}ms`, "--preview-font-size": `${fontSize}px`, "--preview-gap": `${itemGap}px` } as React.CSSProperties} aria-label={`Предпросмотр ${selectedPreview.label}`}>
+      <div className="preview-menu"><header><b>{venue.name}</b><time>29.09.2026 13:57</time></header><div className="preview-items">{previewItems.map(item => <div className={`preview-item ${item.isAvailable ? "" : "unavailable"}`} key={item.id}><span>{item.name}</span><strong>{previewMoney.format(item.priceMinor / 100)}</strong></div>)}</div><small>Страница {previewPage + 1} из {expectedPages} · единый размер {fontSize}px</small></div>
+      <div className="preview-break"><b>{testBreak ? "Перерыв" : "Проверка"}</b><strong>{testBreak ? "09:42" : "—"}</strong></div>
+    </div>
     <div className="preview-controls"><button type="button" onClick={() => setPreviewPage(value => (value - 1 + expectedPages) % expectedPages)}>Предыдущая</button><button type="button" onClick={() => setPreviewPage(value => (value + 1) % expectedPages)}>Следующая</button><button type="button" onClick={() => setPaused(value => !value)}>{paused ? "Продолжить автоперелистывание" : "Пауза автоперелистывания"}</button><button type="button" onClick={() => setTestBreak(value => !value)}>{testBreak ? "Закрыть проверку перерыва" : "Проверить режим перерыва"}</button></div>
     <div className="experimental-actions"><button type="button" onClick={reset}>Вернуть рекомендуемые значения</button><button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить настройки"}</button></div>
     {message && <p className="settings-success">{message}</p>}{error && <p className="status-error">{error}</p>}

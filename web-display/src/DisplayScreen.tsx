@@ -34,6 +34,14 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const [viewport, setViewport] = useState(readViewport);
   const [now, setNow] = useState(Date.now());
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
+  const [morphActive, setMorphActive] = useState(false);
+  const shellRef = useRef<HTMLElement | null>(null);
+  const clockRef = useRef<HTMLTimeElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const timerRef = useRef<HTMLElement | null>(null);
+  const morphRef = useRef<HTMLSpanElement | null>(null);
+  const lastClockRect = useRef<DOMRect | null>(null);
+  const previousBreakActive = useRef<boolean | null>(null);
   const measureRef = useRef<HTMLDivElement | null>(null);
   const logoPosition = venue.logoPosition ?? "top-right";
   const logoInset = Math.min(20, Math.max(0, venue.logoInsetPercent ?? 3));
@@ -52,11 +60,76 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const breakFontScale = Math.min(200, Math.max(50, venue.breakFontSizePercent ?? 100)) / 100;
 
   useEffect(() => {
-    const interval = breakActive ? 1000 : 30_000;
+    const interval = breakActive ? 1000 : 60_000;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), interval);
     return () => window.clearInterval(timer);
   }, [breakActive, venue.breakEndsAt]);
+
+  useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const clock = clockRef.current;
+    const panel = panelRef.current;
+    const timer = timerRef.current;
+    const morph = morphRef.current;
+    if (!shell || !clock || !panel || !timer || !morph) return;
+
+    const stateChanged = previousBreakActive.current !== null && previousBreakActive.current !== breakActive;
+    previousBreakActive.current = breakActive;
+    if (!stateChanged) {
+      setMorphActive(false);
+      morph.className = `break-morph ${breakExpired ? "is-expired" : ""}`;
+      return;
+    }
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const clockInline = { visibility: clock.style.visibility, opacity: clock.style.opacity, transform: clock.style.transform };
+    const panelInline = { transition: panel.style.transition, transform: panel.style.transform, opacity: panel.style.opacity };
+    clock.style.visibility = "visible";
+    clock.style.opacity = "1";
+    clock.style.transform = "none";
+    panel.style.transition = "none";
+    panel.style.transform = "none";
+    panel.style.opacity = "1";
+    const clockRect = clock.getBoundingClientRect();
+    const timerRect = timer.getBoundingClientRect();
+    if (!breakActive) lastClockRect.current = clockRect;
+    const from = breakActive ? clockRect : timerRect;
+    const to = breakActive ? timerRect : (lastClockRect.current ?? clockRect);
+    clock.style.visibility = clockInline.visibility;
+    clock.style.opacity = clockInline.opacity;
+    clock.style.transform = clockInline.transform;
+    panel.style.transition = panelInline.transition;
+    panel.style.transform = panelInline.transform;
+    panel.style.opacity = panelInline.opacity;
+
+    if (reducedMotion || breakExpired || from.width <= 0 || to.width <= 0) {
+      setMorphActive(false);
+      morph.className = `break-morph ${breakExpired ? "is-expired" : ""}`;
+      return;
+    }
+    setMorphActive(true);
+    morph.className = `break-morph is-visible ${breakActive ? "is-to-timer" : "is-to-clock"}`;
+    morph.style.left = `${from.left}px`;
+    morph.style.top = `${from.top}px`;
+    morph.style.width = `${from.width}px`;
+    morph.style.height = `${from.height}px`;
+    morph.style.transition = "none";
+    void morph.offsetWidth;
+    requestAnimationFrame(() => {
+      morph.style.transition = `left ${transitionMs}ms cubic-bezier(.2,.8,.2,1), top ${transitionMs}ms cubic-bezier(.2,.8,.2,1), width ${transitionMs}ms cubic-bezier(.2,.8,.2,1), height ${transitionMs}ms cubic-bezier(.2,.8,.2,1)`;
+      morph.style.left = `${to.left}px`;
+      morph.style.top = `${to.top}px`;
+      morph.style.width = `${to.width}px`;
+      morph.style.height = `${to.height}px`;
+    });
+    const timerId = window.setTimeout(() => {
+      setMorphActive(false);
+      morph.className = "break-morph";
+      morph.style.transition = "none";
+    }, transitionMs + 80);
+    return () => window.clearTimeout(timerId);
+  }, [breakActive, breakExpired, transitionMs]);
 
   useEffect(() => {
     const resize = () => setViewport(readViewport());
@@ -69,7 +142,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const scale = useMemo(() => venue.displayScaleMode === "manual"
     ? Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100
     : autoScaleForMenu(categories, items, usableWidth, viewport.height), [venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.height]);
-  const layout = useMemo(() => layoutForViewport(usableWidth / scale, viewport.height / scale), [usableWidth, viewport.height, scale]);
+  const layout = useMemo(() => layoutForViewport(usableWidth, viewport.height, viewport.height / scale), [usableWidth, viewport.height, scale]);
   const availableHeight = Math.max(180, viewport.height / scale - 190);
   const columnWidth = Math.max(220, (usableWidth / scale - Math.max(0, layout.columnCount - 1) * 32) / layout.columnCount);
 
@@ -105,9 +178,9 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
     "--menu-dim-opacity": (100 - dimPercent) / 100, "--item-font-size": `${itemFontSize}px`, "--item-gap": `${itemGap}px`, "--break-transition": `${transitionMs}ms`,
   } as React.CSSProperties;
 
-  return <main className={`display-shell ${breakActive ? "break-active" : ""} ${breakExpired ? "break-expired" : ""}`} lang="ru" style={style}>
+  return <main ref={shellRef} className={`display-shell ${breakActive ? "break-active" : ""} ${breakExpired ? "break-expired" : ""} ${morphActive ? "morph-active" : ""}`} lang="ru" style={style}>
     <section className={`display-menu logo-${logoPosition}`} style={{ zoom: scale }}>
-      <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time></header>
+      <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><time ref={clockRef} className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
       {!page ? <div className="empty">Меню пока не заполнено</div> : <section className="page page-transition" key={`${pageIndex}-${items.length}-${breakActive}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
         {page.columns.map((column, columnIndex) => <div className="column" key={columnIndex}>{column.map((entry, rowIndex) => entry.kind === "category" ?
@@ -116,7 +189,8 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
       </section>}
       <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}{pages.length > 1 && <span className="page-indicator" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</footer>
     </section>
-    <aside className="break-panel" aria-hidden={!breakActive} aria-live="polite"><div className="break-state-label">{breakExpired ? "Перерыв завершён" : "Перерыв"}</div>{breakExpired ? <strong className="break-expired-text">{formatRussianText(venue.breakExpiredText ?? "Скоро буду")}</strong> : <strong className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * breakFontScale, viewport.width * panelWidth / 100 * .22))}px` }}>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong>}</aside>
+    <aside ref={panelRef} className="break-panel" aria-hidden={!breakActive} aria-live="polite"><div className="break-state-label">{breakExpired ? "Перерыв завершён" : "Перерыв"}</div>{breakExpired ? <strong ref={timerRef} className="break-expired-text">{formatRussianText(venue.breakExpiredText ?? "Скоро буду")}</strong> : <strong ref={timerRef} className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * breakFontScale, viewport.width * panelWidth / 100 * .22))}px` }}>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong>}</aside>
+    <span ref={morphRef} className={`break-morph ${breakExpired ? "is-expired" : ""}`} aria-hidden="true"><span className="break-morph-clock">{formatLocalDateTime(now)}</span><span className="break-morph-timer">{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</span></span>
     <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, fontSize: itemFontSize }}><h2 data-measure-key="category">Раздел</h2>{items.map((item) => <div className="menu-item" data-measure-key={`item-${item.id}`} key={item.id}><span className="item-name">{formatRussianText(item.name)}</span><span className="dots" /><span className="price">{money.format(item.priceMinor / 100)}</span></div>)}</div>
   </main>;
 }

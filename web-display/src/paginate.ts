@@ -1,5 +1,7 @@
 import type { Category, MenuItem, MenuPage, PageEntry } from "./types";
 
+export const MIN_DISPLAY_COLUMN_WIDTH = 580;
+
 export function paginateMenu(
   categories: Category[],
   items: MenuItem[],
@@ -50,17 +52,18 @@ export function paginateMenu(
   return pages;
 }
 
-export function layoutForViewport(width: number, height: number) {
+export function layoutForViewport(width: number, height: number, rowLayoutHeight = height) {
   const aspect = width / Math.max(1, height);
-  const columnCount = width >= 1500 ? 3 : aspect >= 1.25 ? 2 : 1;
+  const columnCount = Math.min(3, Math.max(1, Math.floor((width + 32) / (MIN_DISPLAY_COLUMN_WIDTH + 32))));
+  const responsiveColumnCount = aspect >= 1.25 ? columnCount : 1;
   // These are the baseline CSS pixels used by the display. The whole menu is
   // scaled uniformly, so viewport units here would be multiplied twice by
   // browser zoom and cause clipping on older TVs.
   const reservedHeight = width >= 900 ? 230 : 190;
   const rowHeight = width >= 1500 ? 86 : 78;
   return {
-    columnCount,
-    rowsPerColumn: Math.max(4, Math.floor((height - reservedHeight) / rowHeight)),
+    columnCount: responsiveColumnCount,
+    rowsPerColumn: Math.max(4, Math.floor((rowLayoutHeight - reservedHeight) / rowHeight)),
   };
 }
 
@@ -69,7 +72,7 @@ export function autoScaleForMenu(categories: Category[], items: MenuItem[], widt
   // still use the full 50–160% range, while automatic mode grows only as far
   // as the viewport can comfortably render.
   const pagesAt = (scale: number) => {
-    const layout = layoutForViewport(width / scale, height / scale);
+    const layout = layoutForViewport(width, height, height / scale);
     return paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount).length;
   };
   // Prefer a single complete screen. A sparse second page is harder to read

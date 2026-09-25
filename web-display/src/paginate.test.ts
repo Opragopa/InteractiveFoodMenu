@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoScaleForMenu, itemNameScale, layoutForViewport, paginateMenu, paginateMenuByHeight } from "./paginate";
+import { autoScaleForMenu, itemNameScale, layoutForViewport, MIN_DISPLAY_COLUMN_WIDTH, paginateMenu, paginateMenuByHeight } from "./paginate";
 import { contrastForeground } from "./DisplayScreen";
 import type { Category, MenuItem } from "./types";
 
@@ -44,6 +44,10 @@ describe("paginateMenu", () => {
   it("uses three columns for Full HD and two for 1366 wide", () => {
     expect(layoutForViewport(1920, 1080).columnCount).toBe(3);
     expect(layoutForViewport(1366, 768).columnCount).toBe(2);
+    expect(layoutForViewport(1748, 768).columnCount).toBe(2);
+    expect(layoutForViewport(1366 * 2, 768).columnCount).toBe(3);
+    expect(layoutForViewport(1366 * .64, 768).columnCount).toBe(1);
+    expect(MIN_DISPLAY_COLUMN_WIDTH).toBeGreaterThan(500);
   });
 
   it("keeps automatic scale in a legible range", () => {
