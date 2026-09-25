@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+
+jobs:
+  web-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend-api/package-lock.json
+            web-display/package-lock.json
+      - run: npm ci --prefix backend-api
+      - run: npm ci --prefix web-display
+      - run: npm test
+      - run: npm run build
+      - run: docker build -t interactivefoodmenu-api:ci backend-api
+      - run: docker build -t interactivefoodmenu-web:ci -f Dockerfile.web .
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: ./gradlew :android:testDebugUnitTest :android:assembleDebug

@@ -43,6 +43,12 @@ services:
       - backend_outbound
     restart: unless-stopped
     init: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/ready').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     security_opt:
       - no-new-privileges:true
     read_only: true
@@ -62,6 +68,12 @@ services:
     networks:
       - menu_internal
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     security_opt:
       - no-new-privileges:true
     read_only: true
@@ -89,6 +101,12 @@ services:
       # private: the port above is bound only to host loopback.
       - backend_outbound
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     security_opt:
       - no-new-privileges:true
     read_only: true

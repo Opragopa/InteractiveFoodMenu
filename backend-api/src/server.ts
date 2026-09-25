@@ -4,11 +4,15 @@ import helmet from "helmet";
 import { createAppwriteServices } from "./appwrite.js";
 import { loadConfig } from "./config.js";
 import { ApiError, createApiRouter } from "./routes.js";
+import { consumeRateLimit, pruneRateLimitBuckets } from "./rateLimit.js";
 import { TABLES } from "./schema.js";
 
 const config = loadConfig();
 const services = createAppwriteServices(config);
 const app = express();
+const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+const authRateLimitWindowMs = 15 * 60 * 1000;
+const authRateLimitMaxAttempts = 12;
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -22,6 +26,18 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 }));
 app.use(express.json({ limit: "8mb" }));
+app.use("/api/auth/staff", (request, response, next) => {
+  const now = Date.now();
+  if (authRateLimitBuckets.size > 1000) pruneRateLimitBuckets(authRateLimitBuckets, now);
+  const key = request.ip || request.socket.remoteAddress || "unknown";
+  const result = consumeRateLimit(authRateLimitBuckets, key, now, authRateLimitWindowMs, authRateLimitMaxAttempts);
+  if (!result.allowed) {
+    response.setHeader("Retry-After", String(result.retryAfterSeconds));
+    next(new ApiError(429, "rate_limited", "Слишком много попыток входа. Повторите позже."));
+    return;
+  }
+  next();
+});
 
 app.get("/health", (_request, response) => {
   response.json({ status: "ok", service: "interactive-food-menu-api" });

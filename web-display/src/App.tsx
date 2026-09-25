@@ -154,6 +154,7 @@ function StaffScreen() {
   const [selectionBusy, setSelectionBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const availabilityListRef = useRef<HTMLDivElement | null>(null);
   const previousRowsRef = useRef<Map<string, number> | null>(null);
   const login = async () => {
@@ -178,7 +179,8 @@ function StaffScreen() {
     setBreakDuration(Number(menu.venue.breakDurationMinutes ?? 10));
     setLastUpdatedAt(Date.now());
     setSelectedIds(new Set());
-  }, [sessionToken]);
+    setShowOnboarding(localStorage.getItem(`ifm-staff-onboarding-${code}`) !== "dismissed");
+  }, [sessionToken, code]);
   useEffect(() => {
     if (!sessionToken) return;
     void loadMenu().catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось загрузить меню."));
@@ -340,6 +342,10 @@ function StaffScreen() {
     catch (cause) { reportClientError("break_stop_failed", cause); setError(cause instanceof Error ? cause.message : "Не удалось завершить перерыв."); }
     finally { setBusy(false); }
   };
+  const dismissOnboarding = () => {
+    localStorage.setItem(`ifm-staff-onboarding-${code}`, "dismissed");
+    setShowOnboarding(false);
+  };
   const selectCsv = async (file: File | undefined) => {
     if (!file) return;
     setError("");
@@ -362,8 +368,13 @@ function StaffScreen() {
         <article><span>Категорий</span><strong>{categories.length}</strong><small>в текущем меню</small></article>
         <article><span>Страниц ТВ</span><strong>{pageEstimate}</strong><small>при 1366 × 768</small></article>
       </section>
+      {showOnboarding && <aside className="staff-onboarding" aria-label="Быстрый старт">
+        <div><span className="onboarding-kicker">Быстрый старт</span><h2>Меню под контролем</h2><p>Три действия, которые пригодятся каждый день:</p></div>
+        <ol><li><b>Наличие</b> — найдите блюдо и выключите его одним переключателем.</li><li><b>Перерыв</b> — задайте минуты сверху и запустите перерыв для экрана.</li><li><b>Настройки</b> — изменяйте оформление и расширенные параметры отдельно.</li></ol>
+        <button type="button" onClick={dismissOnboarding}>Понятно</button>
+      </aside>}
       <nav className="staff-tabs" aria-label="Разделы кабинета">
-        {([ ["availability", "Наличие"], ["categories", "Категории"], ["items", "Позиции"], ["settings", "Настройки"], ["experimental", "Экспериментальные функции"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
+        {([ ["availability", "Наличие"], ["categories", "Категории"], ["items", "Позиции"], ["settings", "Настройки"], ["experimental", "Расширенные настройки"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
       </nav>
       {tab === "availability" && <section className="availability-workspace"><div className="workspace-heading"><div><h2>Наличие позиций</h2><p>Изменения сохраняются сразу и автоматически появляются на экране.</p></div><button type="button" className="quick-add" onClick={() => setTab("items")}>+ Добавить позицию</button></div><div className="availability-toolbar"><label className="search-field"><span className="sr-only">Поиск по позициям</span><input type="search" placeholder="Найти блюдо…" value={search} onChange={event => setSearch(event.target.value)} /></label><div className="filter-group" role="group" aria-label="Фильтр наличия">{([ ["all", "Все"], ["available", "В наличии"], ["unavailable", "Нет в наличии"] ] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={availabilityFilter === value} className={availabilityFilter === value ? "active" : ""} onClick={() => setAvailabilityFilter(value)}>{label}</button>)}</div><select aria-label="Фильтр по категории" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}><option value="">Все категории</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="selection-toolbar"><label><input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} disabled={!filteredIds.length} /> Выбрать показанные</label><span>{selectedIds.size ? `Выбрано: ${selectedIds.size}` : `${filteredItems.length} показано`}</span>{selectedIds.size > 0 && <div className="bulk-actions"><button type="button" onClick={() => void bulkAvailability(true)} disabled={selectionBusy}>В наличии</button><button type="button" onClick={() => void bulkAvailability(false)} disabled={selectionBusy}>Нет в наличии</button></div>}</div><div ref={availabilityListRef} className="availability-list">{grouped.length ? grouped.map(group => (
         <section key={group.category.id}>
@@ -405,7 +416,7 @@ function StaffScreen() {
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
       {tab === "experimental" && venue && <ExperimentalSettings venue={venue} categories={categories} items={items} busy={busy} onSave={saveVenueSettings} />}
       {toast && <p className="staff-toast" role="status" aria-live="polite">{toast}</p>}
-      {error && <p className="status-error">{error}</p>}
+      {error && <p role="alert" className="status-error">{error}</p>}
     </main>
   );
 }
@@ -528,7 +539,7 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
 
-  return <section className="experimental-settings"><div className="experimental-heading"><div><h2>Экспериментальные функции</h2><p>Настройте пагинацию и двухколоночный режим перерыва.</p>{dirty && <span className="unsaved-indicator" role="status">Есть несохранённые изменения</span>}</div><span className="page-estimate">Ожидается страниц: <b>{expectedPages}</b></span></div>
+  return <section className="experimental-settings"><div className="experimental-heading"><div><h2>Расширенные настройки</h2><p>Настройте пагинацию и двухколоночный режим перерыва.</p>{dirty && <span className="unsaved-indicator" role="status">Есть несохранённые изменения</span>}</div><span className="page-estimate">Ожидается страниц: <b>{expectedPages}</b></span></div>
     <div className="preset-buttons">{(["compact", "balanced", "large"] as DisplayPreset[]).map(value => <button type="button" className={preset === value ? "active" : ""} key={value} onClick={() => applyPreset(value)}>{({ compact: "Компактный", balanced: "Сбалансированный", large: "Крупный" })[value]}</button>)}</div>
     {expectedPages > 5 && <p className="settings-warning">При выбранном размере текста и отступах меню будет состоять более чем из пяти страниц.</p>}
     <div className="experimental-grid">
