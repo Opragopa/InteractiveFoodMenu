@@ -96,36 +96,7 @@ services:
       - /var/cache/nginx
       - /var/run
 
-  # Development-only Firebase Emulator Suite. Never publish this profile to
-  # the internet; it does not run with the production web deployment above.
-  backend:
-    profiles: ["emulators"]
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-interactivefoodmenu}
-      ENFORCE_APP_CHECK: "false"
-      # Used by seed and by server-rendered display links when supplied.
-      DISPLAY_BASE_URL: ${DISPLAY_BASE_URL:-}
-    ports:
-      - "4000:4000" # Emulator Suite UI
-      - "5001:5001" # Cloud Functions
-      - "8080:8080" # Firestore
-      - "9099:9099" # Authentication
-      - "9199:9199" # Storage
-    volumes:
-      - firebase-emulator-data:/srv/app/.firebase-data
-    # This is a local development backend. Do not hide a startup error behind
-    # an automatic restart loop; inspect it with `docker compose logs backend`.
-    restart: "no"
-    init: true
-    stop_grace_period: 30s
-
 networks:
   menu_internal:
     internal: true
   backend_outbound:
-
-volumes:
-  firebase-emulator-data:

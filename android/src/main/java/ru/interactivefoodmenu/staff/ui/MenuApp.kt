@@ -132,7 +132,7 @@ private fun ConfigurationMissing() = Column(
 ) {
     Text("Backend API не настроен", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(12.dp))
-    Text("Добавьте android/google-services.json и пересоберите приложение.")
+    Text("Задайте backendApiUrl при сборке и пересоберите приложение.")
 }
 
 @Composable

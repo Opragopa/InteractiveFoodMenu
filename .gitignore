@@ -3,7 +3,6 @@
 .gradle/
 **/build/
 local.properties
-android/google-services.json
 android/keystore.properties
 *.jks
 *.keystore
@@ -11,18 +10,8 @@ node_modules/
 web-display/dist/
 web-display/public/legacy-connect.js
 *.tsbuildinfo
-functions/lib/
-functions/.env*
-functions/.secret.local
 **/.env.local
 .env.deploy
 .env.backend
 appwrite/
 backend-api/dist/
-.firebase/
-.firebase-data/
-firebase-debug.log
-firestore-debug.log
-ui-debug.log
-storage-debug.log
-.runtimeconfig.json
