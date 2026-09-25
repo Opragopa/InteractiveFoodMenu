@@ -60,6 +60,14 @@ function integer(value: unknown, minimum: number, maximum: number): number {
   return result;
 }
 
+export function normalizeBulkAvailabilityIds(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new ApiError(400, "invalid_argument", "Нужен массив позиций.");
+  const ids = [...new Set(value.map((item) => String(item ?? "").trim()).filter(Boolean))];
+  if (!ids.length) throw new ApiError(400, "invalid_argument", "Выберите хотя бы одну позицию.");
+  if (ids.length > 500) throw new ApiError(400, "invalid_argument", "За одну операцию можно изменить не более 500 позиций.");
+  return ids;
+}
+
 function routeId(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -527,6 +535,24 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     });
     await bumpMenuVersion(services, databaseId, claims.venueId!);
     response.status(201).json({ item: publicRow(row) });
+  }));
+
+  router.patch("/items/bulk-availability", asyncRoute(async (request, response) => {
+    const claims = requireRole(request, config, ["staff"]);
+    const itemIds = normalizeBulkAvailabilityIds(request.body?.itemIds);
+    if (typeof request.body?.isAvailable !== "boolean") {
+      throw new ApiError(400, "invalid_argument", "Поле isAvailable должно быть логическим.");
+    }
+    const isAvailable = request.body.isAvailable;
+    const existing = await Promise.all(itemIds.map((itemId) => ownedRow(services, config, "items", itemId, claims.venueId!)));
+    const now = new Date().toISOString();
+    const updated = await Promise.all(existing.map((item) => services.tables.updateRow<RowData>({
+      databaseId, tableId: "items", rowId: item.$id,
+      data: { isAvailable, updatedAt: now, updatedBy: "staff-api" },
+    })));
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId! });
+    response.json({ updatedCount: updated.length, items: updated.map(publicRow), menuVersion: Number(venue.menuVersion ?? 1) });
   }));
 
   router.patch("/items/:id", asyncRoute(async (request, response) => {

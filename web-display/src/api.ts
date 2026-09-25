@@ -1,6 +1,9 @@
+import type { MenuItem } from "./types";
+
 const baseUrl = (import.meta.env.VITE_BACKEND_API_URL ?? `${window.location.origin}/api`).replace(/\/$/, "");
 
 export type ApiSession = { token: string; venueId: string };
+export type BulkAvailabilityResponse = { updatedCount: number; items: MenuItem[]; menuVersion: number };
 
 export class ApiRequestError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -77,6 +80,7 @@ export const api = {
   deleteCategory: (token: string, id: string) => request<void>(`/categories/${id}`, { method: "DELETE" }, token),
   createItem: (token: string, data: unknown) => request<{ item: any }>("/items", { method: "POST", body: JSON.stringify(data) }, token),
   updateItem: (token: string, id: string, data: unknown) => request<{ item: any }>(`/items/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+  updateItemsAvailability: (token: string, itemIds: string[], isAvailable: boolean) => request<BulkAvailabilityResponse>("/items/bulk-availability", { method: "PATCH", body: JSON.stringify({ itemIds, isAvailable }) }, token),
   deleteItem: (token: string, id: string) => request<void>(`/items/${id}`, { method: "DELETE" }, token),
   createPairing: () => request<{ pairingToken: string; displayBaseUrl: string; expiresInSeconds: number }>("/display/pairings", { method: "POST" }),
   completePairing: (pairingToken: string, venueCode: string, pin: string) => request<{ displayUrl: string }>("/display/pairings/complete", { method: "POST", body: JSON.stringify({ pairingToken, venueCode, pin }) }),
