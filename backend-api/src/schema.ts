@@ -25,7 +25,7 @@ export const TABLES: TableDefinition[] = [
       { key: "currency", type: "varchar", size: 3, required: true },
       { key: "backgroundColor", type: "varchar", size: 7, required: true },
       { key: "accentColor", type: "varchar", size: 7, required: true },
-      { key: "pageDurationSeconds", type: "integer", required: true, min: 5, max: 60 },
+      { key: "pageDurationSeconds", type: "integer", required: true, min: 5, max: 30 },
       { key: "logoFileId", type: "varchar", size: 36, required: false },
       { key: "logoPosition", type: "varchar", size: 16, required: false },
       { key: "logoInsetPercent", type: "integer", required: false, min: 0, max: 20 },
@@ -37,6 +37,13 @@ export const TABLES: TableDefinition[] = [
       { key: "breakEndsAt", type: "datetime", required: false },
       { key: "breakDurationMinutes", type: "integer", required: false, min: 1, max: 60 },
       { key: "breakFontSizePercent", type: "integer", required: false, min: 50, max: 200 },
+      { key: "breakPanelWidthPercent", type: "integer", required: false, min: 30, max: 50 },
+      { key: "breakMenuDimPercent", type: "integer", required: false, min: 25, max: 75 },
+      { key: "menuItemFontSizePx", type: "integer", required: false, min: 22, max: 54 },
+      { key: "menuItemGapPx", type: "integer", required: false, min: 4, max: 28 },
+      { key: "breakTransitionMs", type: "integer", required: false, min: 200, max: 1200 },
+      { key: "displayPreset", type: "varchar", size: 16, required: false },
+      { key: "breakExpiredText", type: "varchar", size: 80, required: false },
       { key: "staffVersion", type: "integer", required: true },
       { key: "displayVersion", type: "integer", required: true },
       { key: "menuVersion", type: "integer", required: false, min: 1 },
@@ -205,11 +212,18 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   if (!venueColumns.columns.some(column => column.key === "breakEndsAt")) await tables.createDatetimeColumn({ databaseId, tableId: "venues", key: "breakEndsAt", required: false });
   if (!venueColumns.columns.some(column => column.key === "breakDurationMinutes")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakDurationMinutes", required: false, min: 1, max: 60 });
   if (!venueColumns.columns.some(column => column.key === "breakFontSizePercent")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakFontSizePercent", required: false, min: 50, max: 200 });
+  if (!venueColumns.columns.some(column => column.key === "breakPanelWidthPercent")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakPanelWidthPercent", required: false, min: 30, max: 50 });
+  if (!venueColumns.columns.some(column => column.key === "breakMenuDimPercent")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakMenuDimPercent", required: false, min: 25, max: 75 });
+  if (!venueColumns.columns.some(column => column.key === "menuItemFontSizePx")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "menuItemFontSizePx", required: false, min: 22, max: 54 });
+  if (!venueColumns.columns.some(column => column.key === "menuItemGapPx")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "menuItemGapPx", required: false, min: 4, max: 28 });
+  if (!venueColumns.columns.some(column => column.key === "breakTransitionMs")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakTransitionMs", required: false, min: 200, max: 1200 });
+  if (!venueColumns.columns.some(column => column.key === "displayPreset")) await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "displayPreset", size: 16, required: false });
+  if (!venueColumns.columns.some(column => column.key === "breakExpiredText")) await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "breakExpiredText", size: 80, required: false });
   const displayColumns = await tables.listColumns({ databaseId, tableId: "display_tokens", queries: [Query.limit(100)] });
   if (!displayColumns.columns.some(column => column.key === "label")) await tables.createVarcharColumn({ databaseId, tableId: "display_tokens", key: "label", size: 80, required: false });
   if (!displayColumns.columns.some(column => column.key === "lastSeenAt")) await tables.createDatetimeColumn({ databaseId, tableId: "display_tokens", key: "lastSeenAt", required: false });
   const venues = await tables.listRows<Models.Row & Record<string, unknown>>({ databaseId, tableId: "venues", queries: [Query.limit(200)] });
-  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined).map(row => tables.updateRow({
+  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined || row.breakPanelWidthPercent === undefined || row.breakMenuDimPercent === undefined || row.menuItemFontSizePx === undefined || row.menuItemGapPx === undefined || row.breakTransitionMs === undefined || row.displayPreset === undefined || row.breakExpiredText === undefined).map(row => tables.updateRow({
     databaseId,
     tableId: "venues",
     rowId: String(row.$id),
@@ -221,6 +235,13 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
       ...(row.breakActive === undefined ? { breakActive: false } : {}),
       ...(row.breakDurationMinutes === undefined ? { breakDurationMinutes: 10 } : {}),
       ...(row.breakFontSizePercent === undefined ? { breakFontSizePercent: 100 } : {}),
+      ...(row.breakPanelWidthPercent === undefined ? { breakPanelWidthPercent: 36 } : {}),
+      ...(row.breakMenuDimPercent === undefined ? { breakMenuDimPercent: 45 } : {}),
+      ...(row.menuItemFontSizePx === undefined ? { menuItemFontSizePx: 34 } : {}),
+      ...(row.menuItemGapPx === undefined ? { menuItemGapPx: 12 } : {}),
+      ...(row.breakTransitionMs === undefined ? { breakTransitionMs: 600 } : {}),
+      ...(row.displayPreset === undefined ? { displayPreset: "balanced" } : {}),
+      ...(row.breakExpiredText === undefined ? { breakExpiredText: "Скоро буду" } : {}),
     },
   })));
 }

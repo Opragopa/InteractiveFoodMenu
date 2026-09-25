@@ -21,7 +21,6 @@ export function paginateMenu(
     .forEach((category) => {
       const categoryItems = items
         .filter((item) => item.categoryId === category.id)
-        .filter((item) => item.isAvailable !== false)
         .sort((a, b) => a.sortOrder - b.sortOrder
           || a.name.localeCompare(b.name, "ru"));
       if (!categoryItems.length) return;
@@ -87,8 +86,79 @@ export function autoScaleForMenu(categories: Category[], items: MenuItem[], widt
 }
 
 export function itemNameScale(name: string) {
-  if (name.length > 54) return 0.62;
-  if (name.length > 38) return 0.72;
-  if (name.length > 24) return 0.84;
+  void name;
   return 1;
+}
+
+export type EntryHeights = { category: number; item: (item: MenuItem) => number };
+
+/**
+ * Height-aware pagination used after the display has measured the rendered
+ * rows. A section that fits in a fresh column is kept together. Oversized
+ * sections continue in the next column with a repeated heading.
+ */
+export function paginateMenuByHeight(
+  categories: Category[],
+  items: MenuItem[],
+  availableHeight: number,
+  columnCount: number,
+  heights: EntryHeights,
+): MenuPage[] {
+  const capacity = Math.max(1, availableHeight);
+  const allColumns: PageEntry[][] = [];
+  let column: PageEntry[] = [];
+  let used = 0;
+
+  const flush = () => {
+    if (column.length) allColumns.push(column);
+    column = [];
+    used = 0;
+  };
+
+  [...categories]
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ru"))
+    .forEach((category) => {
+      const categoryItems = items
+        .filter((item) => item.categoryId === category.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ru"));
+      if (!categoryItems.length) return;
+
+      const sectionHeight = heights.category + categoryItems.reduce((sum, item) => sum + heights.item(item), 0);
+      if (column.length && sectionHeight <= capacity && used + sectionHeight > capacity) flush();
+
+      const addHeading = (repeated: boolean) => {
+        column.push({ kind: "category", categoryId: category.id, name: category.name, repeated });
+        used += heights.category;
+      };
+      if (column.length && used + heights.category + heights.item(categoryItems[0]) > capacity) flush();
+      addHeading(false);
+
+      categoryItems.forEach((item, index) => {
+        const itemHeight = heights.item(item);
+        if (column.length > 1 && used + itemHeight > capacity) {
+          flush();
+          addHeading(index > 0);
+        }
+        column.push({ kind: "item", item });
+        used += itemHeight;
+      });
+    });
+  flush();
+
+  const pages: MenuPage[] = [];
+  const columnsPerPage = Math.max(1, Math.floor(columnCount));
+  for (let index = 0; index < allColumns.length; index += columnsPerPage) pages.push({ columns: allColumns.slice(index, index + columnsPerPage) });
+  return pages;
+}
+
+export function estimateMenuPages(categories: Category[], items: MenuItem[], width: number, height: number, itemFontSizePx: number, itemGapPx: number) {
+  const layout = layoutForViewport(width, height);
+  const columnWidth = Math.max(240, (width - Math.max(0, layout.columnCount - 1) * 32) / layout.columnCount);
+  const itemHeight = (item: MenuItem) => {
+    const averageGlyphWidth = itemFontSizePx * .54;
+    const textWidth = Math.max(120, columnWidth - 210);
+    const lines = Math.max(1, Math.ceil(item.name.length * averageGlyphWidth / textWidth));
+    return lines * itemFontSizePx * 1.2 + itemGapPx * 2;
+  };
+  return paginateMenuByHeight(categories, items, Math.max(180, height - 220), layout.columnCount, { category: 54, item: itemHeight }).length;
 }

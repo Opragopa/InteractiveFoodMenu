@@ -18,6 +18,13 @@ export type Venue = {
   breakEndsAt?: string | null;
   breakDurationMinutes?: number;
   breakFontSizePercent?: number;
+  breakPanelWidthPercent?: number;
+  breakMenuDimPercent?: number;
+  menuItemFontSizePx?: number;
+  menuItemGapPx?: number;
+  breakTransitionMs?: number;
+  displayPreset?: "compact" | "balanced" | "large";
+  breakExpiredText?: string;
 };
 
 export type Category = { id: string; venueId: string; name: string; sortOrder: number };

@@ -21,6 +21,13 @@ type HubVenue = {
   displayScalePercent: number;
   displayScaleMode?: "auto" | "manual";
   breakFontSizePercent?: number;
+  breakPanelWidthPercent?: number;
+  breakMenuDimPercent?: number;
+  menuItemFontSizePx?: number;
+  menuItemGapPx?: number;
+  breakTransitionMs?: number;
+  displayPreset?: "compact" | "balanced" | "large";
+  breakExpiredText?: string;
   logoFileId?: string | null;
   logoPosition?: LogoPosition;
   logoInsetPercent?: number;
@@ -80,7 +87,15 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
   const save = async () => {
     try {
       setError("");
-      await onSave(normalizeVenueAppearance({ name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale, displayScaleMode, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale, logoVisible, menuRefreshSeconds, breakFontSizePercent: breakFontSize }));
+      await onSave(normalizeVenueAppearance({
+        name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale,
+        displayScaleMode, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale,
+        logoVisible, menuRefreshSeconds, breakFontSizePercent: breakFontSize,
+        breakPanelWidthPercent: venue.breakPanelWidthPercent, breakMenuDimPercent: venue.breakMenuDimPercent,
+        menuItemFontSizePx: venue.menuItemFontSizePx, menuItemGapPx: venue.menuItemGapPx,
+        breakTransitionMs: venue.breakTransitionMs, displayPreset: venue.displayPreset,
+        breakExpiredText: venue.breakExpiredText,
+      }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
 
@@ -89,7 +104,7 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
     <label>Название точки<input maxLength={160} value={name} onChange={event => setName(event.target.value)} /></label>
     <HubColorField label="Цвет фона" value={backgroundColor} onChange={setBackgroundColor} />
     <HubColorField label="Цвет текста и заголовков" value={accentColor} onChange={setAccentColor} />
-    <HubNumberControl label="Смена страниц, сек." value={duration} minimum={5} maximum={60} step={1} onChange={setDuration} />
+    <HubNumberControl label="Смена страниц, сек." value={duration} minimum={5} maximum={30} step={1} onChange={setDuration} />
     <HubNumberControl label="Масштаб меню ТВ, %" value={displayScale} minimum={50} maximum={160} step={5} onChange={setDisplayScale} />
     <label>Режим масштаба<select value={displayScaleMode} onChange={event => setDisplayScaleMode(event.target.value as "auto" | "manual")}><option value="auto">Авто (до двух страниц)</option><option value="manual">Ручной масштаб</option></select></label>
     <label>Расположение логотипа<select value={logoPosition} onChange={event => setLogoPosition(event.target.value as LogoPosition)}>{logoPositions.map(position => <option key={position} value={position}>{({ "top-right": "Справа сверху", "top-left": "Слева сверху", "bottom-right": "Справа снизу", "bottom-left": "Слева снизу" } as Record<LogoPosition, string>)[position]}</option>)}</select></label>

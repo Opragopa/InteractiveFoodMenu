@@ -8,6 +8,8 @@ import { forgetVenueCredentials, saveVenueCredentials, savedVenueCredentials } f
 import { reportClientError } from "./clientLogger";
 import { BackendHub } from "./BackendHub";
 import { api } from "./api";
+import { displayPresets, normalizeVenueAppearance, type DisplayPreset, type VenueAppearance } from "./venueSettings";
+import { estimateMenuPages } from "./paginate";
 
 function installationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -131,7 +133,7 @@ function StaffScreen() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState<"availability" | "categories" | "items" | "settings">("availability");
+  const [tab, setTab] = useState<"availability" | "categories" | "items" | "settings" | "experimental">("availability");
   const [newCategory, setNewCategory] = useState("");
   const [newItem, setNewItem] = useState({ name: "", price: "", categoryId: "" });
   const [csvRows, setCsvRows] = useState<CsvMenuRow[]>([]);
@@ -214,7 +216,7 @@ function StaffScreen() {
     try { await api.deleteItem(sessionToken, item.id); setItems(current => current.filter(value => value.id !== item.id)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось удалить позицию."); }
   };
-  const saveVenueSettings = async (settings: Pick<Venue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent">) => {
+  const saveVenueSettings = async (settings: Partial<Venue>) => {
     setBusy(true);
     try {
       const result = await api.updateVenue(sessionToken, settings);
@@ -266,6 +268,7 @@ function StaffScreen() {
         <button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>Категории</button>
         <button className={tab === "items" ? "active" : ""} onClick={() => setTab("items")}>Позиции</button>
         <button className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Настройки</button>
+        <button className={tab === "experimental" ? "active" : ""} onClick={() => setTab("experimental")}>Экспериментальные функции</button>
       </nav>
       {tab === "availability" && <div ref={availabilityListRef} className="availability-list">{grouped.map(group => (
         <section key={group.category.id}>
@@ -304,6 +307,7 @@ function StaffScreen() {
         </section>
       )}
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
+      {tab === "experimental" && venue && <ExperimentalSettings venue={venue} categories={categories} items={items} busy={busy} onSave={saveVenueSettings} />}
       {error && <p className="status-error">{error}</p>}
     </main>
   );
@@ -345,11 +349,91 @@ function VenueSettings({ venue, busy, onSave }: {
     <label className="setting-field"><span>Название точки</span><input maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
     <ColorSetting label="Цвет фона" value={backgroundColor} onChange={setBackgroundColor} />
     <ColorSetting label="Акцентный цвет" value={accentColor} onChange={setAccentColor} />
-    <div className="setting-field duration-setting"><span>Смена страниц</span><div className="duration-control"><button type="button" aria-label="Уменьшить интервал" disabled={duration <= 5} onClick={() => setDuration(value => Math.max(5, value - 1))}>−</button><strong>{duration} сек.</strong><button type="button" aria-label="Увеличить интервал" disabled={duration >= 60} onClick={() => setDuration(value => Math.min(60, value + 1))}>+</button></div><small>Если меню не помещается на одной странице, ТВ будет переключать страницы с этим интервалом.</small></div>
+    <div className="setting-field duration-setting"><span>Смена страниц</span><div className="duration-control"><button type="button" aria-label="Уменьшить интервал" disabled={duration <= 5} onClick={() => setDuration(value => Math.max(5, value - 1))}>−</button><strong>{duration} сек.</strong><button type="button" aria-label="Увеличить интервал" disabled={duration >= 30} onClick={() => setDuration(value => Math.min(30, value + 1))}>+</button></div><small>Если меню не помещается на одной странице, ТВ будет переключать страницы с этим интервалом.</small></div>
     <div className="setting-field duration-setting"><span>Масштаб меню ТВ</span><div className="duration-control"><button type="button" aria-label="Уменьшить масштаб" disabled={displayScale <= 80} onClick={() => setDisplayScale(value => Math.max(80, value - 5))}>−</button><strong>{displayScale}%</strong><button type="button" aria-label="Увеличить масштаб" disabled={displayScale >= 160} onClick={() => setDisplayScale(value => Math.min(160, value + 5))}>+</button></div><small>Увеличивает текст и отступы; при крупном масштабе на странице будет меньше позиций.</small></div>
     <button className="save-settings" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить оформление"}</button>
     {message && <p className="settings-success">{message}</p>}{error && <p className="status-error">{error}</p>}
   </section>;
+}
+
+function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
+  venue: Venue;
+  categories: Category[];
+  items: MenuItem[];
+  busy: boolean;
+  onSave: (settings: Partial<Venue>) => Promise<void>;
+}) {
+  const [preset, setPreset] = useState<DisplayPreset>(venue.displayPreset ?? "balanced");
+  const [panelWidth, setPanelWidth] = useState(venue.breakPanelWidthPercent ?? 36);
+  const [dimPercent, setDimPercent] = useState(venue.breakMenuDimPercent ?? 45);
+  const [fontSize, setFontSize] = useState(venue.menuItemFontSizePx ?? 34);
+  const [itemGap, setItemGap] = useState(venue.menuItemGapPx ?? 12);
+  const [pageDuration, setPageDuration] = useState(Math.min(30, venue.pageDurationSeconds || 10));
+  const [transitionMs, setTransitionMs] = useState(venue.breakTransitionMs ?? 600);
+  const [expiredText, setExpiredText] = useState(venue.breakExpiredText ?? "Скоро буду");
+  const [testBreak, setTestBreak] = useState(false);
+  const [previewPage, setPreviewPage] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const previewWidth = 1366 * (testBreak ? (100 - panelWidth) / 100 : 1);
+  const expectedPages = Math.max(1, estimateMenuPages(categories, items, previewWidth, 768, fontSize, itemGap));
+
+  useEffect(() => { setPreviewPage((value) => Math.min(value, expectedPages - 1)); }, [expectedPages]);
+  useEffect(() => {
+    if (paused || expectedPages <= 1) return;
+    const timer = window.setInterval(() => setPreviewPage((value) => (value + 1) % expectedPages), pageDuration * 1000);
+    return () => window.clearInterval(timer);
+  }, [paused, expectedPages, pageDuration]);
+
+  const applyPreset = (next: DisplayPreset) => {
+    const values = displayPresets[next];
+    setPreset(next); setPanelWidth(values.breakPanelWidthPercent!); setDimPercent(values.breakMenuDimPercent!);
+    setFontSize(values.menuItemFontSizePx!); setItemGap(values.menuItemGapPx!); setPageDuration(values.pageDurationSeconds); setTransitionMs(values.breakTransitionMs!);
+  };
+  const reset = () => { applyPreset("balanced"); setExpiredText("Скоро буду"); };
+  const save = async () => {
+    setError(""); setMessage("");
+    try {
+      const normalized = normalizeVenueAppearance({
+        name: venue.name, backgroundColor: venue.backgroundColor, accentColor: venue.accentColor,
+        pageDurationSeconds: pageDuration, displayScalePercent: venue.displayScalePercent ?? 100,
+        displayScaleMode: venue.displayScaleMode, logoPosition: venue.logoPosition ?? "top-right", logoInsetPercent: venue.logoInsetPercent ?? 3,
+        logoScalePercent: venue.logoScalePercent ?? 100, logoVisible: venue.logoVisible, menuRefreshSeconds: venue.menuRefreshSeconds,
+        breakFontSizePercent: venue.breakFontSizePercent, breakPanelWidthPercent: panelWidth, breakMenuDimPercent: dimPercent,
+        menuItemFontSizePx: fontSize, menuItemGapPx: itemGap, breakTransitionMs: transitionMs, displayPreset: preset, breakExpiredText: expiredText,
+      });
+      await onSave({
+        pageDurationSeconds: normalized.pageDurationSeconds, breakPanelWidthPercent: normalized.breakPanelWidthPercent,
+        breakMenuDimPercent: normalized.breakMenuDimPercent, menuItemFontSizePx: normalized.menuItemFontSizePx,
+        menuItemGapPx: normalized.menuItemGapPx, breakTransitionMs: normalized.breakTransitionMs,
+        displayPreset: normalized.displayPreset, breakExpiredText: normalized.breakExpiredText,
+      });
+      setMessage("Экспериментальные настройки сохранены и будут применены на экране автоматически.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
+  };
+
+  return <section className="experimental-settings"><div className="experimental-heading"><div><h2>Экспериментальные функции</h2><p>Настройте пагинацию и двухколоночный режим перерыва.</p></div><span className="page-estimate">Ожидается страниц: <b>{expectedPages}</b></span></div>
+    <div className="preset-buttons">{(["compact", "balanced", "large"] as DisplayPreset[]).map(value => <button type="button" className={preset === value ? "active" : ""} key={value} onClick={() => applyPreset(value)}>{({ compact: "Компактный", balanced: "Сбалансированный", large: "Крупный" })[value]}</button>)}</div>
+    {expectedPages > 5 && <p className="settings-warning">При выбранном размере текста и отступах меню будет состоять более чем из пяти страниц.</p>}
+    <div className="experimental-grid">
+      <RangeSetting label="Ширина панели перерыва" value={panelWidth} unit="%" min={30} max={50} step={1} onChange={setPanelWidth} />
+      <RangeSetting label="Приглушение меню" value={dimPercent} unit="%" min={25} max={75} step={5} onChange={setDimPercent} />
+      <RangeSetting label="Размер названий" value={fontSize} unit="px" min={22} max={54} step={1} onChange={setFontSize} />
+      <RangeSetting label="Вертикальные отступы" value={itemGap} unit="px" min={4} max={28} step={1} onChange={setItemGap} />
+      <RangeSetting label="Смена страниц" value={pageDuration} unit="сек." min={5} max={30} step={1} onChange={setPageDuration} />
+      <RangeSetting label="Переход часов и таймера" value={transitionMs} unit="мс" min={200} max={1200} step={100} onChange={setTransitionMs} />
+      <label className="experimental-text">Текст после окончания таймера<input maxLength={80} value={expiredText} onChange={event => setExpiredText(event.target.value)} /></label>
+    </div>
+    <div className={`experimental-preview ${testBreak ? "is-break" : ""}`} style={{ "--preview-panel": `${panelWidth}%`, "--preview-dim": (100 - dimPercent) / 100, "--preview-transition": `${transitionMs}ms` } as React.CSSProperties}><div className="preview-menu"><b>{venue.name}</b><span>Страница {previewPage + 1} из {expectedPages}</span><small>Названия сохраняют единый размер {fontSize}px</small></div><div className="preview-break"><b>Перерыв</b><strong>09:42</strong></div></div>
+    <div className="preview-controls"><button type="button" onClick={() => setPreviewPage(value => (value - 1 + expectedPages) % expectedPages)}>Предыдущая</button><button type="button" onClick={() => setPreviewPage(value => (value + 1) % expectedPages)}>Следующая</button><button type="button" onClick={() => setPaused(value => !value)}>{paused ? "Продолжить автоперелистывание" : "Пауза автоперелистывания"}</button><button type="button" onClick={() => setTestBreak(value => !value)}>{testBreak ? "Закрыть проверку перерыва" : "Проверить режим перерыва"}</button></div>
+    <div className="experimental-actions"><button type="button" onClick={reset}>Вернуть рекомендуемые значения</button><button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить настройки"}</button></div>
+    {message && <p className="settings-success">{message}</p>}{error && <p className="status-error">{error}</p>}
+  </section>;
+}
+
+function RangeSetting({ label, value, unit, min, max, step, onChange }: { label: string; value: number; unit: string; min: number; max: number; step: number; onChange: (value: number) => void }) {
+  return <label className="range-setting"><span>{label}<b>{value} {unit}</b></span><input type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} /></label>;
 }
 
 function ColorSetting({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {

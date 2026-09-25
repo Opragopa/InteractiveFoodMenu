@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { autoScaleForMenu, itemNameScale, layoutForViewport, paginateMenu } from "./paginate";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { autoScaleForMenu, layoutForViewport, paginateMenuByHeight } from "./paginate";
 import type { Category, MenuItem, Venue } from "./types";
 import { formatRussianText } from "./typography";
 import { remainingBreakSeconds } from "./break";
@@ -23,84 +23,100 @@ function freshnessLabel(updatedAt: number | null) {
   return `Нет связи · меню актуально на ${new Date(updatedAt).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" })}`;
 }
 
+function formatLocalDateTime(now: number) {
+  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(now).replace(",", "");
+}
+
 export function DisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt }: {
-  venue: Venue;
-  categories: Category[];
-  items: MenuItem[];
-  logoUrl: string;
-  connected: boolean;
-  updatedAt?: number | null;
+  venue: Venue; categories: Category[]; items: MenuItem[]; logoUrl: string; connected: boolean; updatedAt?: number | null;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
+  const [viewport, setViewport] = useState(readViewport);
+  const [now, setNow] = useState(Date.now());
+  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
+  const measureRef = useRef<HTMLDivElement | null>(null);
   const logoPosition = venue.logoPosition ?? "top-right";
   const logoInset = Math.min(20, Math.max(0, venue.logoInsetPercent ?? 3));
   const logoScale = Math.min(200, Math.max(50, venue.logoScalePercent ?? 100)) / 100;
   const backgroundColor = /^#[0-9a-f]{6}$/i.test(venue.backgroundColor) ? venue.backgroundColor : "#56965B";
   const accentColor = /^#[0-9a-f]{6}$/i.test(venue.accentColor) ? venue.accentColor : "#FFFFFF";
   const foregroundColor = contrastForeground(backgroundColor);
+  const breakActive = venue.breakActive === true;
+  const breakSeconds = remainingBreakSeconds(breakActive, venue.breakEndsAt, now);
+  const breakExpired = breakActive && breakSeconds === 0;
+  const panelWidth = Math.min(50, Math.max(30, venue.breakPanelWidthPercent ?? 36));
+  const dimPercent = Math.min(75, Math.max(25, venue.breakMenuDimPercent ?? 45));
+  const itemFontSize = Math.min(54, Math.max(22, venue.menuItemFontSizePx ?? 34));
+  const itemGap = Math.min(28, Math.max(4, venue.menuItemGapPx ?? 12));
+  const transitionMs = Math.min(1200, Math.max(200, venue.breakTransitionMs ?? 600));
   const breakFontScale = Math.min(200, Math.max(50, venue.breakFontSizePercent ?? 100)) / 100;
-  const [viewport, setViewport] = useState(readViewport);
-  const [now, setNow] = useState(Date.now());
-  const breakSeconds = remainingBreakSeconds(venue.breakActive, venue.breakEndsAt, now);
+
   useEffect(() => {
-    if (!venue.breakActive) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [venue.breakActive, venue.breakEndsAt]);
+    const interval = breakActive ? 1000 : 30_000;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), interval);
+    return () => window.clearInterval(timer);
+  }, [breakActive, venue.breakEndsAt]);
+
   useEffect(() => {
     const resize = () => setViewport(readViewport());
     addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
     return () => { removeEventListener("resize", resize); window.visualViewport?.removeEventListener("resize", resize); };
   }, []);
+
+  const usableWidth = viewport.width * (breakActive ? (100 - panelWidth) / 100 : 1);
   const scale = useMemo(() => venue.displayScaleMode === "manual"
     ? Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100
-    : autoScaleForMenu(categories, items, viewport.width, viewport.height), [venue.displayScaleMode, venue.displayScalePercent, categories, items, viewport]);
-  const pages = useMemo(() => {
-    const layout = layoutForViewport(viewport.width / scale, viewport.height / scale);
-    return paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount);
-  }, [categories, items, viewport, scale]);
+    : autoScaleForMenu(categories, items, usableWidth, viewport.height), [venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.height]);
+  const layout = useMemo(() => layoutForViewport(usableWidth / scale, viewport.height / scale), [usableWidth, viewport.height, scale]);
+  const availableHeight = Math.max(180, viewport.height / scale - 190);
+  const columnWidth = Math.max(220, (usableWidth / scale - Math.max(0, layout.columnCount - 1) * 32) / layout.columnCount);
+
+  useLayoutEffect(() => {
+    const root = measureRef.current;
+    if (!root) return;
+    const next: Record<string, number> = {};
+    root.querySelectorAll<HTMLElement>("[data-measure-key]").forEach((element) => { next[element.dataset.measureKey ?? ""] = Math.ceil(element.getBoundingClientRect().height); });
+    setMeasuredHeights((current) => {
+      const keys = Object.keys(next);
+      if (keys.length === Object.keys(current).length && keys.every((key) => current[key] === next[key])) return current;
+      return next;
+    });
+  }, [categories, items, columnWidth, itemFontSize, itemGap, scale]);
+
+  const pages = useMemo(() => paginateMenuByHeight(categories, items, availableHeight, layout.columnCount, {
+    category: measuredHeights.category ?? 52,
+    item: (item) => measuredHeights[`item-${item.id}`] ?? itemFontSize * 1.4 + itemGap * 2,
+  }), [categories, items, availableHeight, layout.columnCount, measuredHeights, itemFontSize, itemGap]);
+
+  useEffect(() => { setPageIndex(0); }, [breakActive]);
   useEffect(() => {
     setPageIndex((current) => pages.length ? Math.min(current, pages.length - 1) : 0);
     if (pages.length <= 1) return;
-    const timer = window.setInterval(() => setPageIndex((current) => (current + 1) % pages.length), venue.pageDurationSeconds * 1000);
-    return () => clearInterval(timer);
+    const timer = window.setInterval(() => setPageIndex((current) => (current + 1) % pages.length), Math.min(30, Math.max(5, venue.pageDurationSeconds || 10)) * 1000);
+    return () => window.clearInterval(timer);
   }, [pages.length, venue.pageDurationSeconds]);
 
   const page = pages[pageIndex];
-  if (breakSeconds > 0) return <main className="display break-screen" style={{ backgroundColor, color: foregroundColor }}><h1 className="break-title" style={{ color: accentColor }}>Перерыв</h1><strong className="break-timer" style={{ fontSize: `${15 * breakFontScale}vw` }}>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong></main>;
-  return (
-    <main className={`display logo-${logoPosition}`} lang="ru" style={{
-      zoom: scale,
-      backgroundColor,
-      color: foregroundColor,
-      "--background": backgroundColor,
-      "--accent": accentColor,
-      "--foreground": foregroundColor,
-      "--logo-inset": `${logoInset}%`,
-      "--logo-scale": logoScale,
-    } as React.CSSProperties}>
-      <header><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1></header>
+  const style = {
+    backgroundColor, color: foregroundColor, "--background": backgroundColor, "--accent": accentColor, "--foreground": foregroundColor,
+    "--logo-inset": `${logoInset}%`, "--logo-scale": logoScale, "--break-panel-width": `${panelWidth}%`,
+    "--menu-dim-opacity": (100 - dimPercent) / 100, "--item-font-size": `${itemFontSize}px`, "--item-gap": `${itemGap}px`, "--break-transition": `${transitionMs}ms`,
+  } as React.CSSProperties;
+
+  return <main className={`display-shell ${breakActive ? "break-active" : ""} ${breakExpired ? "break-expired" : ""}`} lang="ru" style={style}>
+    <section className={`display-menu logo-${logoPosition}`} style={{ zoom: scale }}>
+      <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
-      {!page ? <div className="empty">Меню пока не заполнено</div> : (
-        <section className="page page-transition" key={`${pageIndex}-${items.filter((item) => item.isAvailable).length}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
-          {page.columns.map((column, columnIndex) => (
-            <div className="column" key={columnIndex}>
-              {column.map((entry, rowIndex) => entry.kind === "category" ? (
-                <h2 key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor }}>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</h2>
-              ) : (
-                <div className={`menu-item menu-item-enter ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms` } as React.CSSProperties}>
-                  <span className="item-name" style={{ fontSize: `${itemNameScale(entry.item.name)}em` }}>{formatRussianText(entry.item.name)}</span><span className="dots" /><span className="price">{money.format(entry.item.priceMinor / 100)}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </section>
-      )}
-      <footer>
-        {!connected && <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span>}
-        {pages.length > 1 && <span>{pageIndex + 1} / {pages.length}</span>}
-      </footer>
-    </main>
-  );
+      {!page ? <div className="empty">Меню пока не заполнено</div> : <section className="page page-transition" key={`${pageIndex}-${items.length}-${breakActive}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
+        {page.columns.map((column, columnIndex) => <div className="column" key={columnIndex}>{column.map((entry, rowIndex) => entry.kind === "category" ?
+          <h2 key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor }}>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</h2> :
+          <div className={`menu-item menu-item-enter ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" /><span className="price">{money.format(entry.item.priceMinor / 100)}</span></div>)}</div>)}
+      </section>}
+      <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}{pages.length > 1 && <span className="page-indicator" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</footer>
+    </section>
+    <aside className="break-panel" aria-hidden={!breakActive} aria-live="polite"><div className="break-state-label">{breakExpired ? "Перерыв завершён" : "Перерыв"}</div>{breakExpired ? <strong className="break-expired-text">{formatRussianText(venue.breakExpiredText ?? "Скоро буду")}</strong> : <strong className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * breakFontScale, viewport.width * panelWidth / 100 * .22))}px` }}>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong>}</aside>
+    <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, fontSize: itemFontSize }}><h2 data-measure-key="category">Раздел</h2>{items.map((item) => <div className="menu-item" data-measure-key={`item-${item.id}`} key={item.id}><span className="item-name">{formatRussianText(item.name)}</span><span className="dots" /><span className="price">{money.format(item.priceMinor / 100)}</span></div>)}</div>
+  </main>;
 }

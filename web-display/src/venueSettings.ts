@@ -14,6 +14,20 @@ export type VenueAppearance = {
   logoVisible?: boolean;
   menuRefreshSeconds?: number;
   breakFontSizePercent?: number;
+  breakPanelWidthPercent?: number;
+  breakMenuDimPercent?: number;
+  menuItemFontSizePx?: number;
+  menuItemGapPx?: number;
+  breakTransitionMs?: number;
+  displayPreset?: DisplayPreset;
+  breakExpiredText?: string;
+};
+
+export type DisplayPreset = "compact" | "balanced" | "large";
+export const displayPresets: Record<DisplayPreset, Pick<VenueAppearance, "breakPanelWidthPercent" | "breakMenuDimPercent" | "menuItemFontSizePx" | "menuItemGapPx" | "pageDurationSeconds" | "breakTransitionMs">> = {
+  compact: { breakPanelWidthPercent: 32, breakMenuDimPercent: 35, menuItemFontSizePx: 28, menuItemGapPx: 6, pageDurationSeconds: 8, breakTransitionMs: 400 },
+  balanced: { breakPanelWidthPercent: 36, breakMenuDimPercent: 45, menuItemFontSizePx: 34, menuItemGapPx: 12, pageDurationSeconds: 10, breakTransitionMs: 600 },
+  large: { breakPanelWidthPercent: 42, breakMenuDimPercent: 55, menuItemFontSizePx: 42, menuItemGapPx: 18, pageDurationSeconds: 14, breakTransitionMs: 800 },
 };
 
 export const polytechAppearance = { backgroundColor: "#56965B", accentColor: "#FFFFFF" };
@@ -35,7 +49,7 @@ export function normalizeVenueAppearance(value: VenueAppearance): VenueAppearanc
     name,
     backgroundColor,
     accentColor,
-    pageDurationSeconds: clampInteger(value.pageDurationSeconds, 5, 60, 10),
+    pageDurationSeconds: clampInteger(value.pageDurationSeconds, 5, 30, 10),
     displayScalePercent: clampInteger(value.displayScalePercent, 50, 160, 100),
     displayScaleMode: value.displayScaleMode === "manual" ? "manual" : "auto",
     logoPosition: value.logoPosition,
@@ -44,5 +58,12 @@ export function normalizeVenueAppearance(value: VenueAppearance): VenueAppearanc
     logoVisible: value.logoVisible !== false,
     menuRefreshSeconds: clampInteger(value.menuRefreshSeconds, 5, 300, 15),
     breakFontSizePercent: clampInteger(value.breakFontSizePercent, 50, 200, 100),
+    breakPanelWidthPercent: clampInteger(value.breakPanelWidthPercent, 30, 50, 36),
+    breakMenuDimPercent: clampInteger(value.breakMenuDimPercent, 25, 75, 45),
+    menuItemFontSizePx: clampInteger(value.menuItemFontSizePx, 22, 54, 34),
+    menuItemGapPx: clampInteger(value.menuItemGapPx, 4, 28, 12),
+    breakTransitionMs: clampInteger(value.breakTransitionMs, 200, 1200, 600),
+    displayPreset: value.displayPreset && value.displayPreset in displayPresets ? value.displayPreset : "balanced",
+    breakExpiredText: String(value.breakExpiredText ?? "Скоро буду").trim().slice(0, 80) || "Скоро буду",
   };
 }

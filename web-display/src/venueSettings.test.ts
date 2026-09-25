@@ -14,6 +14,13 @@ describe("venue appearance editor", () => {
       logoScalePercent: 145,
       logoVisible: false,
       menuRefreshSeconds: 45,
+      breakPanelWidthPercent: 36,
+      breakMenuDimPercent: 45,
+      menuItemFontSizePx: 34,
+      menuItemGapPx: 12,
+      breakTransitionMs: 600,
+      displayPreset: "balanced",
+      breakExpiredText: "Скоро буду",
     });
     expect(settings).toMatchObject({
       backgroundColor: "#56965B",
@@ -56,5 +63,12 @@ describe("venue appearance editor", () => {
     expect(settings.logoScalePercent).toBe(100);
     expect(settings.logoVisible).toBe(true);
     expect(settings.menuRefreshSeconds).toBe(15);
+    expect(settings.breakPanelWidthPercent).toBe(36);
+    expect(settings.breakMenuDimPercent).toBe(45);
+    expect(settings.menuItemFontSizePx).toBe(34);
+    expect(settings.menuItemGapPx).toBe(12);
+    expect(settings.breakTransitionMs).toBe(600);
+    expect(settings.displayPreset).toBe("balanced");
+    expect(settings.breakExpiredText).toBe("Скоро буду");
   });
 });

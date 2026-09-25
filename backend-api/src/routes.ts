@@ -192,7 +192,10 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
         backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
-        displayScalePercent: 100, displayScaleMode: "auto", breakActive: false, breakDurationMinutes: 10, breakFontSizePercent: 100, staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
+        displayScalePercent: 100, displayScaleMode: "auto", breakActive: false, breakDurationMinutes: 10, breakFontSizePercent: 100,
+        breakPanelWidthPercent: 36, breakMenuDimPercent: 45, menuItemFontSizePx: 34, menuItemGapPx: 12,
+        breakTransitionMs: 600, displayPreset: "balanced", breakExpiredText: "Скоро буду",
+        staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
         updatedAt: now, updatedBy: "backend-hub",
       },
     });
@@ -243,7 +246,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
         data[field] = value;
       }
     }
-    if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 60);
+    if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 30);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
     if (request.body?.displayScaleMode !== undefined) {
       const mode = String(request.body.displayScaleMode);
@@ -256,6 +259,17 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.logoVisible !== undefined) data.logoVisible = Boolean(request.body.logoVisible);
     if (request.body?.menuRefreshSeconds !== undefined) data.menuRefreshSeconds = integer(request.body.menuRefreshSeconds, 5, 300);
     if (request.body?.breakFontSizePercent !== undefined) data.breakFontSizePercent = integer(request.body.breakFontSizePercent, 50, 200);
+    if (request.body?.breakPanelWidthPercent !== undefined) data.breakPanelWidthPercent = integer(request.body.breakPanelWidthPercent, 30, 50);
+    if (request.body?.breakMenuDimPercent !== undefined) data.breakMenuDimPercent = integer(request.body.breakMenuDimPercent, 25, 75);
+    if (request.body?.menuItemFontSizePx !== undefined) data.menuItemFontSizePx = integer(request.body.menuItemFontSizePx, 22, 54);
+    if (request.body?.menuItemGapPx !== undefined) data.menuItemGapPx = integer(request.body.menuItemGapPx, 4, 28);
+    if (request.body?.breakTransitionMs !== undefined) data.breakTransitionMs = integer(request.body.breakTransitionMs, 200, 1200);
+    if (request.body?.displayPreset !== undefined) {
+      const preset = String(request.body.displayPreset);
+      if (!["compact", "balanced", "large"].includes(preset)) throw new ApiError(400, "invalid_argument", "Некорректный пресет отображения.");
+      data.displayPreset = preset;
+    }
+    if (request.body?.breakExpiredText !== undefined) data.breakExpiredText = text(request.body.breakExpiredText, 80);
     const removeLogoFileId = request.body?.logoFileId === null && typeof venue.logoFileId === "string" ? venue.logoFileId : "";
     if (request.body?.logoFileId === null) data.logoFileId = null;
     data.updatedAt = new Date().toISOString();
@@ -402,11 +416,6 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const expectedVersion = claims.role === "staff" ? venue.staffVersion : venue.displayVersion;
     if (claims.version !== Number(expectedVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните вход заново.");
     response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    const expiredBreak = venue.breakActive === true && venue.breakEndsAt && new Date(String(venue.breakEndsAt)).getTime() <= Date.now();
-    if (expiredBreak) {
-      await services.tables.updateRow({ databaseId, tableId: "venues", rowId: claims.venueId, data: { breakActive: false, breakEndsAt: null } });
-      venue.breakActive = false; venue.breakEndsAt = null;
-    }
     response.json({ venue: publicRow(venue), categories: categories.rows.map(publicRow), items: items.rows.map(publicRow) });
   }));
 
@@ -435,10 +444,21 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
         data[field] = value;
       }
     }
-    if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 60);
+    if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 30);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
     if (request.body?.logoInsetPercent !== undefined) data.logoInsetPercent = integer(request.body.logoInsetPercent, 0, 20);
     if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
+    if (request.body?.breakPanelWidthPercent !== undefined) data.breakPanelWidthPercent = integer(request.body.breakPanelWidthPercent, 30, 50);
+    if (request.body?.breakMenuDimPercent !== undefined) data.breakMenuDimPercent = integer(request.body.breakMenuDimPercent, 25, 75);
+    if (request.body?.menuItemFontSizePx !== undefined) data.menuItemFontSizePx = integer(request.body.menuItemFontSizePx, 22, 54);
+    if (request.body?.menuItemGapPx !== undefined) data.menuItemGapPx = integer(request.body.menuItemGapPx, 4, 28);
+    if (request.body?.breakTransitionMs !== undefined) data.breakTransitionMs = integer(request.body.breakTransitionMs, 200, 1200);
+    if (request.body?.displayPreset !== undefined) {
+      const preset = String(request.body.displayPreset);
+      if (!["compact", "balanced", "large"].includes(preset)) throw new ApiError(400, "invalid_argument", "Некорректный пресет отображения.");
+      data.displayPreset = preset;
+    }
+    if (request.body?.breakExpiredText !== undefined) data.breakExpiredText = text(request.body.breakExpiredText, 80);
     data.updatedAt = new Date().toISOString();
     data.updatedBy = "staff-api";
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId!, data });

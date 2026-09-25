@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoScaleForMenu, itemNameScale, layoutForViewport, paginateMenu } from "./paginate";
+import { autoScaleForMenu, itemNameScale, layoutForViewport, paginateMenu, paginateMenuByHeight } from "./paginate";
 import { contrastForeground } from "./DisplayScreen";
 import type { Category, MenuItem } from "./types";
 
@@ -27,18 +27,18 @@ describe("paginateMenu", () => {
     expect(paginateMenu(categories, [], 5, 3)).toEqual([]);
   });
 
-  it("hides unavailable positions", () => {
+  it("keeps unavailable positions in their original order", () => {
     const items = [
       { ...itemsFixture("off", false), sortOrder: 0 },
       { ...itemsFixture("on", true), sortOrder: 1 },
     ];
     const pages = paginateMenu(categories, items, 5, 1);
-    expect(pages[0].columns[0].map((entry) => entry.kind === "item" ? entry.item.id : entry.kind)).toEqual(["category", "on"]);
+    expect(pages[0].columns[0].map((entry) => entry.kind === "item" ? entry.item.id : entry.kind)).toEqual(["category", "off", "on"]);
   });
 
-  it("removes categories when every position is unavailable", () => {
+  it("keeps categories when every position is unavailable", () => {
     const pages = paginateMenu(categories, [itemsFixture("off-1", false), itemsFixture("off-2", false)], 5, 1);
-    expect(pages).toEqual([]);
+    expect(pages[0].columns[0]).toHaveLength(3);
   });
 
   it("uses three columns for Full HD and two for 1366 wide", () => {
@@ -48,7 +48,13 @@ describe("paginateMenu", () => {
 
   it("keeps automatic scale in a legible range", () => {
     expect(autoScaleForMenu(categories, items, 1920, 1080)).toBeLessThanOrEqual(1.2);
-    expect(itemNameScale("Очень длинное название блюда с большим количеством слов")).toBeLessThan(1);
+    expect(itemNameScale("Очень длинное название блюда с большим количеством слов")).toBe(1);
+  });
+
+  it("keeps a small section together and repeats an oversized section heading", () => {
+    const result = paginateMenuByHeight(categories, items, 160, 1, { category: 40, item: () => 50 });
+    expect(result).toHaveLength(4);
+    expect(result[1].columns[0][0]).toMatchObject({ kind: "category", repeated: true });
   });
 
   it("prefers one page when shrinking makes the menu fit", () => {
