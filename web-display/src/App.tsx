@@ -222,6 +222,16 @@ function StaffScreen() {
       row.style.transform = "translateY(0)";
     })));
   }, [items]);
+  useEffectQr(() => {
+    let cancelled = false;
+    if (!showStaffQr || !code.trim()) { setStaffQr(""); return; }
+    const staffUrl = new URL("/staff", window.location.origin);
+    staffUrl.searchParams.set("venue", code.trim().toLowerCase());
+    QRCode.toDataURL(staffUrl.toString(), { margin: 2, width: 280, errorCorrectionLevel: "M" })
+      .then(dataUrl => { if (!cancelled) setStaffQr(dataUrl); })
+      .catch(() => { if (!cancelled) setStaffQr(""); });
+    return () => { cancelled = true; };
+  }, [showStaffQr, code]);
   if (sessionToken && menuLoading && !venue) return <main className="staff-menu staff-dashboard"><div className="loading-panel" role="status" aria-live="polite"><span className="loading-spinner" aria-hidden="true" />Загружаем меню…</div></main>;
   if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button type="button" onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button type="button" className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
   const filteredItems = filterMenuItems(items, search, categoryFilter, availabilityFilter);
@@ -407,16 +417,6 @@ function StaffScreen() {
     localStorage.setItem(`ifm-staff-onboarding-${code}`, "dismissed");
     setShowOnboarding(false);
   };
-  useEffectQr(() => {
-    let cancelled = false;
-    if (!showStaffQr || !code.trim()) { setStaffQr(""); return; }
-    const staffUrl = new URL("/staff", window.location.origin);
-    staffUrl.searchParams.set("venue", code.trim().toLowerCase());
-    QRCode.toDataURL(staffUrl.toString(), { margin: 2, width: 280, errorCorrectionLevel: "M" })
-      .then(dataUrl => { if (!cancelled) setStaffQr(dataUrl); })
-      .catch(() => { if (!cancelled) setStaffQr(""); });
-    return () => { cancelled = true; };
-  }, [showStaffQr, code]);
   const selectCsv = async (file: File | undefined) => {
     if (!file) return;
     setError(""); setCsvProgress(null);
