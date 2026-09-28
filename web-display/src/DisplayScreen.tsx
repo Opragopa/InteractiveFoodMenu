@@ -67,7 +67,9 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
     return () => { removeEventListener("resize", resize); window.visualViewport?.removeEventListener("resize", resize); };
   }, []);
 
-  const usableWidth = viewport.width * (breakActive ? (100 - panelWidth) / 100 : 1);
+  // The break panel slides over the menu like a physical overlay. Keep menu
+  // pagination and sizing stable while it is open.
+  const usableWidth = viewport.width;
   const scale = useMemo(() => venue.displayScaleMode === "manual"
     ? Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100
     : autoScaleForMenu(categories, items, usableWidth, viewport.height), [venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.height]);
@@ -118,13 +120,13 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
       </section>}
       <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>
     </section>
-    <BreakPanel active={breakActive} endsAt={venue.breakEndsAt} expiredText={venue.breakExpiredText ?? "Скоро буду"} fontScale={breakFontScale} viewport={viewport} />
+    <BreakPanel active={breakActive} endsAt={venue.breakEndsAt} expiredText={venue.breakExpiredText ?? "Скоро буду"} fontScale={breakFontScale} panelWidth={panelWidth} viewport={viewport} />
     <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, fontSize: itemFontSize }}><h2 data-measure-key="category">Раздел</h2>{items.map((item) => <div className={`menu-item ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} data-measure-key={`item-${item.id}`} key={item.id}><span className="item-name">{formatRussianText(item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{item.servingSize || "—"}</span>}<span className="price">{money.format(item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{item.caloriesKcal ?? "—"}</span>}</div>)}</div>
   </main>;
 }
 
-function BreakPanel({ active, endsAt, expiredText, fontScale, viewport }: {
-  active: boolean; endsAt?: string | null; expiredText: string; fontScale: number; viewport: { width: number; height: number };
+function BreakPanel({ active, endsAt, expiredText, fontScale, panelWidth, viewport }: {
+  active: boolean; endsAt?: string | null; expiredText: string; fontScale: number; panelWidth: number; viewport: { width: number; height: number };
 }) {
   const [now, setNow] = useState(Date.now());
   const seconds = remainingBreakSeconds(active, endsAt, now);
@@ -142,5 +144,5 @@ function BreakPanel({ active, endsAt, expiredText, fontScale, viewport }: {
     return () => window.clearTimeout(timer);
   }, [active, endsAt]);
 
-  return <aside className={`break-panel ${expired ? "break-expired" : ""}`} aria-hidden={!active} aria-live="polite"><div className="break-state-label">{expired ? "Перерыв завершён" : "Перерыв"}</div>{expired ? <strong className="break-expired-text">{formatRussianText(expiredText)}</strong> : <strong className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * fontScale, viewport.width * .22, viewport.height * .3))}px` }}>{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</strong>}</aside>;
+  return <aside className={`break-panel ${expired ? "break-expired" : ""}`} aria-hidden={!active} aria-live="polite"><div className="break-state-label">{expired ? "Перерыв завершён" : "Перерыв"}</div>{expired ? <strong className="break-expired-text">{formatRussianText(expiredText)}</strong> : <strong className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * fontScale, viewport.width * panelWidth / 100 * .34, viewport.height * .3))}px` }}>{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</strong>}</aside>;
 }

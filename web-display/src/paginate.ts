@@ -77,15 +77,17 @@ export function autoScaleForMenu(categories: Category[], items: MenuItem[], widt
   };
   // Prefer a single complete screen. A sparse second page is harder to read
   // and wastes the available display area.
-  for (let percent = 120; percent >= 50; percent -= 5) {
+  for (let percent = 120; percent >= 80; percent -= 5) {
     const scale = percent / 100;
     if (pagesAt(scale) <= 1) return scale;
   }
-  for (let percent = 120; percent >= 50; percent -= 5) {
+  for (let percent = 120; percent >= 80; percent -= 5) {
     const scale = percent / 100;
     if (pagesAt(scale) <= maxPages) return scale;
   }
-  return 0.5;
+  // Keep TV text at a readable size; additional pages are preferable to
+  // shrinking the entire menu below 80%.
+  return 0.8;
 }
 
 export function itemNameScale(name: string) {

@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import type { AppwriteServices } from "./appwrite.js";
 import type { BackendConfig } from "./config.js";
 import { hashSecret, opaqueToken, signSession, verifySecret, verifySession, type SessionClaims, type SessionRole } from "./security.js";
+import { renderLegacyDisplay } from "./legacyDisplay.js";
 
 const VENUE_CODE = /^[a-z0-9][a-z0-9-]{2,31}$/;
 const PIN = /^\d{6}$/;
@@ -165,6 +166,28 @@ async function deleteVenueRows(services: AppwriteServices, databaseId: string, t
 
 export function createApiRouter(services: AppwriteServices, config: BackendConfig): Router {
   const router = Router();
+
+  router.get("/display/legacy/:credentials", asyncRoute(async (request, response) => {
+    const match = /^([A-Za-z0-9_-]{12,40})\.([A-Za-z0-9_-]{32,80})$/.exec(routeId(request.params.credentials));
+    if (!match) throw new ApiError(404, "not_found", "Ссылка экрана недействительна.");
+    const token = await services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: match[1] }).catch(() => null);
+    if (!token || token.active !== true || !(await verifySecret(match[2], String(token.tokenHash ?? "")))) throw new ApiError(401, "unauthenticated", "Ссылка экрана недействительна или отозвана.");
+    const venue = await services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId: "venues", rowId: String(token.venueId) });
+    if (venue.active === false) throw new ApiError(403, "forbidden", "Точка отключена.");
+    await services.tables.updateRow({ databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: token.$id, data: { lastSeenAt: new Date().toISOString() } });
+    response.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    if (request.query.state === "1") {
+      response.json({ version: Number(venue.menuVersion ?? 1), breakActive: venue.breakActive === true, breakEndsAt: venue.breakEndsAt ?? null });
+      return;
+    }
+    const [categories, items] = await Promise.all([
+      listAllRows(services, config.appwriteDatabaseId, "categories", [Query.equal("venueId", [String(token.venueId)]), Query.orderAsc("sortOrder")]),
+      listAllRows(services, config.appwriteDatabaseId, "items", [Query.equal("venueId", [String(token.venueId)])]),
+    ]);
+    const width = Math.max(480, Math.min(7680, Number(request.query.w) || 1920));
+    const height = Math.max(360, Math.min(4320, Number(request.query.h) || 1080));
+    response.status(200).type("html").set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; base-uri 'none'").set("Referrer-Policy", "no-referrer").send(renderLegacyDisplay(venue, categories.map(publicRow) as never, items.map(publicRow) as never, width, height, `${match[1]}.${match[2]}`));
+  }));
   const databaseId = config.appwriteDatabaseId;
 
   router.post("/hub/login", asyncRoute(async (request, response) => {

@@ -9,22 +9,30 @@
       (function (navigator, window) {
         var userAgent = navigator.userAgent || "";
         var webOs = /Web0S|webOS/i.test(userAgent);
+        var webOsVersion = /(?:Web0S|webOS)[\s/]+(\d+(?:\.\d+)?)/i.exec(userAgent);
         var tizen = /Tizen\s+(\d+(?:\.\d+)?)/i.exec(userAgent);
         var samsungTv = /SMART-TV|TV Safari/i.test(userAgent);
         // Tizen 5.5 uses Chromium 69; Tizen 6 moves to Chromium 76.
         var legacySamsung = samsungTv && tizen && parseFloat(tizen[1]) < 6;
-        var legacyDisplay = /^\/display\/([A-Za-z0-9_-]{12,40})\.([A-Za-z0-9_-]{32,80})$/.exec(window.location.pathname);
+        var legacyPathDisplay = /^\/display\/([A-Za-z0-9_-]{12,40})\.([A-Za-z0-9_-]{32,80})$/.exec(window.location.pathname);
+        var hashDisplay = /^#([A-Za-z0-9_-]{12,40})\.([A-Za-z0-9_-]{32,80})$/.exec(window.location.hash);
+        var oldWebOs = webOs && (!webOsVersion || parseFloat(webOsVersion[1]) < 4);
+        var oldTv = oldWebOs || legacySamsung || typeof window.fetch !== "function";
         // Some older TVs do not identify themselves as webOS/Tizen but still
         // lack fetch. The static XHR-based page is compatible with them.
-        if ((webOs || legacySamsung || typeof window.fetch !== "function") && window.location.pathname === "/connect") {
+        if (oldTv && window.location.pathname === "/connect") {
           window.location.replace("/connect-legacy.html");
           return;
         }
-        // Old Firebase renderer links are still found on previously paired TVs.
-        // The Appwrite web stack serves the SPA at /, so normalize those links
-        // back to the current hash URL instead of leaving the TV on a dead path.
-        if (legacyDisplay) {
-          window.location.replace("/#" + legacyDisplay[1] + "." + legacyDisplay[2]);
+        // Old TVs receive a complete HTML page from the API. Modern clients
+        // keep the React application and its normal hash-based display URL.
+        var credentials = legacyPathDisplay || hashDisplay;
+        if (oldTv && credentials) {
+          window.location.replace("/api/display/legacy/" + credentials[1] + "." + credentials[2] + "?w=" + (screen.width || 1920) + "&h=" + (screen.height || 1080));
+          return;
+        }
+        if (legacyPathDisplay) {
+          window.location.replace("/#" + legacyPathDisplay[1] + "." + legacyPathDisplay[2]);
         }
       })(navigator, window);
     </script>
