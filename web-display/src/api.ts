@@ -77,6 +77,7 @@ export const api = {
   stopBreak: (token: string) => request<{ venue: any }>("/venue/break/stop", { method: "POST" }, token),
   updateVenue: (token: string, data: unknown) => request<{ venue: any }>("/venue", { method: "PATCH", body: JSON.stringify(data) }, token),
   createCategory: (token: string, data: unknown) => request<{ category: any }>("/categories", { method: "POST", body: JSON.stringify(data) }, token),
+  updateCategory: (token: string, id: string, data: unknown) => request<{ category: any }>(`/categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
   deleteCategory: (token: string, id: string) => request<void>(`/categories/${id}`, { method: "DELETE" }, token),
   createItem: (token: string, data: unknown) => request<{ item: any }>("/items", { method: "POST", body: JSON.stringify(data) }, token),
   updateItem: (token: string, id: string, data: unknown) => request<{ item: any }>(`/items/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),

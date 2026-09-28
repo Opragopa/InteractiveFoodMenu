@@ -25,6 +25,8 @@ export type Venue = {
   breakTransitionMs?: number;
   displayPreset?: "compact" | "balanced" | "large";
   breakExpiredText?: string;
+  showServingSize?: boolean;
+  showCalories?: boolean;
 };
 
 export type Category = { id: string; venueId: string; name: string; sortOrder: number };
@@ -34,6 +36,8 @@ export type MenuItem = {
   categoryId: string;
   name: string;
   priceMinor: number;
+  servingSize?: string | null;
+  caloriesKcal?: number | null;
   sortOrder: number;
   isAvailable: boolean;
 };
