@@ -7,7 +7,7 @@ import { parseMenuCsv, type CsvMenuRow } from "./csv";
 import { forgetVenueCredentials, saveVenueCredentials, savedVenueCredentials } from "./venueCredentials";
 import { reportClientError } from "./clientLogger";
 import { BackendHub } from "./BackendHub";
-import { api } from "./api";
+import { api, ApiRequestError } from "./api";
 import { displayPresets, normalizeVenueAppearance, type DisplayPreset, type VenueAppearance } from "./venueSettings";
 import { estimateMenuPages } from "./paginate";
 import { filterMenuItems, selectionIncludesAll, type AvailabilityFilter } from "./staffFilters";
@@ -143,9 +143,11 @@ function StaffScreen() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [menuLoading, setMenuLoading] = useState(() => Boolean(sessionToken));
-  const [tab, setTab] = useState<"availability" | "categories" | "items" | "settings" | "experimental">("availability");
+  const [tab, setTab] = useState<"availability" | "categories" | "items" | "nutrition" | "settings" | "experimental">("availability");
   const [newCategory, setNewCategory] = useState("");
-  const [newItem, setNewItem] = useState({ name: "", price: "", categoryId: "" });
+  const [editingName, setEditingName] = useState<{ kind: "category" | "item"; id: string; name: string } | null>(null);
+  const [newItem, setNewItem] = useState({ name: "", price: "", categoryId: "", servingSize: "", caloriesKcal: "" });
+  const [nutritionDrafts, setNutritionDrafts] = useState<Record<string, { servingSize: string; caloriesKcal: string }>>({});
   const [csvRows, setCsvRows] = useState<CsvMenuRow[]>([]);
   const [csvProgress, setCsvProgress] = useState<{ current: number; total: number; failed: string[] } | null>(null);
   const [breakDuration, setBreakDuration] = useState(10);
@@ -191,7 +193,10 @@ function StaffScreen() {
   }, [sessionToken, code]);
   useEffect(() => {
     if (!sessionToken) return;
-    void loadMenu().catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось загрузить меню."));
+    void loadMenu().catch(cause => {
+      if (cause instanceof ApiRequestError && cause.status === 401) { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); setError("Сессия завершилась. Войдите в кабинет снова."); return; }
+      setError(cause instanceof Error ? cause.message : "Не удалось загрузить меню.");
+    });
   }, [sessionToken, loadMenu]);
   useLayoutEffect(() => {
     const previous = previousRowsRef.current;
@@ -221,23 +226,6 @@ function StaffScreen() {
   const allFilteredSelected = selectionIncludesAll(filteredIds, selectedIds);
   const pageEstimate = estimateMenuPages(categories, items, 1366, 768, venue?.menuItemFontSizePx ?? 34, venue?.menuItemGapPx ?? 12);
   const setToastMessage = (message: string) => { setToast(message); window.setTimeout(() => setToast(current => current === message ? "" : current), 3500); };
-  const toggleAvailability = async (item: MenuItem, unavailable: boolean) => {
-    const root = availabilityListRef.current;
-    previousRowsRef.current = new Map(Array.from(root?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
-    setItems(current => current.map(value => value.id === item.id ? { ...value, isAvailable: !unavailable } : value));
-    try {
-      const result = await api.updateItem(sessionToken, item.id, { isAvailable: !unavailable });
-      // Use the persisted value returned by Appwrite. This prevents a later
-      // render/sort from restoring the stale checkbox state from the closure.
-      setItems(current => current.map(value => value.id === item.id ? result.item as MenuItem : value));
-    } catch (cause) {
-      const currentRoot = availabilityListRef.current;
-      previousRowsRef.current = new Map(Array.from(currentRoot?.querySelectorAll<HTMLElement>("[data-item-id]") ?? []).map(row => [row.dataset.itemId ?? "", row.getBoundingClientRect().top]));
-      setItems(current => current.map(value => value.id === item.id ? { ...value, isAvailable: item.isAvailable } : value));
-      reportClientError("availability_update_failed", cause, { itemId: item.id });
-      setError(cause instanceof Error ? `Не удалось обновить наличие: ${cause.message}` : "Не удалось обновить наличие.");
-    }
-  };
   const toggleSelection = (itemId: string, selected: boolean) => {
     setSelectedIds(current => {
       const next = new Set(current);
@@ -285,14 +273,32 @@ function StaffScreen() {
       setError(cause instanceof Error ? cause.message : "Не удалось добавить категорию.");
     } finally { setBusy(false); }
   };
+  const saveEditedName = async () => {
+    if (!editingName) return;
+    const name = editingName.name.trim();
+    if (!name) { setError("Название не может быть пустым."); return; }
+    setBusy(true); setError("");
+    try {
+      if (editingName.kind === "category") {
+        const result = await api.updateCategory(sessionToken, editingName.id, { name });
+        setCategories(current => current.map(value => value.id === editingName.id ? result.category as Category : value));
+      } else {
+        const result = await api.updateItem(sessionToken, editingName.id, { name });
+        setItems(current => current.map(value => value.id === editingName.id ? result.item as MenuItem : value));
+      }
+      setToastMessage("Название сохранено."); setEditingName(null);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось изменить название."); }
+    finally { setBusy(false); }
+  };
   const saveItem = async () => {
     const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100);
     if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor) || priceMinor < 0) { setError("Заполните название, категорию и корректную цену."); return; }
+    if (newItem.servingSize.trim().length > 40 || (newItem.caloriesKcal !== "" && (!/^\d+$/.test(newItem.caloriesKcal) || Number(newItem.caloriesKcal) > 100000))) { setError("Проверьте выход (до 40 символов) и калорийность (целое число до 100000)."); return; }
     setBusy(true); setError("");
     try {
-      const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true });
+      const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true, servingSize: newItem.servingSize.trim() || undefined, caloriesKcal: newItem.caloriesKcal === "" ? undefined : Number(newItem.caloriesKcal) });
       setItems(current => [...current, result.item as MenuItem]);
-      setNewItem({ name: "", price: "", categoryId: newItem.categoryId });
+      setNewItem({ name: "", price: "", categoryId: newItem.categoryId, servingSize: "", caloriesKcal: "" });
     } catch (cause) {
       reportClientError("item_create_failed", cause);
       setError(cause instanceof Error ? cause.message : "Не удалось добавить позицию.");
@@ -320,6 +326,16 @@ function StaffScreen() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось удалить объект.");
     } finally { setBusy(false); }
+  };
+  const saveNutrition = async (item: MenuItem) => {
+    const draft = nutritionDrafts[item.id] ?? { servingSize: item.servingSize == null ? "" : String(item.servingSize), caloriesKcal: item.caloriesKcal == null ? "" : String(item.caloriesKcal) };
+    const servingSize = draft.servingSize.trim() || null; const caloriesKcal = draft.caloriesKcal.trim() === "" ? null : /^\d+$/.test(draft.caloriesKcal.trim()) ? Number(draft.caloriesKcal.trim()) : NaN;
+    if (servingSize && servingSize.length > 40) { setError("Значение выхода должно быть не длиннее 40 символов."); return; }
+    if (typeof caloriesKcal === "number" && (!Number.isSafeInteger(caloriesKcal) || caloriesKcal < 0 || caloriesKcal > 100000)) { setError("Калорийность должна быть целым числом от 0 до 100000."); return; }
+    setBusy(true); setError("");
+    try { const result = await api.updateItem(sessionToken, item.id, { servingSize, caloriesKcal }); setItems(current => current.map(value => value.id === item.id ? result.item as MenuItem : value)); setToastMessage(`Параметры «${item.name}» сохранены.`); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить параметры позиции."); }
+    finally { setBusy(false); }
   };
   const saveVenueSettings = async (settings: Partial<Venue>) => {
     setBusy(true);
@@ -412,20 +428,19 @@ function StaffScreen() {
       {error && <p className="staff-error-banner" role="alert">{error}</p>}
       {showOnboarding && <aside className="staff-onboarding" aria-label="Быстрый старт">
         <div><span className="onboarding-kicker">Быстрый старт</span><h2>Меню под контролем</h2><p>Три действия, которые пригодятся каждый день:</p></div>
-        <ol><li><b>Наличие</b> — найдите блюдо и выключите его одним переключателем.</li><li><b>Перерыв</b> — задайте минуты сверху и запустите перерыв для экрана.</li><li><b>Настройки</b> — изменяйте оформление и расширенные параметры отдельно.</li></ol>
+        <ol><li><b>Наличие</b> — выберите блюда и используйте кнопки «В наличии» или «Нет в наличии».</li><li><b>Перерыв</b> — задайте минуты сверху и запустите перерыв для экрана.</li><li><b>Настройки</b> — изменяйте оформление и расширенные параметры отдельно.</li></ol>
         <button type="button" onClick={dismissOnboarding}>Понятно</button>
       </aside>}
       <nav className="staff-tabs" aria-label="Разделы кабинета">
-        {([ ["availability", "Наличие"], ["categories", "Категории"], ["items", "Позиции"], ["settings", "Настройки"], ["experimental", "Расширенные настройки"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
+        {([ ["availability", "Наличие"], ["categories", "Категории"], ["items", "Позиции"], ["nutrition", "Параметры"], ["settings", "Настройки"], ["experimental", "Ещё"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
       </nav>
-      {tab === "availability" && <section className="availability-workspace"><div className="workspace-heading"><div><h2>Наличие позиций</h2><p>Изменения сохраняются сразу и автоматически появляются на экране.</p></div><button type="button" className="quick-add" onClick={() => setTab("items")}>+ Добавить позицию</button></div><div className="availability-toolbar"><label className="search-field"><span className="sr-only">Поиск по позициям</span><input type="search" placeholder="Найти блюдо…" value={search} onChange={event => setSearch(event.target.value)} /></label><div className="filter-group" role="group" aria-label="Фильтр наличия">{([ ["all", "Все"], ["available", "В наличии"], ["unavailable", "Нет в наличии"] ] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={availabilityFilter === value} className={availabilityFilter === value ? "active" : ""} onClick={() => setAvailabilityFilter(value)}>{label}</button>)}</div><select aria-label="Фильтр по категории" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}><option value="">Все категории</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="selection-toolbar"><label><input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} disabled={!filteredIds.length} /> Выбрать показанные</label><span>{selectedIds.size ? `Выбрано: ${selectedIds.size}` : `${filteredItems.length} показано`}</span>{selectedIds.size > 0 && <div className="bulk-actions"><button type="button" onClick={() => void bulkAvailability(true)} disabled={selectionBusy}>В наличии</button><button type="button" onClick={() => void bulkAvailability(false)} disabled={selectionBusy}>Нет в наличии</button></div>}</div><div ref={availabilityListRef} className="availability-list">{grouped.length ? grouped.map(group => (
+      {tab === "availability" && <section className="availability-workspace"><div className="workspace-heading"><div><h2>Наличие позиций</h2><p>Отметьте позиции, затем нажмите нужную кнопку сверху. Изменения сразу появятся на экране.</p></div><button type="button" className="quick-add" onClick={() => setTab("items")}>+ Добавить позицию</button></div><div className="availability-toolbar"><label className="search-field"><span className="sr-only">Поиск по позициям</span><input type="search" placeholder="Найти блюдо…" value={search} onChange={event => setSearch(event.target.value)} /></label><div className="filter-group" role="group" aria-label="Фильтр наличия">{([ ["all", "Все"], ["available", "В наличии"], ["unavailable", "Нет в наличии"] ] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={availabilityFilter === value} className={availabilityFilter === value ? "active" : ""} onClick={() => setAvailabilityFilter(value)}>{label}</button>)}</div><select aria-label="Фильтр по категории" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}><option value="">Все категории</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="selection-toolbar"><label><input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} disabled={!filteredIds.length} /> Выбрать показанные</label><span>{selectedIds.size ? `Выбрано: ${selectedIds.size}` : `${filteredItems.length} показано`}</span><div className="bulk-actions"><button type="button" onClick={() => void bulkAvailability(true)} disabled={selectionBusy || selectedIds.size === 0}>В наличии</button><button type="button" onClick={() => void bulkAvailability(false)} disabled={selectionBusy || selectedIds.size === 0}>Нет в наличии</button></div></div><div ref={availabilityListRef} className="availability-list">{grouped.length ? grouped.map(group => (
         <section key={group.category.id}>
           <h2>{group.category.name}</h2>
           {group.items.map(item => (
-            <div className={`availability-row ${!item.isAvailable ? "unavailable" : ""}`} data-item-id={item.id} key={item.id}>
+            <div className={`availability-item availability-row ${!item.isAvailable ? "unavailable" : ""}`} data-item-id={item.id} key={item.id}>
               <label className="item-select-control"><input className="item-select" type="checkbox" aria-label={`Выбрать ${item.name}`} checked={selectedIds.has(item.id)} onChange={event => toggleSelection(item.id, event.target.checked)} /></label>
               <span className="item-copy"><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span>
-              <label className="availability-control"><input className="availability-toggle" type="checkbox" aria-label={item.isAvailable ? `${item.name}: сделать недоступной` : `${item.name}: сделать доступной`} checked={!item.isAvailable} onChange={event => void toggleAvailability(item, event.target.checked)} /><span className="sr-only">{item.isAvailable ? "Сделать недоступной" : "Сделать доступной"}</span></label>
               <em>{item.isAvailable ? "В наличии" : "Нет в наличии"}</em>
             </div>
           ))}
@@ -435,7 +450,7 @@ function StaffScreen() {
         <section>
           <h2>Категории</h2>
           <div className="form-row"><label><span>Название категории</span><input placeholder="Например, Десерты" value={newCategory} onChange={event => setNewCategory(event.target.value)} /></label><button type="button" disabled={busy} onClick={() => void saveCategory()}>Добавить</button></div>
-          {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => <div className="entity-row" key={category.id}><span><b>{category.name}</b></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteCategory(category)}>Удалить</button></div>)}
+          {[...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => <div className="manage-row" key={category.id}>{editingName?.kind === "category" && editingName.id === category.id ? <div className="edit-name-form"><input aria-label="Название категории" autoFocus value={editingName.name} onChange={event => setEditingName({ ...editingName, name: event.target.value })} onKeyDown={event => { if (event.key === "Enter") void saveEditedName(); if (event.key === "Escape") setEditingName(null); }} /><button type="button" disabled={busy} onClick={() => void saveEditedName()}>Сохранить</button><button type="button" className="subtle-action" onClick={() => setEditingName(null)}>Отмена</button></div> : <><span className="manage-row-content"><b>{category.name}</b></span><div className="manage-actions"><button type="button" className="icon-action" aria-label={`Изменить категорию ${category.name}`} title="Изменить" disabled={busy} onClick={() => { setError(""); setEditingName({ kind: "category", id: category.id, name: category.name }); }}><PencilIcon /></button><button type="button" className="icon-action danger-action" aria-label={`Удалить категорию ${category.name}`} title="Удалить" disabled={busy} onClick={() => void deleteCategory(category)}><CrossIcon /></button></div></>}</div>)}
         </section>
       )}
       {tab === "items" && (
@@ -444,6 +459,8 @@ function StaffScreen() {
           <div className="form-row">
             <label><span>Название позиции</span><input placeholder="Например, Капучино" value={newItem.name} onChange={event => setNewItem({ ...newItem, name: event.target.value })} /></label>
             <label><span>Цена, ₽</span><input placeholder="250" inputMode="decimal" value={newItem.price} onChange={event => setNewItem({ ...newItem, price: event.target.value })} /></label>
+            <label><span>Выход</span><input placeholder="Например, 1/150/030" value={newItem.servingSize} onChange={event => setNewItem({ ...newItem, servingSize: event.target.value })} /></label>
+            <label><span>Ккал</span><input placeholder="Необязательно" inputMode="numeric" value={newItem.caloriesKcal} onChange={event => setNewItem({ ...newItem, caloriesKcal: event.target.value })} /></label>
             <label><span>Категория</span><select aria-label="Категория позиции" value={newItem.categoryId || categories[0]?.id || ""} onChange={event => setNewItem({ ...newItem, categoryId: event.target.value })}>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
             <button type="button" disabled={busy} onClick={() => void saveItem()}>Добавить</button>
           </div>
@@ -452,9 +469,14 @@ function StaffScreen() {
             <small>Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.</small>
             {csvRows.length > 0 && <button type="button" onClick={() => void importCsv()} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>
-          {items.map(item => <div className="entity-row" key={item.id}><span><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><button type="button" className="danger-action" disabled={busy} onClick={() => void deleteItem(item)}>Удалить</button></div>)}
+          {items.map(item => <div className="manage-row" key={item.id}>{editingName?.kind === "item" && editingName.id === item.id ? <div className="edit-name-form"><input aria-label="Название позиции" autoFocus value={editingName.name} onChange={event => setEditingName({ ...editingName, name: event.target.value })} onKeyDown={event => { if (event.key === "Enter") void saveEditedName(); if (event.key === "Escape") setEditingName(null); }} /><button type="button" disabled={busy} onClick={() => void saveEditedName()}>Сохранить</button><button type="button" className="subtle-action" onClick={() => setEditingName(null)}>Отмена</button></div> : <><span className="manage-row-content"><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><div className="manage-actions"><button type="button" className="icon-action" aria-label={`Изменить позицию ${item.name}`} title="Изменить" disabled={busy} onClick={() => { setError(""); setEditingName({ kind: "item", id: item.id, name: item.name }); }}><PencilIcon /></button><button type="button" className="icon-action danger-action" aria-label={`Удалить позицию ${item.name}`} title="Удалить" disabled={busy} onClick={() => void deleteItem(item)}><CrossIcon /></button></div></>}</div>)}
         </section>
       )}
+      {tab === "nutrition" && venue && <section className="nutrition-settings">
+        <h2>Выход и калорийность</h2><p>Укажите параметры порции для каждой позиции и выберите, какие столбцы показывать на экране меню.</p>
+        <div className="nutrition-toggles"><label><input type="checkbox" checked={venue.showServingSize === true} onChange={event => void saveVenueSettings({ showServingSize: event.target.checked }).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки столбцов."))} disabled={busy} /> Показывать столбец «Выход»</label><label><input type="checkbox" checked={venue.showCalories === true} onChange={event => void saveVenueSettings({ showCalories: event.target.checked }).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки столбцов."))} disabled={busy} /> Показывать столбец «Ккал»</label></div>
+        {categories.map(category => <div className="nutrition-category" key={category.id}><h3>{category.name}</h3>{items.filter(item => item.categoryId === category.id).map(item => { const draft = nutritionDrafts[item.id] ?? { servingSize: item.servingSize == null ? "" : String(item.servingSize), caloriesKcal: item.caloriesKcal == null ? "" : String(item.caloriesKcal) }; return <div className="nutrition-row" key={item.id}><b>{item.name}</b><label>Выход<input maxLength={40} placeholder="1/150/030" value={draft.servingSize} onChange={event => setNutritionDrafts(current => ({ ...current, [item.id]: { ...draft, servingSize: event.target.value } }))} /></label><label>Ккал<input inputMode="numeric" placeholder="—" value={draft.caloriesKcal} onChange={event => setNutritionDrafts(current => ({ ...current, [item.id]: { ...draft, caloriesKcal: event.target.value } }))} /></label><button type="button" disabled={busy} onClick={() => void saveNutrition(item)}>Сохранить</button></div>; })}</div>)}
+      </section>}
       {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
       {tab === "experimental" && venue && <ExperimentalSettings venue={venue} categories={categories} items={items} busy={busy} onSave={saveVenueSettings} />}
       {toast && <p className="staff-toast" role="status" aria-live="polite">{toast}</p>}
@@ -463,6 +485,9 @@ function StaffScreen() {
     </main>
   );
 }
+
+function PencilIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 4 4 4"/><path d="m18 2 4 4L8 20l-5 1 1-5Z"/></svg>; }
+function CrossIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>; }
 
 function VenueSettings({ venue, busy, onSave }: {
   venue: Venue;

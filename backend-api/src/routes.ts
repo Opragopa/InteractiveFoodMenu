@@ -157,7 +157,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const accessKey = String(request.body?.accessKey ?? "");
     const valid = Buffer.byteLength(accessKey) === Buffer.byteLength(config.hubAccessKey)
       && await import("node:crypto").then(({ timingSafeEqual }) => timingSafeEqual(Buffer.from(accessKey), Buffer.from(config.hubAccessKey)));
-    if (!valid) throw new ApiError(401, "unauthenticated", "Неверный ключ Backend Hub.");
+    if (!valid) throw new ApiError(401, "unauthenticated", "Неверный ключ хаба.");
     response.json({ token: signSession({ role: "hub" }, config.sessionSecret, "4h") });
   }));
 
@@ -202,6 +202,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
         backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
         displayScalePercent: 100, displayScaleMode: "auto", breakActive: false, breakDurationMinutes: 10, breakFontSizePercent: 100,
         breakPanelWidthPercent: 36, breakMenuDimPercent: 45, menuItemFontSizePx: 34, menuItemGapPx: 12,
+        showServingSize: false, showCalories: false,
         breakTransitionMs: 600, displayPreset: "balanced", breakExpiredText: "Скоро буду",
         staffVersion: 1, displayVersion: 1, menuVersion: 1, menuRefreshSeconds: 15, active: true,
         updatedAt: now, updatedBy: "backend-hub",
@@ -278,6 +279,10 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data.displayPreset = preset;
     }
     if (request.body?.breakExpiredText !== undefined) data.breakExpiredText = text(request.body.breakExpiredText, 80);
+    for (const field of ["showServingSize", "showCalories"] as const) if (request.body?.[field] !== undefined) {
+      if (typeof request.body[field] !== "boolean") throw new ApiError(400, "invalid_argument", `${field} должно быть логическим.`);
+      data[field] = request.body[field];
+    }
     const removeLogoFileId = request.body?.logoFileId === null && typeof venue.logoFileId === "string" ? venue.logoFileId : "";
     if (request.body?.logoFileId === null) data.logoFileId = null;
     data.updatedAt = new Date().toISOString();
@@ -467,6 +472,10 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data.displayPreset = preset;
     }
     if (request.body?.breakExpiredText !== undefined) data.breakExpiredText = text(request.body.breakExpiredText, 80);
+    for (const field of ["showServingSize", "showCalories"] as const) if (request.body?.[field] !== undefined) {
+      if (typeof request.body[field] !== "boolean") throw new ApiError(400, "invalid_argument", `${field} должно быть логическим.`);
+      data[field] = request.body[field];
+    }
     data.updatedAt = new Date().toISOString();
     data.updatedBy = "staff-api";
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId!, data });
@@ -530,6 +539,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data: {
         venueId: claims.venueId, categoryId, name: text(request.body?.name, 200),
         priceMinor: integer(request.body?.priceMinor, 0, 2_000_000_000), sortOrder: integer(request.body?.sortOrder ?? 0, 0, 100000),
+        ...(request.body?.servingSize !== undefined && request.body.servingSize !== null && request.body.servingSize !== "" ? { servingSize: text(request.body.servingSize, 40) } : {}),
+        ...(request.body?.caloriesKcal !== undefined && request.body.caloriesKcal !== null && request.body.caloriesKcal !== "" ? { caloriesKcal: integer(request.body.caloriesKcal, 0, 100000) } : {}),
         isAvailable: request.body?.isAvailable !== false, updatedAt: new Date().toISOString(), updatedBy: "staff-api",
       },
     });
@@ -563,6 +574,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.isAvailable !== undefined) data.isAvailable = Boolean(request.body.isAvailable);
     if (request.body?.name !== undefined) data.name = text(request.body.name, 200);
     if (request.body?.priceMinor !== undefined) data.priceMinor = integer(request.body.priceMinor, 0, 2_000_000_000);
+    if (request.body?.servingSize !== undefined) data.servingSize = request.body.servingSize === null || request.body.servingSize === "" ? null : text(request.body.servingSize, 40);
+    if (request.body?.caloriesKcal !== undefined) data.caloriesKcal = request.body.caloriesKcal === null || request.body.caloriesKcal === "" ? null : integer(request.body.caloriesKcal, 0, 100000);
     if (request.body?.sortOrder !== undefined) data.sortOrder = integer(request.body.sortOrder, 0, 100000);
     const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "items", rowId, data });
     await bumpMenuVersion(services, databaseId, claims.venueId!);

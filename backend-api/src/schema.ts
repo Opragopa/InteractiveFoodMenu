@@ -44,6 +44,8 @@ export const TABLES: TableDefinition[] = [
       { key: "breakTransitionMs", type: "integer", required: false, min: 200, max: 1200 },
       { key: "displayPreset", type: "varchar", size: 16, required: false },
       { key: "breakExpiredText", type: "varchar", size: 80, required: false },
+      { key: "showServingSize", type: "boolean", required: false },
+      { key: "showCalories", type: "boolean", required: false },
       { key: "staffVersion", type: "integer", required: true },
       { key: "displayVersion", type: "integer", required: true },
       { key: "menuVersion", type: "integer", required: false, min: 1 },
@@ -76,6 +78,8 @@ export const TABLES: TableDefinition[] = [
       { key: "name", type: "varchar", size: 200, required: true },
       { key: "description", type: "mediumtext", required: false },
       { key: "priceMinor", type: "integer", required: true, min: 0 },
+      { key: "servingSize", type: "varchar", size: 40, required: false },
+      { key: "caloriesKcal", type: "integer", required: false, min: 0, max: 100000 },
       { key: "sortOrder", type: "integer", required: true },
       { key: "isAvailable", type: "boolean", required: true },
       { key: "imageFileId", type: "varchar", size: 36, required: false },
@@ -219,11 +223,16 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   if (!venueColumns.columns.some(column => column.key === "breakTransitionMs")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakTransitionMs", required: false, min: 200, max: 1200 });
   if (!venueColumns.columns.some(column => column.key === "displayPreset")) await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "displayPreset", size: 16, required: false });
   if (!venueColumns.columns.some(column => column.key === "breakExpiredText")) await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "breakExpiredText", size: 80, required: false });
+  if (!venueColumns.columns.some(column => column.key === "showServingSize")) await tables.createBooleanColumn({ databaseId, tableId: "venues", key: "showServingSize", required: false });
+  if (!venueColumns.columns.some(column => column.key === "showCalories")) await tables.createBooleanColumn({ databaseId, tableId: "venues", key: "showCalories", required: false });
+  const itemColumns = await tables.listColumns({ databaseId, tableId: "items", queries: [Query.limit(100)] });
+  if (!itemColumns.columns.some(column => column.key === "servingSize")) await tables.createVarcharColumn({ databaseId, tableId: "items", key: "servingSize", size: 40, required: false });
+  if (!itemColumns.columns.some(column => column.key === "caloriesKcal")) await tables.createIntegerColumn({ databaseId, tableId: "items", key: "caloriesKcal", required: false, min: 0, max: 100000 });
   const displayColumns = await tables.listColumns({ databaseId, tableId: "display_tokens", queries: [Query.limit(100)] });
   if (!displayColumns.columns.some(column => column.key === "label")) await tables.createVarcharColumn({ databaseId, tableId: "display_tokens", key: "label", size: 80, required: false });
   if (!displayColumns.columns.some(column => column.key === "lastSeenAt")) await tables.createDatetimeColumn({ databaseId, tableId: "display_tokens", key: "lastSeenAt", required: false });
   const venues = await tables.listRows<Models.Row & Record<string, unknown>>({ databaseId, tableId: "venues", queries: [Query.limit(200)] });
-  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined || row.breakPanelWidthPercent === undefined || row.breakMenuDimPercent === undefined || row.menuItemFontSizePx === undefined || row.menuItemGapPx === undefined || row.breakTransitionMs === undefined || row.displayPreset === undefined || row.breakExpiredText === undefined).map(row => tables.updateRow({
+  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined || row.breakPanelWidthPercent === undefined || row.breakMenuDimPercent === undefined || row.menuItemFontSizePx === undefined || row.menuItemGapPx === undefined || row.breakTransitionMs === undefined || row.displayPreset === undefined || row.breakExpiredText === undefined || row.showServingSize === undefined || row.showCalories === undefined).map(row => tables.updateRow({
     databaseId,
     tableId: "venues",
     rowId: String(row.$id),
@@ -242,6 +251,8 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
       ...(row.breakTransitionMs === undefined ? { breakTransitionMs: 600 } : {}),
       ...(row.displayPreset === undefined ? { displayPreset: "balanced" } : {}),
       ...(row.breakExpiredText === undefined ? { breakExpiredText: "Скоро буду" } : {}),
+      ...(row.showServingSize === undefined ? { showServingSize: false } : {}),
+      ...(row.showCalories === undefined ? { showCalories: false } : {}),
     },
   })));
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "./api";
+import { api, ApiRequestError } from "./api";
 import { clampInteger, logoPositions, normalizeVenueAppearance, polytechAppearance, type LogoPosition, type VenueAppearance } from "./venueSettings";
 
 type HubOverview = {
@@ -161,7 +161,10 @@ export function BackendHub() {
     setBusy(true); setError("");
     try {
       setOverview(await api.hubOverview(hubToken) as HubOverview);
-    } catch (cause) { setError(errorMessage(cause)); }
+    } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.status === 401) { localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); setError("Сессия завершилась. Войдите в хаб снова."); }
+      else setError(errorMessage(cause));
+    }
     finally { setBusy(false); }
   }, [hubToken]);
 
@@ -281,11 +284,11 @@ export function BackendHub() {
   };
 
   if (!hubToken) return <main className="hub-login">
-    <div className="hub-login-card"><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1><p>Единый центр управления серверной частью.</p><label htmlFor="hub-access-key">Ключ оператора</label><input id="hub-access-key" type="password" autoComplete="current-password" placeholder="Введите ключ оператора" value={accessKey} onChange={event => setAccessKey(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void login(); }} /><small>Ключ даёт доступ к точкам, экранам и журналу действий.</small><button type="button" disabled={busy || !accessKey} onClick={() => void login()}>{busy ? "Проверяем…" : "Войти в хаб"}</button>{error && <p className="hub-error" role="alert">{error}</p>}</div>
+    <div className="hub-login-card"><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1><p>Единый центр управления серверной частью.</p><label htmlFor="hub-access-key">Ключ оператора</label><input id="hub-access-key" type="password" autoComplete="current-password" placeholder="Введите ключ оператора" value={accessKey} onChange={event => setAccessKey(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void login(); }} /><small>Ключ даёт доступ к точкам, экранам и журналу действий.</small><button type="button" disabled={busy || !accessKey} onClick={() => void login()}>{busy ? "Проверяем…" : "Войти в хаб"}</button>{error && <p className="hub-error" role="alert">{error}</p>}</div>
   </main>;
 
   return <main className="backend-hub">
-    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Backend Hub</h1></div><nav aria-label="Разделы Backend Hub">{([ ["venues", "Точки"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button type="button" className="hub-signout" onClick={() => { localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
+    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1></div><nav aria-label="Разделы Меню еды. Хаб">{([ ["venues", "Точки"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button type="button" className="hub-signout" onClick={() => { localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
     <section className="hub-content">
       <header className="hub-header"><div><span className="hub-kicker">Управление платформой</span><h2>{tab === "venues" ? "Точки и доступ" : tab === "functions" ? "Серверные функции" : tab === "logs" ? "Ошибки клиентов" : "Журнал действий"}</h2></div><button type="button" className="hub-refresh" disabled={busy} onClick={() => void loadOverview()}>{busy ? "Обновляем…" : "Обновить"}</button></header>
       {error && <p className="hub-banner hub-error" role="alert">{error}</p>}{notice && <p className="hub-banner hub-success" role="status">{notice}</p>}
