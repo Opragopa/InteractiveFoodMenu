@@ -11,6 +11,7 @@
         var webOs = /Web0S|webOS/i.test(userAgent);
         var webOsVersion = /(?:Web0S|webOS)[\s/]+(\d+(?:\.\d+)?)/i.exec(userAgent);
         var tizen = /Tizen\s+(\d+(?:\.\d+)?)/i.exec(userAgent);
+        var chromeVersion = /(?:Chrome|Chromium)\/(\d+)/i.exec(userAgent);
         var samsungTv = /SMART-TV|TV Safari/i.test(userAgent);
         // Tizen 5.5 uses Chromium 69; Tizen 6 moves to Chromium 76.
         var legacySamsung = samsungTv && tizen && parseFloat(tizen[1]) < 6;
@@ -18,19 +19,16 @@
         var hashDisplay = /^#([A-Za-z0-9_-]{12,40})\.([A-Za-z0-9_-]{32,80})$/.exec(window.location.hash);
         var oldWebOs = webOs && (!webOsVersion || parseFloat(webOsVersion[1]) < 4);
         var oldTv = oldWebOs || legacySamsung || typeof window.fetch !== "function";
+        var legacyChromium = chromeVersion && parseInt(chromeVersion[1], 10) < 49;
+        if (legacyChromium || oldTv) document.documentElement.className += " legacy-tv";
         // Some older TVs do not identify themselves as webOS/Tizen but still
         // lack fetch. The static XHR-based page is compatible with them.
         if (oldTv && window.location.pathname === "/connect") {
           window.location.replace("/connect-legacy.html");
           return;
         }
-        // Old TVs receive a complete HTML page from the API. Modern clients
-        // keep the React application and its normal hash-based display URL.
-        var credentials = legacyPathDisplay || hashDisplay;
-        if (oldTv && credentials) {
-          window.location.replace("/api/display/legacy/" + credentials[1] + "." + credentials[2] + "?w=" + (screen.width || 1920) + "&h=" + (screen.height || 1080));
-          return;
-        }
+        // Legacy TV displays stay in React; the ES5 entry supplies fetch and
+        // language polyfills. The connect flow remains XHR-based.
         if (legacyPathDisplay) {
           window.location.replace("/#" + legacyPathDisplay[1] + "." + legacyPathDisplay[2]);
         }
