@@ -45,7 +45,7 @@ export function App() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [connected, setConnected] = useState(navigator.onLine);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const [menuRefreshSeconds, setMenuRefreshSeconds] = useState(15);
+  const [menuRefreshSeconds, setMenuRefreshSeconds] = useState(5);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const hasLoadedMenuRef = useRef(false);
@@ -121,7 +121,9 @@ export function App() {
       } catch {
         if (!cancelled) setConnected(false);
       }
-    }, menuRefreshSeconds * 1000);
+    // Cap change detection at five seconds so break and column changes reach
+    // the TV promptly, even when a venue still stores the old 15-second value.
+    }, Math.min(5, menuRefreshSeconds) * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [sessionToken, menuRefreshSeconds, legacyBrowser]);
 
