@@ -66,6 +66,6 @@ jobs:
           test -n "$PROD_HOST" && test -n "$PROD_USER" && test -n "$PROD_PATH" || { echo 'Missing PROD_HOST, PROD_USER, or PROD_PATH'; exit 1; }
           [[ "$PROD_PATH" == [A-Za-z]:\\* && "$PROD_PATH" != *"'"* && "$PROD_PATH" != *$'\n'* ]] || { echo 'PROD_PATH must be a simple absolute Windows path'; exit 1; }
           port="${PROD_SSH_PORT:-22}"
-          remote_script="Set-Location -LiteralPath '${PROD_PATH}'; powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-production.ps1 -ExpectedCommit '${GITHUB_SHA}'"
+          remote_script="\$repo = '${PROD_PATH}'; git -C \$repo fetch origin main; if (\$LASTEXITCODE -ne 0) { exit 10 }; git -C \$repo checkout main; if (\$LASTEXITCODE -ne 0) { exit 11 }; git -C \$repo pull --ff-only origin main; if (\$LASTEXITCODE -ne 0) { exit 12 }; & (Join-Path \$repo 'scripts/deploy-production.ps1') -ExpectedCommit '${GITHUB_SHA}'; exit \$LASTEXITCODE"
           encoded_script="$(printf '%s' "$remote_script" | iconv -t UTF-16LE | base64 | tr -d '\n')"
           ssh -i ~/.ssh/id_ed25519 -p "$port" -o BatchMode=yes "$PROD_USER@$PROD_HOST" "powershell.exe -NoLogo -NoProfile -EncodedCommand $encoded_script"
