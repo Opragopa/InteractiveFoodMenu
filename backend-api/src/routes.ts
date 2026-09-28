@@ -14,6 +14,7 @@ const LOGO_POSITIONS = new Set(["top-right", "top-left", "bottom-right", "bottom
 const LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 type RowData = Models.Row & Record<string, unknown>;
+const ROW_PAGE_SIZE = 5000;
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -95,6 +96,19 @@ async function venueByCode(services: AppwriteServices, config: BackendConfig, co
   return result.rows[0] ?? null;
 }
 
+async function listAllRows(services: AppwriteServices, databaseId: string, tableId: string, filters: string[] = []): Promise<RowData[]> {
+  const rows: RowData[] = [];
+  for (let offset = 0; ; offset += ROW_PAGE_SIZE) {
+    const page = await services.tables.listRows<RowData>({
+      databaseId,
+      tableId,
+      queries: [...filters, Query.limit(ROW_PAGE_SIZE), Query.offset(offset)],
+    });
+    rows.push(...page.rows);
+    if (page.rows.length < ROW_PAGE_SIZE) return rows;
+  }
+}
+
 async function ownedRow(services: AppwriteServices, config: BackendConfig, tableId: string, rowId: string, venueId: string): Promise<RowData> {
   const row = await services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId, rowId });
   if (row.venueId !== venueId) throw new ApiError(404, "not_found", "Запись не найдена.");
@@ -164,7 +178,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
   router.get("/hub/overview", asyncRoute(async (request, response) => {
     requireRole(request, config, ["hub"]);
     const [venues, categories, items, displays, logs, auditLogs] = await Promise.all([
-      services.tables.listRows<RowData>({ databaseId, tableId: "venues", queries: [Query.orderAsc("name"), Query.limit(200)] }),
+      listAllRows(services, databaseId, "venues", [Query.orderAsc("name")]),
       services.tables.listRows<RowData>({ databaseId, tableId: "categories", queries: [Query.limit(1)], total: true }),
       services.tables.listRows<RowData>({ databaseId, tableId: "items", queries: [Query.limit(1)], total: true }),
       services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("active", [true]), Query.limit(1)], total: true }),
@@ -173,8 +187,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     ]);
     response.json({
       generatedAt: new Date().toISOString(),
-      totals: { venues: venues.total, categories: categories.total, items: items.total, activeDisplays: displays.total },
-      venues: venues.rows.map(publicRow),
+      totals: { venues: venues.length, categories: categories.total, items: items.total, activeDisplays: displays.total },
+      venues: venues.map(publicRow),
       functions: [
         { name: "auth/staff", area: "Доступ", access: "Публичная", purpose: "Вход сотрудника по коду точки и PIN" },
         { name: "display/pairings", area: "Экраны", access: "Публичная", purpose: "Одноразовое подключение ТВ через QR-код" },
@@ -338,8 +352,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
   router.get("/hub/venues/:id/displays", asyncRoute(async (request, response) => {
     requireRole(request, config, ["hub"]);
     const venueId = routeId(request.params.id);
-    const result = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [venueId]), Query.orderDesc("createdAt"), Query.limit(200)] });
-    response.json({ displays: result.rows.map(publicRow) });
+    const displays = await listAllRows(services, databaseId, "display_tokens", [Query.equal("venueId", [venueId]), Query.equal("active", [true]), Query.orderDesc("createdAt")]);
+    response.json({ displays: displays.map(publicRow) });
   }));
   router.patch("/hub/venues/:id/displays/:tokenId", asyncRoute(async (request, response) => {
     requireRole(request, config, ["hub"]);
@@ -418,13 +432,13 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     }
     const [venue, categories, items] = await Promise.all([
       services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId }),
-      services.tables.listRows<RowData>({ databaseId, tableId: "categories", queries: [Query.equal("venueId", [claims.venueId]), Query.orderAsc("sortOrder"), Query.limit(500)] }),
-      services.tables.listRows<RowData>({ databaseId, tableId: "items", queries: [Query.equal("venueId", [claims.venueId]), Query.limit(5000)] }),
+      listAllRows(services, databaseId, "categories", [Query.equal("venueId", [claims.venueId]), Query.orderAsc("sortOrder")]),
+      listAllRows(services, databaseId, "items", [Query.equal("venueId", [claims.venueId])]),
     ]);
     const expectedVersion = claims.role === "staff" ? venue.staffVersion : venue.displayVersion;
     if (claims.version !== Number(expectedVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните вход заново.");
     response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    response.json({ venue: publicRow(venue), categories: categories.rows.map(publicRow), items: items.rows.map(publicRow) });
+    response.json({ venue: publicRow(venue), categories: categories.map(publicRow), items: items.map(publicRow) });
   }));
 
   router.get("/menu/version", asyncRoute(async (request, response) => {
@@ -560,7 +574,10 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const rowId = routeId(request.params.id);
     await ownedRow(services, config, "items", rowId, claims.venueId!);
     const data: Record<string, unknown> = { updatedAt: new Date().toISOString(), updatedBy: "staff-api" };
-    if (request.body?.isAvailable !== undefined) data.isAvailable = Boolean(request.body.isAvailable);
+    if (request.body?.isAvailable !== undefined) {
+      if (typeof request.body.isAvailable !== "boolean") throw new ApiError(400, "invalid_argument", "Поле isAvailable должно быть логическим.");
+      data.isAvailable = request.body.isAvailable;
+    }
     if (request.body?.name !== undefined) data.name = text(request.body.name, 200);
     if (request.body?.priceMinor !== undefined) data.priceMinor = integer(request.body.priceMinor, 0, 2_000_000_000);
     if (request.body?.sortOrder !== undefined) data.sortOrder = integer(request.body.sortOrder, 0, 100000);

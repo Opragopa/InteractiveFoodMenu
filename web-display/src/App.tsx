@@ -121,7 +121,7 @@ export function App() {
       } catch {
         if (!cancelled) setConnected(false);
       }
-    }, Math.min(menuRefreshSeconds, 2) * 1000);
+    }, menuRefreshSeconds * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [sessionToken, menuRefreshSeconds, legacyBrowser]);
 

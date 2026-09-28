@@ -131,16 +131,72 @@ function HubNumberControl({ label, value, minimum, maximum, step, onChange }: { 
 function HubDisplays({ token, venue, busy: parentBusy }: { token: string; venue: HubVenue; busy: boolean }) {
   const [displays, setDisplays] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [error, setError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const busy = parentBusy || actionBusy;
-  const load = async () => { setActionBusy(true); setError(""); try { const result = await api.hubDisplays(token, venue.id); setDisplays(result.displays); setOpen(true); } catch (cause) { setError(errorMessage(cause)); } finally { setActionBusy(false); } };
-  const revoke = async (id: string) => { if (!window.confirm("Сбросить сессию этого экрана? На ТВ потребуется подключение заново.")) return; setActionBusy(true); try { await api.hubRevokeDisplay(token, venue.id, id); await load(); } catch (cause) { setError(errorMessage(cause)); } finally { setActionBusy(false); } };
-  const saveLabel = async (id: string) => { setActionBusy(true); try { await api.hubUpdateDisplay(token, venue.id, id, label); setEditing(null); await load(); } catch (cause) { setError(errorMessage(cause)); } finally { setActionBusy(false); } };
-  const revokeAll = async () => { if (!window.confirm("Сбросить все сессии экранов этой точки? Все ТВ потребуется подключить заново.")) return; setActionBusy(true); try { await api.hubRevokeAllDisplays(token, venue.id); await load(); } catch (cause) { setError(errorMessage(cause)); } finally { setActionBusy(false); } };
-  return <div className="hub-displays" aria-busy={busy}><div className="hub-displays-head"><b>Экраны точки</b><button type="button" disabled={busy} onClick={() => void load()}>{busy ? "Обновляем…" : open ? "Обновить" : "Показать"}</button></div>{open && <div className="hub-display-list">{displays.length ? displays.map(display => <div className={!display.active ? "revoked" : ""} key={display.id}><span>{editing === display.id ? <input aria-label="Метка экрана" value={label} maxLength={80} onChange={event => setLabel(event.target.value)} /> : <b>{display.label || "Экран"}</b>}<small>{display.active ? "Активен" : "Отозван"} · создан: {dateTime(display.createdAt)} · активность: {dateTime(display.lastSeenAt)}</small></span>{editing === display.id ? <><button type="button" disabled={busy} onClick={() => void saveLabel(display.id)}>{busy ? "Сохраняем…" : "Сохранить"}</button><button type="button" disabled={busy} onClick={() => setEditing(null)}>Отмена</button></> : <><button type="button" disabled={busy} onClick={() => { setEditing(display.id); setLabel(display.label || ""); }}>Метка</button>{display.active && <button type="button" className="danger" disabled={busy} onClick={() => void revoke(display.id)}>Сбросить</button>}</>}</div>) : <small>Сессий пока нет.</small>}{displays.some(display => display.active) && <button type="button" className="danger" disabled={busy} onClick={() => void revokeAll()}>Сбросить все экраны</button>}{error && <small className="hub-error">{error}</small>}</div>}</div>;
+  const load = async () => {
+    setActionBusy(true); setError("");
+    try { const result = await api.hubDisplays(token, venue.id); setDisplays(result.displays); setHasLoaded(true); }
+    catch (cause) { setError(errorMessage(cause)); }
+    finally { setActionBusy(false); }
+  };
+  const toggleOpen = () => {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+    if (nextOpen) void load();
+  };
+  const revoke = async (id: string) => {
+    if (!window.confirm("Отключить этот экран? На телевизоре потребуется подключение заново.")) return;
+    setActionBusy(true); setError("");
+    try {
+      await api.hubRevokeDisplay(token, venue.id, id);
+      setDisplays(current => current.filter(display => display.id !== id));
+      if (editing === id) setEditing(null);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setActionBusy(false); }
+  };
+  const saveLabel = async (id: string) => {
+    const nextLabel = label.trim();
+    if (!nextLabel) { setError("Введите понятное название, например «Основной зал»."); return; }
+    setActionBusy(true); setError("");
+    try {
+      const result = await api.hubUpdateDisplay(token, venue.id, id, nextLabel);
+      setDisplays(current => current.map(display => display.id === id ? { ...display, ...result.display } : display));
+      setEditing(null);
+    } catch (cause) { setError(errorMessage(cause)); }
+    finally { setActionBusy(false); }
+  };
+  const revokeAll = async () => {
+    if (!window.confirm("Отключить все активные экраны этой точки? На телевизорах потребуется подключение заново.")) return;
+    setActionBusy(true); setError("");
+    try { await api.hubRevokeAllDisplays(token, venue.id); setDisplays([]); setEditing(null); }
+    catch (cause) { setError(errorMessage(cause)); }
+    finally { setActionBusy(false); }
+  };
+  return <section className="hub-displays" aria-busy={busy}>
+    <div className="hub-displays-head">
+      <div><b>Активные экраны</b><small>{hasLoaded ? `Активных экранов: ${displays.length}` : "Назовите экраны по расположению: зал, касса, витрина"}</small></div>
+      <button type="button" aria-expanded={open} disabled={busy} onClick={toggleOpen}>{busy ? "Загружаем…" : open ? "Свернуть" : hasLoaded ? "Развернуть" : "Показать"}</button>
+    </div>
+    {open && <div className="hub-display-list">
+      <div className="hub-display-list-toolbar"><small>Имена видны только в Backend Hub и помогают отличать телевизоры.</small><button type="button" disabled={busy} onClick={() => void load()}>{busy ? "Обновляем…" : "Обновить список"}</button></div>
+      {displays.length ? displays.map(display => <div className="hub-display-row" key={display.id}>
+        <span>{editing === display.id
+          ? <input aria-label="Название экрана" placeholder="Например, Основной зал" value={label} maxLength={80} onChange={event => setLabel(event.target.value)} />
+          : <b>{display.label || `Экран ${display.id.slice(-4)}`}</b>}
+          <small>Последняя связь: {dateTime(display.lastSeenAt)} · добавлен: {dateTime(display.createdAt)}</small>
+        </span>
+        {editing === display.id
+          ? <><button type="button" disabled={busy} onClick={() => void saveLabel(display.id)}>{busy ? "Сохраняем…" : "Сохранить название"}</button><button type="button" disabled={busy} onClick={() => setEditing(null)}>Отмена</button></>
+          : <><button type="button" disabled={busy} onClick={() => { setEditing(display.id); setLabel(display.label || ""); setError(""); }}>Переименовать</button><button type="button" className="danger" disabled={busy} onClick={() => void revoke(display.id)}>Отключить</button></>}
+      </div>) : <p className="hub-empty">Активных экранов нет.</p>}
+      {displays.length > 1 && <button type="button" className="danger hub-revoke-all" disabled={busy} onClick={() => void revokeAll()}>Отключить все экраны</button>}
+      {error && <small className="hub-error" role="alert">{error}</small>}
+    </div>}
+  </section>;
 }
 
 export function BackendHub() {
