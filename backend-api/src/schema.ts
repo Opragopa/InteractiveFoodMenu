@@ -33,6 +33,9 @@ export const TABLES: TableDefinition[] = [
       { key: "logoVisible", type: "boolean", required: false },
       { key: "displayScalePercent", type: "integer", required: true, min: 50, max: 160 },
       { key: "displayScaleMode", type: "varchar", size: 8, required: false },
+      { key: "columnScale1Percent", type: "integer", required: false, min: 50, max: 160 },
+      { key: "columnScale2Percent", type: "integer", required: false, min: 50, max: 160 },
+      { key: "columnScale3Percent", type: "integer", required: false, min: 50, max: 160 },
       { key: "breakActive", type: "boolean", required: false },
       { key: "breakEndsAt", type: "datetime", required: false },
       { key: "breakDurationMinutes", type: "integer", required: false, min: 1, max: 60 },
@@ -212,6 +215,9 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
     await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "menuRefreshSeconds", required: false, min: 5, max: 300 });
   }
   if (!venueColumns.columns.some(column => column.key === "displayScaleMode")) await tables.createVarcharColumn({ databaseId, tableId: "venues", key: "displayScaleMode", size: 8, required: false });
+  for (const key of ["columnScale1Percent", "columnScale2Percent", "columnScale3Percent"]) {
+    if (!venueColumns.columns.some(column => column.key === key)) await tables.createIntegerColumn({ databaseId, tableId: "venues", key, required: false, min: 50, max: 160 });
+  }
   if (!venueColumns.columns.some(column => column.key === "breakActive")) await tables.createBooleanColumn({ databaseId, tableId: "venues", key: "breakActive", required: false });
   if (!venueColumns.columns.some(column => column.key === "breakEndsAt")) await tables.createDatetimeColumn({ databaseId, tableId: "venues", key: "breakEndsAt", required: false });
   if (!venueColumns.columns.some(column => column.key === "breakDurationMinutes")) await tables.createIntegerColumn({ databaseId, tableId: "venues", key: "breakDurationMinutes", required: false, min: 1, max: 60 });
@@ -232,7 +238,7 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   if (!displayColumns.columns.some(column => column.key === "label")) await tables.createVarcharColumn({ databaseId, tableId: "display_tokens", key: "label", size: 80, required: false });
   if (!displayColumns.columns.some(column => column.key === "lastSeenAt")) await tables.createDatetimeColumn({ databaseId, tableId: "display_tokens", key: "lastSeenAt", required: false });
   const venues = await tables.listRows<Models.Row & Record<string, unknown>>({ databaseId, tableId: "venues", queries: [Query.limit(200)] });
-  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined || row.breakPanelWidthPercent === undefined || row.breakMenuDimPercent === undefined || row.menuItemFontSizePx === undefined || row.menuItemGapPx === undefined || row.breakTransitionMs === undefined || row.displayPreset === undefined || row.breakExpiredText === undefined || row.showServingSize === undefined || row.showCalories === undefined).map(row => tables.updateRow({
+  await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.columnScale1Percent === undefined || row.columnScale2Percent === undefined || row.columnScale3Percent === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined || row.breakPanelWidthPercent === undefined || row.breakMenuDimPercent === undefined || row.menuItemFontSizePx === undefined || row.menuItemGapPx === undefined || row.breakTransitionMs === undefined || row.displayPreset === undefined || row.breakExpiredText === undefined || row.showServingSize === undefined || row.showCalories === undefined).map(row => tables.updateRow({
     databaseId,
     tableId: "venues",
     rowId: String(row.$id),
@@ -241,6 +247,9 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
       ...(row.menuRefreshSeconds === undefined ? { menuRefreshSeconds: 15 } : {}),
       ...(row.logoVisible === undefined ? { logoVisible: true } : {}),
       ...(row.displayScaleMode === undefined ? { displayScaleMode: "auto" } : {}),
+      ...(row.columnScale1Percent === undefined ? { columnScale1Percent: 100 } : {}),
+      ...(row.columnScale2Percent === undefined ? { columnScale2Percent: 100 } : {}),
+      ...(row.columnScale3Percent === undefined ? { columnScale3Percent: 100 } : {}),
       ...(row.breakActive === undefined ? { breakActive: false } : {}),
       ...(row.breakDurationMinutes === undefined ? { breakDurationMinutes: 10 } : {}),
       ...(row.breakFontSizePercent === undefined ? { breakFontSizePercent: 100 } : {}),

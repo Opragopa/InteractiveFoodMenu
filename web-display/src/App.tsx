@@ -511,16 +511,18 @@ function CrossIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" fill="
 function VenueSettings({ venue, busy, onSave }: {
   venue: Venue;
   busy: boolean;
-  onSave: (settings: Pick<Venue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent">) => Promise<void>;
+  onSave: (settings: Pick<Venue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent" | "columnScale1Percent" | "columnScale2Percent" | "columnScale3Percent">) => Promise<void>;
 }) {
   const [name, setName] = useState(venue.name);
   const [backgroundColor, setBackgroundColor] = useState(venue.backgroundColor);
   const [accentColor, setAccentColor] = useState(venue.accentColor);
   const [duration, setDuration] = useState(venue.pageDurationSeconds);
   const [displayScale, setDisplayScale] = useState(Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)));
+  const [columnScales, setColumnScales] = useState([venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const dirty = name !== venue.name || backgroundColor.toUpperCase() !== venue.backgroundColor.toUpperCase() || accentColor.toUpperCase() !== venue.accentColor.toUpperCase() || duration !== venue.pageDurationSeconds || displayScale !== Math.min(160, Math.max(80, venue.displayScalePercent ?? 100));
+  const initialColumnScales = [venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100];
+  const dirty = name !== venue.name || backgroundColor.toUpperCase() !== venue.backgroundColor.toUpperCase() || accentColor.toUpperCase() !== venue.accentColor.toUpperCase() || duration !== venue.pageDurationSeconds || displayScale !== Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) || columnScales.some((value, index) => value !== initialColumnScales[index]);
 
   useEffect(() => {
     setName(venue.name);
@@ -528,6 +530,7 @@ function VenueSettings({ venue, busy, onSave }: {
     setAccentColor(venue.accentColor);
     setDuration(venue.pageDurationSeconds);
     setDisplayScale(Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)));
+    setColumnScales([venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100]);
   }, [venue]);
 
   useEffect(() => {
@@ -543,7 +546,7 @@ function VenueSettings({ venue, busy, onSave }: {
     if (!/^#[0-9a-f]{6}$/i.test(backgroundColor) || !/^#[0-9a-f]{6}$/i.test(accentColor)) { setError("Укажите цвета в формате #RRGGBB."); return; }
     setError(""); setMessage("");
     try {
-      await onSave({ name: normalizedName, backgroundColor: backgroundColor.toUpperCase(), accentColor: accentColor.toUpperCase(), pageDurationSeconds: duration, displayScalePercent: displayScale });
+      await onSave({ name: normalizedName, backgroundColor: backgroundColor.toUpperCase(), accentColor: accentColor.toUpperCase(), pageDurationSeconds: duration, displayScalePercent: displayScale, columnScale1Percent: columnScales[0], columnScale2Percent: columnScales[1], columnScale3Percent: columnScales[2] });
       setMessage("Настройки сохранены. Экран обновится автоматически.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
@@ -554,6 +557,7 @@ function VenueSettings({ venue, busy, onSave }: {
     <ColorSetting label="Акцентный цвет" value={accentColor} onChange={setAccentColor} />
     <div className="setting-field duration-setting"><span>Смена страниц</span><div className="duration-control"><button type="button" aria-label="Уменьшить интервал" disabled={duration <= 5} onClick={() => setDuration(value => Math.max(5, value - 1))}>−</button><strong>{duration} сек.</strong><button type="button" aria-label="Увеличить интервал" disabled={duration >= 30} onClick={() => setDuration(value => Math.min(30, value + 1))}>+</button></div><small>Если меню не помещается на одной странице, ТВ будет переключать страницы с этим интервалом.</small></div>
     <div className="setting-field duration-setting"><span>Масштаб меню ТВ</span><div className="duration-control"><button type="button" aria-label="Уменьшить масштаб" disabled={displayScale <= 80} onClick={() => setDisplayScale(value => Math.max(80, value - 5))}>−</button><strong>{displayScale}%</strong><button type="button" aria-label="Увеличить масштаб" disabled={displayScale >= 160} onClick={() => setDisplayScale(value => Math.min(160, value + 5))}>+</button></div><small>Увеличивает текст и отступы; при крупном масштабе на странице будет меньше позиций.</small></div>
+    <div className="setting-field column-scale-settings"><span>Масштаб столбцов</span>{columnScales.map((value, index) => <label key={index}>Столбец {index + 1}<input aria-label={`Масштаб столбца ${index + 1}, процентов`} type="range" min="50" max="160" step="5" value={value} onChange={event => setColumnScales(current => current.map((scale, column) => column === index ? Number(event.target.value) : scale))} /><strong>{value}%</strong></label>)}<small>Настройте размер текста отдельно для каждого столбца. Если на странице меньше столбцов, лишние настройки не используются.</small></div>
     <button className="save-settings" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить оформление"}</button>
     {message && <p className="settings-success">{message}</p>}{error && <p className="status-error">{error}</p>}
   </section>;
@@ -614,6 +618,7 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
         name: venue.name, backgroundColor: venue.backgroundColor, accentColor: venue.accentColor,
         pageDurationSeconds: pageDuration, displayScalePercent: venue.displayScalePercent ?? 100,
         displayScaleMode: venue.displayScaleMode, logoPosition: venue.logoPosition ?? "top-right", logoInsetPercent: venue.logoInsetPercent ?? 3,
+        columnScale1Percent: venue.columnScale1Percent ?? 100, columnScale2Percent: venue.columnScale2Percent ?? 100, columnScale3Percent: venue.columnScale3Percent ?? 100,
         logoScalePercent: venue.logoScalePercent ?? 100, logoVisible: venue.logoVisible, menuRefreshSeconds: venue.menuRefreshSeconds,
         breakFontSizePercent: venue.breakFontSizePercent, breakPanelWidthPercent: panelWidth, breakMenuDimPercent: dimPercent,
         menuItemFontSizePx: fontSize, menuItemGapPx: itemGap, breakTransitionMs: transitionMs, displayPreset: preset, breakExpiredText: expiredText,

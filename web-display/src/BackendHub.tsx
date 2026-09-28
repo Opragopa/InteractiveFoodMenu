@@ -20,6 +20,9 @@ type HubVenue = {
   pageDurationSeconds: number;
   displayScalePercent: number;
   displayScaleMode?: "auto" | "manual";
+  columnScale1Percent?: number;
+  columnScale2Percent?: number;
+  columnScale3Percent?: number;
   breakFontSizePercent?: number;
   breakPanelWidthPercent?: number;
   breakMenuDimPercent?: number;
@@ -90,6 +93,7 @@ function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo,
       await onSave(normalizeVenueAppearance({
         name, backgroundColor, accentColor, pageDurationSeconds: duration, displayScalePercent: displayScale,
         displayScaleMode, logoPosition, logoInsetPercent: logoInset, logoScalePercent: logoScale,
+        columnScale1Percent: venue.columnScale1Percent, columnScale2Percent: venue.columnScale2Percent, columnScale3Percent: venue.columnScale3Percent,
         logoVisible, menuRefreshSeconds, breakFontSizePercent: breakFontSize,
         breakPanelWidthPercent: venue.breakPanelWidthPercent, breakMenuDimPercent: venue.breakMenuDimPercent,
         menuItemFontSizePx: venue.menuItemFontSizePx, menuItemGapPx: venue.menuItemGapPx,

@@ -36,3 +36,36 @@ jobs:
           distribution: temurin
           java-version: 17
       - run: ./gradlew :android:testDebugUnitTest :android:assembleDebug
+
+  deploy-production:
+    name: Deploy production
+    needs: [web-api, android]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Prepare SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.PROD_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PROD_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_KEY" || { echo 'Missing PROD_SSH_KEY'; exit 1; }
+          test -n "$KNOWN_HOSTS" || { echo 'Missing PROD_KNOWN_HOSTS'; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Deploy on Windows server
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_SSH_PORT: ${{ secrets.PROD_SSH_PORT }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_PATH: ${{ secrets.PROD_PATH }}
+        run: |
+          test -n "$PROD_HOST" && test -n "$PROD_USER" && test -n "$PROD_PATH" || { echo 'Missing PROD_HOST, PROD_USER, or PROD_PATH'; exit 1; }
+          [[ "$PROD_PATH" == [A-Za-z]:\\* && "$PROD_PATH" != *"'"* && "$PROD_PATH" != *$'\n'* ]] || { echo 'PROD_PATH must be a simple absolute Windows path'; exit 1; }
+          port="${PROD_SSH_PORT:-22}"
+          remote_script="Set-Location -LiteralPath '${PROD_PATH}'; powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-production.ps1 -ExpectedCommit '${GITHUB_SHA}'"
+          encoded_script="$(printf '%s' "$remote_script" | iconv -t UTF-16LE | base64 | tr -d '\n')"
+          ssh -i ~/.ssh/id_ed25519 -p "$port" -o BatchMode=yes "$PROD_USER@$PROD_HOST" "powershell.exe -NoLogo -NoProfile -EncodedCommand $encoded_script"

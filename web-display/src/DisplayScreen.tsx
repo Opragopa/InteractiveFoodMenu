@@ -47,6 +47,8 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const dimPercent = Math.min(75, Math.max(25, venue.breakMenuDimPercent ?? 45));
   const itemFontSize = Math.min(54, Math.max(22, venue.menuItemFontSizePx ?? 34));
   const itemGap = Math.min(28, Math.max(4, venue.menuItemGapPx ?? 12));
+  const columnScales = [venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100].map(value => Math.min(160, Math.max(50, value)) / 100);
+  const largestColumnScale = Math.max(...columnScales);
   const transitionMs = Math.min(1200, Math.max(200, venue.breakTransitionMs ?? 600));
   const breakFontScale = Math.min(200, Math.max(50, venue.breakFontSizePercent ?? 100)) / 100;
 
@@ -94,10 +96,10 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
     });
   }, [categories, items, columnWidth, itemFontSize, itemGap, scale]);
 
-  const pages = useMemo(() => paginateMenuByHeight(categories, items, availableHeight, layout.columnCount, {
+  const pages = useMemo(() => paginateMenuByHeight(categories, items, availableHeight / largestColumnScale, layout.columnCount, {
     category: measuredHeights.category ?? 52,
     item: (item) => measuredHeights[`item-${item.id}`] ?? itemFontSize * 1.4 + itemGap * 2,
-  }), [categories, items, availableHeight, layout.columnCount, measuredHeights, itemFontSize, itemGap]);
+  }), [categories, items, availableHeight, largestColumnScale, layout.columnCount, measuredHeights, itemFontSize, itemGap]);
 
   useEffect(() => { setPageIndex(0); }, [breakActive]);
   useEffect(() => {
@@ -119,9 +121,14 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
       <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><div className="display-header-meta"><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time>{pages.length > 1 && <span className="page-indicator" aria-live="polite" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</div></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
       {!page ? <div className="empty">Меню пока не заполнено</div> : <section className="page page-transition" key={`${pageIndex}-${items.length}-${breakActive}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
-        {page.columns.map((column, columnIndex) => <div className="column" key={columnIndex}>{column.map((entry, rowIndex) => entry.kind === "category" ?
-          <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor }}><span>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2> :
-          <div className={`menu-item menu-item-enter ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""} ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{entry.item.servingSize || "—"}</span>}<span className="price">{money.format(entry.item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{entry.item.caloriesKcal ?? "—"}</span>}</div>)}</div>)}
+        {page.columns.map((column, columnIndex) => {
+          const columnScale = columnScales[columnIndex] ?? 1;
+          const legacyFontSize = venue.showServingSize || venue.showCalories ? 19 : 30;
+          const itemBaseSize = legacyTv ? legacyFontSize : venue.showServingSize && venue.showCalories ? Math.min(itemFontSize, 16) : venue.showServingSize || venue.showCalories ? Math.min(itemFontSize, 18) : itemFontSize;
+          return <div className="column" key={columnIndex} style={{ "--column-scale": columnScale } as React.CSSProperties}>{column.map((entry, rowIndex) => entry.kind === "category" ?
+            <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor, fontSize: `${(legacyTv ? 29 : 32) * columnScale}px` }}><span>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2> :
+            <div className={`menu-item menu-item-enter ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""} ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms`, fontSize: `${itemBaseSize * columnScale}px` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{entry.item.servingSize || "—"}</span>}<span className="price">{money.format(entry.item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{entry.item.caloriesKcal ?? "—"}</span>}</div>)}</div>;
+        })}
       </section>}
       <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>
     </section>

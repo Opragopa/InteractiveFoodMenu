@@ -8,6 +8,9 @@ export type VenueAppearance = {
   pageDurationSeconds: number;
   displayScalePercent: number;
   displayScaleMode?: "auto" | "manual";
+  columnScale1Percent?: number;
+  columnScale2Percent?: number;
+  columnScale3Percent?: number;
   logoPosition: LogoPosition;
   logoInsetPercent: number;
   logoScalePercent: number;
@@ -52,6 +55,9 @@ export function normalizeVenueAppearance(value: VenueAppearance): VenueAppearanc
     pageDurationSeconds: clampInteger(value.pageDurationSeconds, 5, 30, 10),
     displayScalePercent: clampInteger(value.displayScalePercent, 50, 160, 100),
     displayScaleMode: value.displayScaleMode === "manual" ? "manual" : "auto",
+    columnScale1Percent: clampInteger(value.columnScale1Percent, 50, 160, 100),
+    columnScale2Percent: clampInteger(value.columnScale2Percent, 50, 160, 100),
+    columnScale3Percent: clampInteger(value.columnScale3Percent, 50, 160, 100),
     logoPosition: value.logoPosition,
     logoInsetPercent: clampInteger(value.logoInsetPercent, 0, 20, 3),
     logoScalePercent: clampInteger(value.logoScalePercent, 50, 200, 100),

@@ -14,6 +14,9 @@ export type Venue = {
   pageDurationSeconds: number;
   displayScalePercent?: number;
   displayScaleMode?: "auto" | "manual";
+  columnScale1Percent?: number;
+  columnScale2Percent?: number;
+  columnScale3Percent?: number;
   breakActive?: boolean;
   breakEndsAt?: string | null;
   breakDurationMinutes?: number;

@@ -237,7 +237,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       data: {
         name, code, pinHash: await hashSecret(pin), currency: "RUB",
         backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
-        displayScalePercent: 100, displayScaleMode: "auto", breakActive: false, breakDurationMinutes: 10, breakFontSizePercent: 100,
+        displayScalePercent: 100, displayScaleMode: "auto", columnScale1Percent: 100, columnScale2Percent: 100, columnScale3Percent: 100, breakActive: false, breakDurationMinutes: 10, breakFontSizePercent: 100,
         breakPanelWidthPercent: 36, breakMenuDimPercent: 45, menuItemFontSizePx: 34, menuItemGapPx: 12,
         showServingSize: false, showCalories: false,
         breakTransitionMs: 600, displayPreset: "balanced", breakExpiredText: "Скоро буду",
@@ -294,6 +294,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     }
     if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 30);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
+    for (const field of ["columnScale1Percent", "columnScale2Percent", "columnScale3Percent"] as const) if (request.body?.[field] !== undefined) data[field] = integer(request.body[field], 50, 160);
     if (request.body?.displayScaleMode !== undefined) {
       const mode = String(request.body.displayScaleMode);
       if (mode !== "auto" && mode !== "manual") throw new ApiError(400, "invalid_argument", "Некорректный режим масштаба.");
@@ -496,6 +497,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     }
     if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 30);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
+    for (const field of ["columnScale1Percent", "columnScale2Percent", "columnScale3Percent"] as const) if (request.body?.[field] !== undefined) data[field] = integer(request.body[field], 50, 160);
     if (request.body?.logoInsetPercent !== undefined) data.logoInsetPercent = integer(request.body.logoInsetPercent, 0, 20);
     if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
     if (request.body?.breakPanelWidthPercent !== undefined) data.breakPanelWidthPercent = integer(request.body.breakPanelWidthPercent, 30, 50);
