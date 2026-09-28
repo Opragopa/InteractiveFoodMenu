@@ -26,18 +26,22 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }));
   app.use(express.json({ limit: "8mb" }));
-  app.use("/api/auth/staff", (request, response, next) => {
+  const limitAuthAttempts = (scope: string) => (request: express.Request, response: express.Response, next: express.NextFunction) => {
     const now = Date.now();
     if (authRateLimitBuckets.size > 1000) pruneRateLimitBuckets(authRateLimitBuckets, now);
-    const key = request.ip || request.socket.remoteAddress || "unknown";
-    const result = consumeRateLimit(authRateLimitBuckets, key, now, authRateLimitWindowMs, authRateLimitMaxAttempts);
+    const ip = request.ip || request.socket.remoteAddress || "unknown";
+    const result = consumeRateLimit(authRateLimitBuckets, `${scope}:${ip}`, now, authRateLimitWindowMs, authRateLimitMaxAttempts);
     if (!result.allowed) {
       response.setHeader("Retry-After", String(result.retryAfterSeconds));
-      next(new ApiError(429, "rate_limited", "Слишком много попыток входа. Повторите позже."));
+      next(new ApiError(429, "rate_limited", "Слишком много попыток. Повторите позже."));
       return;
     }
     next();
-  });
+  };
+  app.post("/api/auth/staff", limitAuthAttempts("staff"));
+  app.post("/api/hub/login", limitAuthAttempts("hub"));
+  app.post("/api/display/pairings", limitAuthAttempts("display-pairing-create"));
+  app.post("/api/display/pairings/complete", limitAuthAttempts("display-pairing"));
 
   app.get("/health", (_request, response) => {
   response.json({ status: "ok", service: "interactive-food-menu-api" });

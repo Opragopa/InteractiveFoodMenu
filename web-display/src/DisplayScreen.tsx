@@ -43,8 +43,6 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const accentColor = /^#[0-9a-f]{6}$/i.test(venue.accentColor) ? venue.accentColor : "#FFFFFF";
   const foregroundColor = contrastForeground(backgroundColor);
   const breakActive = venue.breakActive === true;
-  const breakSeconds = remainingBreakSeconds(breakActive, venue.breakEndsAt, now);
-  const breakExpired = breakActive && breakSeconds === 0;
   const panelWidth = Math.min(50, Math.max(30, venue.breakPanelWidthPercent ?? 36));
   const dimPercent = Math.min(75, Math.max(25, venue.breakMenuDimPercent ?? 45));
   const itemFontSize = Math.min(54, Math.max(22, venue.menuItemFontSizePx ?? 34));
@@ -53,11 +51,14 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const breakFontScale = Math.min(200, Math.max(50, venue.breakFontSizePercent ?? 100)) / 100;
 
   useEffect(() => {
-    const interval = breakActive ? 1000 : 60_000;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), interval);
-    return () => window.clearInterval(timer);
-  }, [breakActive, venue.breakEndsAt]);
+    let timer = 0;
+    const updateClock = () => {
+      setNow(Date.now());
+      timer = window.setTimeout(updateClock, 60_000 - Date.now() % 60_000 + 20);
+    };
+    timer = window.setTimeout(updateClock, 60_000 - Date.now() % 60_000 + 20);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const resize = () => setViewport(readViewport());
@@ -106,7 +107,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
     "--menu-dim-opacity": (100 - dimPercent) / 100, "--item-font-size": `${itemFontSize}px`, "--item-gap": `${itemGap}px`, "--break-transition": `${transitionMs}ms`,
   } as React.CSSProperties;
 
-  return <main ref={shellRef} className={`display-shell ${breakActive ? "break-active" : ""} ${breakExpired ? "break-expired" : ""}`} lang="ru" style={style}>
+  return <main ref={shellRef} className={`display-shell ${breakActive ? "break-active" : ""}`} lang="ru" style={style}>
     <section className={`display-menu logo-${logoPosition}`} style={{ zoom: scale }}>
       <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><div className="display-header-meta"><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time>{pages.length > 1 && <span className="page-indicator" aria-live="polite" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</div></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
@@ -117,7 +118,29 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
       </section>}
       <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>
     </section>
-    <aside className="break-panel" aria-hidden={!breakActive} aria-live="polite"><div className="break-state-label">{breakExpired ? "Перерыв завершён" : "Перерыв"}</div>{breakExpired ? <strong className="break-expired-text">{formatRussianText(venue.breakExpiredText ?? "Скоро буду")}</strong> : <strong className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * breakFontScale, viewport.width * .22, viewport.height * .3))}px` }}>{Math.floor(breakSeconds / 60)}:{String(breakSeconds % 60).padStart(2, "0")}</strong>}</aside>
+    <BreakPanel active={breakActive} endsAt={venue.breakEndsAt} expiredText={venue.breakExpiredText ?? "Скоро буду"} fontScale={breakFontScale} viewport={viewport} />
     <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, fontSize: itemFontSize }}><h2 data-measure-key="category">Раздел</h2>{items.map((item) => <div className={`menu-item ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} data-measure-key={`item-${item.id}`} key={item.id}><span className="item-name">{formatRussianText(item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{item.servingSize || "—"}</span>}<span className="price">{money.format(item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{item.caloriesKcal ?? "—"}</span>}</div>)}</div>
   </main>;
+}
+
+function BreakPanel({ active, endsAt, expiredText, fontScale, viewport }: {
+  active: boolean; endsAt?: string | null; expiredText: string; fontScale: number; viewport: { width: number; height: number };
+}) {
+  const [now, setNow] = useState(Date.now());
+  const seconds = remainingBreakSeconds(active, endsAt, now);
+  const expired = active && seconds === 0;
+
+  useEffect(() => {
+    if (!active) return;
+    let timer = 0;
+    const tick = () => {
+      const current = Date.now();
+      setNow(current);
+      timer = window.setTimeout(tick, 1000 - current % 1000 + 12);
+    };
+    timer = window.setTimeout(tick, 0);
+    return () => window.clearTimeout(timer);
+  }, [active, endsAt]);
+
+  return <aside className={`break-panel ${expired ? "break-expired" : ""}`} aria-hidden={!active} aria-live="polite"><div className="break-state-label">{expired ? "Перерыв завершён" : "Перерыв"}</div>{expired ? <strong className="break-expired-text">{formatRussianText(expiredText)}</strong> : <strong className="break-timer" style={{ fontSize: `${Math.max(38, Math.min(118 * fontScale, viewport.width * .22, viewport.height * .3))}px` }}>{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</strong>}</aside>;
 }
