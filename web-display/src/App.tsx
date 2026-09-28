@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEffect as useEffectQr } from "react";
-import { DisplayScreen } from "./DisplayScreen";
+import { contrastForeground, DisplayScreen } from "./DisplayScreen";
 import type { Category, MenuItem, Venue } from "./types";
 import QRCode from "qrcode";
 import { parseMenuCsv, type CsvMenuRow } from "./csv";
@@ -563,6 +563,8 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
   const [error, setError] = useState("");
   const dirty = panelWidth !== (venue.breakPanelWidthPercent ?? 36) || dimPercent !== (venue.breakMenuDimPercent ?? 45) || fontSize !== (venue.menuItemFontSizePx ?? 34) || itemGap !== (venue.menuItemGapPx ?? 12) || pageDuration !== Math.min(30, venue.pageDurationSeconds || 10) || transitionMs !== (venue.breakTransitionMs ?? 600) || expiredText !== (venue.breakExpiredText ?? "Скоро буду") || preset !== (venue.displayPreset ?? "balanced");
   const selectedPreview = previewSizes[previewSize];
+  const previewBackground = /^#[0-9a-f]{6}$/i.test(venue.backgroundColor ?? "") ? venue.backgroundColor! : "#56965B";
+  const previewAccent = /^#[0-9a-f]{6}$/i.test(venue.accentColor ?? "") ? venue.accentColor! : "#FFFFFF";
   const previewWidth = selectedPreview.width * (testBreak ? (100 - panelWidth) / 100 : 1);
   const expectedPages = Math.max(1, estimateMenuPages(categories, items, previewWidth, selectedPreview.height, fontSize, itemGap));
   const previewItems = items.slice(0, 8);
@@ -620,7 +622,7 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
       <label className="experimental-text">Текст после окончания таймера<input maxLength={80} value={expiredText} onChange={event => setExpiredText(event.target.value)} /></label>
     </div>
     <label className="preview-resolution">Разрешение предпросмотра<select value={previewSize} onChange={event => setPreviewSize(event.target.value as PreviewSize)}>{Object.entries(previewSizes).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}</select></label>
-    <div className={`experimental-preview ${testBreak ? "is-break" : ""}`} style={{ "--preview-panel": `${panelWidth}%`, "--preview-dim": (100 - dimPercent) / 100, "--preview-transition": `${transitionMs}ms`, "--preview-font-size": `${fontSize}px`, "--preview-gap": `${itemGap}px` } as React.CSSProperties} aria-label={`Предпросмотр ${selectedPreview.label}`}>
+    <div className={`experimental-preview ${testBreak ? "is-break" : ""}`} style={{ "--preview-panel": `${panelWidth}%`, "--preview-dim": (100 - dimPercent) / 100, "--preview-transition": `${transitionMs}ms`, "--preview-font-size": `${fontSize}px`, "--preview-gap": `${itemGap}px`, "--preview-aspect": `${selectedPreview.width} / ${selectedPreview.height}`, "--preview-background": previewBackground, "--preview-accent": previewAccent, "--preview-foreground": contrastForeground(previewBackground) } as React.CSSProperties} aria-label={`Предпросмотр ${selectedPreview.label}`}>
       <div className="preview-menu"><header><b>{venue.name}</b><time>29.09.2026 13:57</time></header><div className="preview-items">{previewItems.map(item => <div className={`preview-item ${item.isAvailable ? "" : "unavailable"}`} key={item.id}><span>{item.name}</span><strong>{previewMoney.format(item.priceMinor / 100)}</strong></div>)}</div><small>Страница {previewPage + 1} из {expectedPages} · единый размер {fontSize}px</small></div>
       <div className="preview-break"><b>{testBreak ? "Перерыв" : "Проверка"}</b><strong>{testBreak ? "09:42" : "—"}</strong></div>
     </div>
