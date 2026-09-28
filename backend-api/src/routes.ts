@@ -186,7 +186,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     ]);
     const width = Math.max(480, Math.min(7680, Number(request.query.w) || 1920));
     const height = Math.max(360, Math.min(4320, Number(request.query.h) || 1080));
-    response.status(200).type("html").set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; base-uri 'none'").set("Referrer-Policy", "no-referrer").send(renderLegacyDisplay(venue, categories.map(publicRow) as never, items.map(publicRow) as never, width, height, `${match[1]}.${match[2]}`));
+    response.status(200).type("html").set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'").set("Referrer-Policy", "no-referrer").send(renderLegacyDisplay(venue, categories.map(publicRow) as never, items.map(publicRow) as never, width, height, `${match[1]}.${match[2]}`));
   }));
   const databaseId = config.appwriteDatabaseId;
 
