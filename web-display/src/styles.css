@@ -474,41 +474,64 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .nutrition-row button { min-height: 42px; padding: 8px 12px; border: 1px solid var(--staff-primary); border-radius: 8px; color: white; background: var(--staff-primary); font: 700 13px inherit; }
 @media (max-width: 600px) { .nutrition-row { grid-template-columns: 1fr 1fr; } .nutrition-row > b { grid-column: 1 / -1; } .nutrition-row button { min-height: 44px; } .nutrition-toggles { display: grid; } .page h2 { grid-template-columns: minmax(0, 1fr); gap: 5px; } .menu-column-labels { justify-content: flex-end; } }
 
-/* Chromium 38 display fallback: no custom properties, clamp(), or CSS Grid. */
+/* Old webOS / Chromium 38: fixed-pixel layout, flex and table-era primitives only. */
 .legacy-tv, .legacy-tv body, .legacy-tv #root { font-family: OnestStatic, Arial, sans-serif; }
-.legacy-tv .display-shell { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
-.legacy-tv .display-menu { display: block; width: 100%; height: 100%; min-height: 100%; padding: 48px; }
-.legacy-tv .display-header { display: flex; height: 10%; min-height: 74px; }
-.legacy-tv .display-header h1 { font-size: 56px; }
-.legacy-tv .display-clock { font-size: 26px; }
-.legacy-tv .logo { width: 220px; height: 132px; }
-.legacy-tv .logo-top-left > header { padding-left: 230px; }
-.legacy-tv .logo-top-right > header { padding-right: 230px; }
-.legacy-tv .logo-bottom-left > footer { padding-left: 230px; }
-.legacy-tv .logo-bottom-right > footer { padding-right: 230px; }
-.legacy-tv .page { display: flex; height: 82%; min-height: 0; }
-.legacy-tv .page > .column { display: block; flex: 1 1 0; width: 0; margin-right: 32px; }
+.legacy-tv .display-shell { position: fixed; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden; }
+.legacy-tv .display-menu { display: block; width: 100%; height: 100%; min-height: 0; padding: 36px 48px 24px; }
+.legacy-tv .display-header { display: flex; height: 11%; min-height: 68px; max-height: 118px; gap: 20px; }
+.legacy-tv .display-header h1 { flex: 1; overflow: hidden; font-size: 56px; line-height: 1.02; letter-spacing: -1px; }
+.legacy-tv .display-header-meta { flex: 0 0 auto; margin-left: 12px; gap: 16px; }
+.legacy-tv .display-clock { margin-left: 0; font-size: 24px; }
+.legacy-tv .page-indicator { padding: 4px 12px; font-size: 19px; }
+.legacy-tv .logo { width: 200px; height: 120px; }
+.legacy-tv .logo-top-left .logo, .legacy-tv .logo-top-right .logo { top: 3%; }
+.legacy-tv .logo-top-left .logo { left: 3%; }
+.legacy-tv .logo-top-right .logo { right: 3%; }
+.legacy-tv .logo-bottom-left .logo { bottom: 3%; left: 3%; }
+.legacy-tv .logo-bottom-right .logo { right: 3%; bottom: 3%; }
+.legacy-tv .logo-top-left > header { padding-left: 210px; }
+.legacy-tv .logo-top-right > header { padding-right: 210px; }
+.legacy-tv .logo-bottom-left > footer { padding-left: 210px; }
+.legacy-tv .logo-bottom-right > footer { padding-right: 210px; }
+.legacy-tv .page { display: flex; height: 82%; min-height: 0; overflow: hidden; }
+.legacy-tv .page > .column { display: block; flex: 1 1 0; width: 0; min-width: 0; margin-right: 30px; overflow: hidden; }
 .legacy-tv .page > .column:last-child { margin-right: 0; }
-.legacy-tv .page h2 { display: flex; align-items: flex-end; justify-content: space-between; font-size: 30px; }
-.legacy-tv .menu-column-labels { display: inline-flex; }
-.legacy-tv .menu-item { display: flex; min-height: 46px; padding: 8px 0; font-size: 30px; }
-.legacy-tv .menu-item .item-name { flex: 0 1 auto; }
-.legacy-tv .menu-item .dots { flex: 1 1 auto; }
-.legacy-tv .menu-item .price { flex: 0 0 7em; width: 7em; }
-.legacy-tv .menu-item.has-serving, .legacy-tv .menu-item.has-calories { flex-wrap: wrap; font-size: 19px; }
-.legacy-tv .menu-item.has-serving .item-name, .legacy-tv .menu-item.has-calories .item-name { flex: 0 0 100%; }
+.legacy-tv .page h2 { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin: 8px 0 5px; padding-bottom: 7px; font-size: 29px; line-height: 1.08; }
+.legacy-tv .menu-column-labels { display: inline-flex; flex: 0 0 auto; gap: 7px; font-size: 16px; }
+.legacy-tv .menu-item { display: flex; align-items: flex-end; min-height: 0; padding: 6px 0; font-size: 30px; line-height: 1.16; }
+.legacy-tv .menu-item .item-name { flex: 0 1 auto; min-width: 0; overflow-wrap: break-word; word-wrap: break-word; }
+.legacy-tv .menu-item .dots { display: block; flex: 1 1 auto; min-width: 12px; margin: 0 8px 5px; }
+.legacy-tv .menu-item .price { display: block; flex: 0 0 6.6em; width: 6.6em; font-size: 1em; }
+.legacy-tv .menu-item.has-serving, .legacy-tv .menu-item.has-calories { position: relative; display: block; padding: 5px 0 28px; font-size: 19px; }
+.legacy-tv .menu-item.has-serving .item-name, .legacy-tv .menu-item.has-calories .item-name { display: block; width: 100%; font-size: 1.12em; }
 .legacy-tv .menu-item.has-serving .dots, .legacy-tv .menu-item.has-calories .dots { display: none; }
-.legacy-tv .menu-item.has-serving .serving-size, .legacy-tv .menu-item.has-calories .serving-size { margin-left: auto; }
-.legacy-tv .menu-item.has-serving .price, .legacy-tv .menu-item.has-calories .price { flex: 0 0 auto; width: auto; margin-left: 20px; }
-.legacy-tv .menu-item .calories { margin-left: 18px; }
-.legacy-tv .break-panel { position: fixed; top: 0; right: auto; bottom: 0; left: 64%; display: block; width: 36%; height: 100%; padding: 48px 24px; color: #201f1c; background: #f6eee5; transform: translate3d(100%, 0, 0); transition: transform 600ms ease, opacity 600ms ease; }
+.legacy-tv .menu-item.has-serving .serving-size, .legacy-tv .menu-item.has-calories .serving-size { position: absolute; left: 0; bottom: 3px; font-size: 16px; }
+.legacy-tv .menu-item.has-serving .price, .legacy-tv .menu-item.has-calories .price { position: absolute; right: 0; bottom: 3px; width: auto; margin: 0; font-size: 19px; }
+.legacy-tv .menu-item .calories { position: absolute; right: 0; bottom: 3px; margin: 0; font-size: 16px; }
+.legacy-tv .menu-item.has-calories .price { right: 86px; }
+.legacy-tv .menu-item.has-serving.has-calories .price { right: 86px; }
+.legacy-tv .empty { height: 70%; font-size: 38px; }
+.legacy-tv footer { height: 5%; min-height: 24px; font-size: 16px; }
+.legacy-tv .break-panel { position: fixed; top: 0; right: auto; bottom: 0; left: 100%; display: block; width: 36%; height: 100%; padding: 38px 24px; color: #201f1c; background: #f6eee5; transform: translateX(0); transition: left 600ms ease; }
 .legacy-tv .break-panel > * { display: block; width: 100%; }
-.legacy-tv .break-state-label { padding-top: 12px; color: #a95112; font-size: 42px; text-align: center; }
-.legacy-tv .break-timer { position: absolute; top: 40%; left: 0; font-size: 72px; text-align: center; }
-.legacy-tv .break-expired-text { position: absolute; top: 38%; left: 0; color: #a9342b; font-size: 48px; text-align: center; }
-.legacy-tv .display-shell.break-active .break-panel { transform: translate3d(0, 0, 0); opacity: 1; visibility: visible; }
+.legacy-tv .break-state-label { padding-top: 12px; color: #a95112; font-size: 34px; line-height: 1.1; text-align: center; }
+.legacy-tv .break-panel .break-timer { position: absolute; top: 40%; left: 0; font-size: 72px; line-height: 1; text-align: center; }
+.legacy-tv .break-expired-text { position: absolute; top: 38%; left: 0; color: #a9342b; font-size: 42px; line-height: 1.1; text-align: center; }
+.legacy-tv .display-shell.break-active .break-panel { left: 64%; opacity: 1; visibility: visible; }
 .legacy-tv .display-shell.break-active .display-clock { opacity: 0; }
 .legacy-tv .status { font-family: Arial, sans-serif; }
+@media screen and (max-width: 1100px) {
+  .legacy-tv .display-menu { padding: 24px 28px 16px; }
+  .legacy-tv .display-header h1 { font-size: 42px; }
+  .legacy-tv .display-clock { font-size: 18px; }
+  .legacy-tv .logo { width: 150px; height: 90px; }
+  .legacy-tv .logo-top-left > header { padding-left: 160px; }
+  .legacy-tv .logo-top-right > header { padding-right: 160px; }
+  .legacy-tv .page > .column { margin-right: 18px; }
+  .legacy-tv .page h2 { font-size: 23px; }
+  .legacy-tv .menu-item { font-size: 23px; }
+  .legacy-tv .break-panel .break-timer { font-size: 54px; }
+}
 
 /* Staff list actions: one selection checkbox per dish, with touch-sized edit/delete controls. */
 .availability-item { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px; border-bottom: 1px solid #edf3ed; transition: opacity 220ms ease; }
