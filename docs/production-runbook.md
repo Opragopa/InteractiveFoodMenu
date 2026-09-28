@@ -3,18 +3,19 @@
 ## Deploy
 
 GitHub Actions deploys every successful push to `main` after both CI jobs pass.
-Configure a GitHub Actions environment named `production` with these secrets:
+The deploy job uses a self-hosted Windows runner in the signed-in Docker Desktop
+session. In GitHub, open **Settings → Actions → Runners → New self-hosted runner**
+and configure a Windows x64 runner for this repository. Start it with `run.cmd`
+from the `drago` desktop session; do not install it as a Windows service, because
+Docker Desktop's credential helper needs that interactive logon session.
+
+Configure the GitHub Actions environment named `production` with this secret:
 
 | Secret | Value |
 | --- | --- |
-| `PROD_HOST` | Public host name or IP for Windows OpenSSH |
-| `PROD_SSH_PORT` | OpenSSH port (optional; defaults to `22`) |
-| `PROD_USER` | Windows account that owns the project checkout and Docker Desktop session |
 | `PROD_PATH` | Project checkout path, for example `C:\InteractiveFoodMenu` |
-| `PROD_SSH_KEY` | Private Ed25519 key used by Actions; install its public key for `PROD_USER` |
-| `PROD_KNOWN_HOSTS` | Pinned `known_hosts` entry for the server (obtain and verify its fingerprint out of band) |
 
-The server must have Windows OpenSSH Server, Git, Docker Desktop with Compose v2, and the production `.env.deploy` / `.env.backend` files. The SSH account needs non-interactive GitHub read access to this repository and must be able to run Docker Compose. Keep Docker Desktop signed in for that account; test the exact SSH command interactively before enabling the environment. The workflow pins the commit from the triggering push, builds API and web, runs the idempotent Appwrite bootstrap, recreates services, then verifies public health, readiness, CORS, and `/build-version.txt`.
+The server must have Git, Docker Desktop with Compose v2, and the production `.env.deploy` / `.env.backend` files. The runner uses the signed-in account's existing Docker Desktop session. The workflow pins the commit from the triggering push, builds API and web, runs the idempotent Appwrite bootstrap, recreates services, then verifies public health, readiness, CORS, and `/build-version.txt`.
 
 Do not place private keys or environment files in the repository. Protect the `production` environment with the approval and branch rules appropriate for the server.
 

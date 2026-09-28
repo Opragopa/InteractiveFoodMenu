@@ -1,11 +1,15 @@
 param(
   [Parameter(Mandatory = $true)]
   [ValidatePattern('^[0-9a-f]{40}$')]
-  [string]$ExpectedCommit
+  [string]$ExpectedCommit,
+
+  [Parameter(Mandatory = $true)]
+  [ValidateNotNullOrEmpty()]
+  [string]$RepoPath
 )
 
 $ErrorActionPreference = 'Stop'
-Set-Location -LiteralPath (Join-Path $PSScriptRoot '..')
+Set-Location -LiteralPath $RepoPath
 
 git fetch origin main
 if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
