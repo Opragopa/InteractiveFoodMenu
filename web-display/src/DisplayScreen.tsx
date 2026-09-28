@@ -70,9 +70,14 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   // The break panel slides over the menu like a physical overlay. Keep menu
   // pagination and sizing stable while it is open.
   const usableWidth = viewport.width;
-  const scale = useMemo(() => venue.displayScaleMode === "manual"
-    ? Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100
-    : autoScaleForMenu(categories, items, usableWidth, viewport.height), [venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.height]);
+  const legacyTv = document.documentElement.classList.contains("legacy-tv");
+  const scale = useMemo(() => {
+    const configuredScale = Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100;
+    // Old TVs use only the saved percentage; automatic viewport fitting can
+    // shift their layout between devices and make the displayed scale unclear.
+    if (legacyTv || venue.displayScaleMode === "manual") return configuredScale;
+    return autoScaleForMenu(categories, items, usableWidth, viewport.height);
+  }, [legacyTv, venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.height]);
   const layout = useMemo(() => layoutForViewport(usableWidth / scale, viewport.height / scale, viewport.height / scale), [usableWidth, viewport.height, scale]);
   const availableHeight = Math.max(180, viewport.height / scale - 190);
   const columnWidth = Math.max(220, (usableWidth / scale - Math.max(0, layout.columnCount - 1) * 32) / layout.columnCount);
