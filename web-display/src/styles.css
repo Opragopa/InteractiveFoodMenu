@@ -1,4 +1,13 @@
 @font-face { font-family: Onest; src: url("/fonts/onest-variable.ttf") format("truetype"); font-style: normal; font-weight: 100 900; font-display: swap; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-thin.ttf") format("truetype"); font-style: normal; font-weight: 100; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-extralight.ttf") format("truetype"); font-style: normal; font-weight: 200; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-light.ttf") format("truetype"); font-style: normal; font-weight: 300; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-regular.ttf") format("truetype"); font-style: normal; font-weight: 400; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-medium.ttf") format("truetype"); font-style: normal; font-weight: 500; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-semibold.ttf") format("truetype"); font-style: normal; font-weight: 600; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-bold.ttf") format("truetype"); font-style: normal; font-weight: 700; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-extrabold.ttf") format("truetype"); font-style: normal; font-weight: 800; }
+@font-face { font-family: OnestStatic; src: url("/fonts/onest-static-black.ttf") format("truetype"); font-style: normal; font-weight: 900; }
 :root { font-family: Onest, Arial, sans-serif; color: #183b24; background: #f4f8f4; font-synthesis: none; --green-900: #183b24; --green-700: #285d36; --green-500: #56965b; --surface: #fff; --surface-soft: #f4f8f4; --line: #d8e7d9; --muted: #607568; }
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
@@ -466,6 +475,7 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 @media (max-width: 600px) { .nutrition-row { grid-template-columns: 1fr 1fr; } .nutrition-row > b { grid-column: 1 / -1; } .nutrition-row button { min-height: 44px; } .nutrition-toggles { display: grid; } .page h2 { grid-template-columns: minmax(0, 1fr); gap: 5px; } .menu-column-labels { justify-content: flex-end; } }
 
 /* Chromium 38 display fallback: no custom properties, clamp(), or CSS Grid. */
+.legacy-tv, .legacy-tv body, .legacy-tv #root { font-family: OnestStatic, Arial, sans-serif; }
 .legacy-tv .display-shell { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
 .legacy-tv .display-menu { display: block; width: 100%; height: 100%; min-height: 100%; padding: 48px; }
 .legacy-tv .display-header { display: flex; height: 10%; min-height: 74px; }
