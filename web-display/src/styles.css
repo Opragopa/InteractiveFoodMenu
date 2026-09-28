@@ -491,3 +491,12 @@ footer { display: flex; justify-content: space-between; align-items: center; min
   .selection-toolbar .bulk-actions button { flex: 1 1 0; min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .availability-item { transition: none !important; } }
+
+.staff-pairing { max-width: 1280px; margin: 0 auto 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 16px 18px; border: 1px solid var(--staff-border); border-radius: 14px; background: #fff; }
+.staff-pairing h2 { margin: 0 0 4px; color: var(--staff-ink); font-size: 17px; }
+.staff-pairing p { margin: 0; color: var(--staff-muted); font-size: 13px; }
+.staff-pairing > button { min-height: 42px; padding: 9px 15px; border: 1px solid var(--staff-primary); border-radius: 9px; color: #fff; background: var(--staff-primary); font: 700 14px inherit; cursor: pointer; }
+.staff-pairing-code { width: 100%; display: flex; align-items: center; gap: 16px; padding-top: 12px; border-top: 1px solid var(--staff-border); color: var(--staff-muted); font-size: 13px; }
+.staff-pairing-code img { width: 140px; height: 140px; padding: 6px; border: 1px solid var(--staff-border); border-radius: 10px; background: #fff; }
+@media (max-width: 600px) { .staff-pairing { align-items: stretch; flex-direction: column; margin-bottom: 14px; padding: 14px; } .staff-pairing > button { width: 100%; } .staff-pairing-code { flex-direction: column; align-items: flex-start; } }
+.staff-dashboard .staff-actions .staff-qr-action { border-color: var(--staff-primary); color: var(--staff-primary); font-weight: 700; }

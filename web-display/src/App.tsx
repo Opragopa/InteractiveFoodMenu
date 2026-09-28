@@ -159,6 +159,8 @@ function StaffScreen() {
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showStaffQr, setShowStaffQr] = useState(false);
+  const [staffQr, setStaffQr] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ kind: "category" | "item"; id: string; name: string } | null>(null);
   const availabilityListRef = useRef<HTMLDivElement | null>(null);
   const previousRowsRef = useRef<Map<string, number> | null>(null);
@@ -403,6 +405,16 @@ function StaffScreen() {
     localStorage.setItem(`ifm-staff-onboarding-${code}`, "dismissed");
     setShowOnboarding(false);
   };
+  useEffectQr(() => {
+    let cancelled = false;
+    if (!showStaffQr || !code.trim()) { setStaffQr(""); return; }
+    const staffUrl = new URL("/staff", window.location.origin);
+    staffUrl.searchParams.set("venue", code.trim().toLowerCase());
+    QRCode.toDataURL(staffUrl.toString(), { margin: 2, width: 280, errorCorrectionLevel: "M" })
+      .then(dataUrl => { if (!cancelled) setStaffQr(dataUrl); })
+      .catch(() => { if (!cancelled) setStaffQr(""); });
+    return () => { cancelled = true; };
+  }, [showStaffQr, code]);
   const selectCsv = async (file: File | undefined) => {
     if (!file) return;
     setError(""); setCsvProgress(null);
@@ -416,9 +428,14 @@ function StaffScreen() {
         <div className="staff-actions">
           {venue?.breakActive ? <button type="button" className="primary-action" onClick={() => void stopBreak()} disabled={busy}>Завершить перерыв</button> : <span className="break-control"><input aria-label="Длительность перерыва" type="number" min={1} max={60} value={breakDuration} onChange={e => setBreakDuration(Number(e.target.value))} /><button type="button" className="primary-action" onClick={() => void startBreak()} disabled={busy}>Начать перерыв</button></span>}
           <button type="button" onClick={() => void loadMenu().then(() => setError("")).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось обновить меню."))} disabled={busy}>Обновить</button>
+          <button type="button" className="staff-qr-action" aria-expanded={showStaffQr} onClick={() => setShowStaffQr(value => !value)}>{showStaffQr ? "Скрыть QR" : "QR для сотрудника"}</button>
           <button type="button" className="subtle-action" onClick={() => { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
         </div>
       </header>
+      {showStaffQr && <section className="staff-pairing" aria-label="Подключение сотрудника">
+        <div><h2>Подключить сотрудника</h2><p>Покажите QR-код коллеге. Он откроет кабинет с заполненным кодом точки и введёт PIN точки.</p></div>
+        <div className="staff-pairing-code" aria-live="polite">{staffQr ? <img src={staffQr} alt="QR-код входа сотрудника в кабинет этой точки" /> : <span role="status">Создаём QR-код…</span>}<small>После сканирования сотруднику потребуется ввести PIN точки.</small></div>
+      </section>}
       <section className="staff-overview" aria-label="Сводка меню">
         <article><span>Позиций</span><strong>{items.length}</strong><small>{items.filter(item => item.isAvailable).length} доступны</small></article>
         <article><span>Нет в наличии</span><strong>{items.filter(item => !item.isAvailable).length}</strong><small>можно включить массово</small></article>
