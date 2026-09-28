@@ -72,22 +72,24 @@ export function autoScaleForMenu(categories: Category[], items: MenuItem[], widt
   // still use the full 50–160% range, while automatic mode grows only as far
   // as the viewport can comfortably render.
   const pagesAt = (scale: number) => {
-    const layout = layoutForViewport(width, height, height / scale);
+    const scaledWidth = width / scale;
+    const scaledHeight = height / scale;
+    const layout = layoutForViewport(scaledWidth, scaledHeight, scaledHeight);
     return paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount).length;
   };
   // Prefer a single complete screen. A sparse second page is harder to read
   // and wastes the available display area.
-  for (let percent = 120; percent >= 80; percent -= 5) {
+  for (let percent = 120; percent >= 75; percent -= 5) {
     const scale = percent / 100;
     if (pagesAt(scale) <= 1) return scale;
   }
-  for (let percent = 120; percent >= 80; percent -= 5) {
+  for (let percent = 120; percent >= 75; percent -= 5) {
     const scale = percent / 100;
     if (pagesAt(scale) <= maxPages) return scale;
   }
-  // Keep TV text at a readable size; additional pages are preferable to
-  // shrinking the entire menu below 80%.
-  return 0.8;
+  // Keep TV text readable; additional pages are preferable to shrinking
+  // the entire menu below 75%.
+  return 0.75;
 }
 
 export function itemNameScale(name: string) {

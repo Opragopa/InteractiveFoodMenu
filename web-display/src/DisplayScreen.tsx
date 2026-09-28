@@ -73,7 +73,7 @@ export function DisplayScreen({ venue, categories, items, logoUrl, connected, up
   const scale = useMemo(() => venue.displayScaleMode === "manual"
     ? Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100
     : autoScaleForMenu(categories, items, usableWidth, viewport.height), [venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.height]);
-  const layout = useMemo(() => layoutForViewport(usableWidth, viewport.height, viewport.height / scale), [usableWidth, viewport.height, scale]);
+  const layout = useMemo(() => layoutForViewport(usableWidth / scale, viewport.height / scale, viewport.height / scale), [usableWidth, viewport.height, scale]);
   const availableHeight = Math.max(180, viewport.height / scale - 190);
   const columnWidth = Math.max(220, (usableWidth / scale - Math.max(0, layout.columnCount - 1) * 32) / layout.columnCount);
 
