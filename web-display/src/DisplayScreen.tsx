@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { autoScaleForMenu, layoutForViewport, paginateMenuByHeight } from "./paginate";
+import { autoScaleForMenu, layoutForViewport, minMenuColumnWidth, paginateMenuByHeight } from "./paginate";
 import type { Category, MenuItem, Venue } from "./types";
 import { formatRussianText } from "./typography";
 import { remainingBreakSeconds } from "./break";
@@ -42,7 +42,10 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
   const [viewport, setViewport] = useState(readViewport);
   const [now, setNow] = useState(Date.now());
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
+  const [verticalSpace, setVerticalSpace] = useState(190);
   const shellRef = useRef<HTMLElement | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
+  const footerRef = useRef<HTMLElement | null>(null);
   const measureRef = useRef<HTMLDivElement | null>(null);
   const logoPosition = venue.logoPosition ?? "top-right";
   const logoInset = Math.min(20, Math.max(0, venue.logoInsetPercent ?? 3));
@@ -55,6 +58,7 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
   const dimPercent = Math.min(75, Math.max(25, venue.breakMenuDimPercent ?? 45));
   const itemFontSize = Math.min(54, Math.max(22, venue.menuItemFontSizePx ?? 34));
   const itemGap = Math.min(28, Math.max(4, venue.menuItemGapPx ?? 12));
+  const itemBaseSize = venue.showServingSize && venue.showCalories ? Math.min(itemFontSize, 16) : venue.showServingSize || venue.showCalories ? Math.min(itemFontSize, 18) : itemFontSize;
   const columnScales = [venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100].map(value => Math.min(160, Math.max(50, value)) / 100);
   const largestColumnScale = Math.max(...columnScales);
   const transitionMs = Math.min(1200, Math.max(200, venue.breakTransitionMs ?? 600));
@@ -77,20 +81,23 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
     return () => { removeEventListener("resize", resize); window.visualViewport?.removeEventListener("resize", resize); };
   }, []);
 
-  // The break panel slides over the menu like a physical overlay. Keep menu
-  // pagination and sizing stable while it is open.
-  const usableWidth = viewport.width;
+  // Reflow the menu into the area left of the break panel.
+  const usableWidth = breakActive ? viewport.width * (100 - panelWidth) / 100 : viewport.width;
   const legacyTv = document.documentElement.classList.contains("legacy-tv");
   const scale = useMemo(() => {
     const configuredScale = Math.min(160, Math.max(50, venue.displayScalePercent ?? 100)) / 100;
     // Old TVs use only the saved percentage; automatic viewport fitting can
     // shift their layout between devices and make the displayed scale unclear.
-    if (legacyTv || venue.displayScaleMode === "manual") return configuredScale;
+    if (legacyTv || venue.displayScaleMode === "manual") return breakActive ? configuredScale * usableWidth / viewport.width : configuredScale;
     return autoScaleForMenu(categories, items, usableWidth, viewport.height);
-  }, [legacyTv, venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.height]);
-  const layout = useMemo(() => layoutForViewport(usableWidth / scale, viewport.height / scale, viewport.height / scale), [usableWidth, viewport.height, scale]);
-  const availableHeight = Math.max(180, viewport.height / scale - 190);
-  const columnWidth = Math.max(220, (usableWidth / scale - Math.max(0, layout.columnCount - 1) * 32) / layout.columnCount);
+  }, [legacyTv, venue.displayScaleMode, venue.displayScalePercent, categories, items, usableWidth, viewport.width, viewport.height, breakActive]);
+  const menuPadding = Math.min(72, Math.max(24, viewport.width * .035));
+  const menuGap = Math.min(32, Math.max(16, viewport.width * .02));
+  const pageGap = Math.min(64, Math.max(28, viewport.width * .03));
+  const contentWidth = Math.max(1, usableWidth / scale - menuPadding * 2);
+  const layout = useMemo(() => layoutForViewport(contentWidth, viewport.height / scale, viewport.height / scale, minMenuColumnWidth(itemBaseSize * largestColumnScale, items)), [contentWidth, viewport.height, scale, itemBaseSize, largestColumnScale, items]);
+  const availableHeight = Math.max(1, viewport.height / scale - verticalSpace);
+  const columnWidth = Math.max(1, (contentWidth - Math.max(0, layout.columnCount - 1) * pageGap) / layout.columnCount);
 
   useLayoutEffect(() => {
     const root = measureRef.current;
@@ -102,12 +109,20 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
       if (keys.length === Object.keys(current).length && keys.every((key) => current[key] === next[key])) return current;
       return next;
     });
-  }, [categories, items, columnWidth, itemFontSize, itemGap, scale]);
+  }, [categories, items, columnWidth, itemFontSize, itemGap, scale, largestColumnScale, venue.showServingSize, venue.showCalories]);
 
-  const pages = useMemo(() => paginateMenuByHeight(categories, items, availableHeight / largestColumnScale, layout.columnCount, {
-    category: measuredHeights.category ?? 52,
-    item: (item) => measuredHeights[`item-${item.id}`] ?? itemFontSize * 1.4 + itemGap * 2,
-  }), [categories, items, availableHeight, largestColumnScale, layout.columnCount, measuredHeights, itemFontSize, itemGap]);
+  const pages = useMemo(() => paginateMenuByHeight(categories, items, availableHeight, layout.columnCount, {
+    category: Math.max(52 * largestColumnScale, ...categories.map(category => measuredHeights[`category-${category.id}`] ?? 0)),
+    item: (item) => Math.max(48 * largestColumnScale, measuredHeights[`item-${item.id}`] ?? (itemBaseSize * 1.4 + itemGap * 2) * largestColumnScale),
+  }), [categories, items, availableHeight, largestColumnScale, layout.columnCount, measuredHeights, itemBaseSize, itemGap]);
+
+  useLayoutEffect(() => {
+    const header = headerRef.current;
+    const footer = footerRef.current;
+    if (!header || !footer) return;
+    const reserved = menuPadding * 2 + menuGap * 2 + header.offsetHeight + footer.offsetHeight + 8;
+    setVerticalSpace(current => current === reserved ? current : reserved);
+  }, [viewport, scale, menuPadding, menuGap, venue.name, logoPosition, pages.length]);
 
   useEffect(() => { setPageIndex(0); }, [breakActive]);
   useEffect(() => {
@@ -125,23 +140,21 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
   } as React.CSSProperties;
 
   return <main ref={shellRef} className={`display-shell ${breakActive ? "break-active" : ""}`} lang="ru" style={style}>
-    <section className={`display-menu logo-${logoPosition}`} style={{ zoom: scale }}>
-      <header className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><div className="display-header-meta"><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time>{pages.length > 1 && <span className="page-indicator" aria-live="polite" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</div></header>
+    <section className={`display-menu logo-${logoPosition}`} style={{ zoom: scale, width: usableWidth / scale, height: viewport.height / scale, minHeight: viewport.height / scale }}>
+      <header ref={headerRef} className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><div className="display-header-meta"><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time>{pages.length > 1 && <span className="page-indicator" aria-live="polite" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</div></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
       {!page ? <div className="empty">Меню пока не заполнено</div> : <section className="page page-transition" key={`${pageIndex}-${items.length}-${breakActive}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
         {page.columns.map((column, columnIndex) => {
           const columnScale = columnScales[columnIndex] ?? 1;
-          const legacyFontSize = venue.showServingSize || venue.showCalories ? 19 : 30;
-          const itemBaseSize = legacyTv ? legacyFontSize : venue.showServingSize && venue.showCalories ? Math.min(itemFontSize, 16) : venue.showServingSize || venue.showCalories ? Math.min(itemFontSize, 18) : itemFontSize;
           return <div className="column" key={columnIndex} style={{ "--column-scale": columnScale } as React.CSSProperties}>{column.map((entry, rowIndex) => entry.kind === "category" ?
-            <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor, fontSize: `${(legacyTv ? 29 : 32) * columnScale}px` }}><span>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2> :
+            <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor, fontSize: `${32 * columnScale}px` }}><span>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2> :
             <div className={`menu-item menu-item-enter ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""} ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms`, fontSize: `${itemBaseSize * columnScale}px` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{entry.item.servingSize || "—"}</span>}<span className="price">{money.format(entry.item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{entry.item.caloriesKcal ?? "—"}</span>}</div>)}</div>;
         })}
       </section>}
-      <footer>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>
+      <footer ref={footerRef}>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>
     </section>
     <BreakPanel active={breakActive} endsAt={venue.breakEndsAt} expiredText={venue.breakExpiredText ?? "Скоро буду"} fontScale={breakFontScale} panelWidth={panelWidth} viewport={viewport} />
-    <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, fontSize: itemFontSize }}><h2 data-measure-key="category">Раздел</h2>{items.map((item) => <div className={`menu-item ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} data-measure-key={`item-${item.id}`} key={item.id}><span className="item-name">{formatRussianText(item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{item.servingSize || "—"}</span>}<span className="price">{money.format(item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{item.caloriesKcal ?? "—"}</span>}</div>)}</div>
+    <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, fontSize: itemBaseSize * largestColumnScale, "--column-scale": largestColumnScale, "--item-font-size": `${itemBaseSize * largestColumnScale}px`, "--item-gap": `${itemGap * largestColumnScale}px` } as React.CSSProperties}>{categories.map(category => <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} data-measure-key={`category-${category.id}`} key={category.id} style={{ fontSize: 32 * largestColumnScale }}><span>{formatRussianText(category.name)}<span className="continued"> · продолжение</span></span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2>)}{items.map((item) => <div className={`menu-item ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} data-measure-key={`item-${item.id}`} key={item.id}><span className="item-name">{formatRussianText(item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{item.servingSize || "—"}</span>}<span className="price">{money.format(item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{item.caloriesKcal ?? "—"}</span>}</div>)}</div>
   </main>;
 }
 

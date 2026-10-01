@@ -2,6 +2,14 @@ import type { Category, MenuItem, MenuPage, PageEntry } from "./types";
 
 export const MIN_DISPLAY_COLUMN_WIDTH = 580;
 
+// Leave room for a typical two-line name and a right-aligned price at the
+// configured font size. Extra menu entries go to the next column or page.
+export function minMenuColumnWidth(fontSize: number, items: MenuItem[] = []) {
+  const longestName = items.reduce((length, item) => Math.max(length, item.name.length), 0);
+  const twoLineWidth = longestName * fontSize * .54 / 2 + fontSize * 4.5 + 32;
+  return Math.max(MIN_DISPLAY_COLUMN_WIDTH, Math.ceil(fontSize * 13 + 160), Math.ceil(twoLineWidth));
+}
+
 export function paginateMenu(
   categories: Category[],
   items: MenuItem[],
@@ -52,9 +60,9 @@ export function paginateMenu(
   return pages;
 }
 
-export function layoutForViewport(width: number, height: number, rowLayoutHeight = height) {
+export function layoutForViewport(width: number, height: number, rowLayoutHeight = height, minColumnWidth = MIN_DISPLAY_COLUMN_WIDTH) {
   const aspect = width / Math.max(1, height);
-  const columnCount = Math.min(3, Math.max(1, Math.floor((width + 32) / (MIN_DISPLAY_COLUMN_WIDTH + 32))));
+  const columnCount = Math.min(3, Math.max(1, Math.floor((width + 32) / (minColumnWidth + 32))));
   const responsiveColumnCount = aspect >= 1.25 ? columnCount : 1;
   // These are the baseline CSS pixels used by the display. The whole menu is
   // scaled uniformly, so viewport units here would be multiplied twice by

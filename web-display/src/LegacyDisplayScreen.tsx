@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DisplayScreenProps } from "./DisplayScreen";
 import { contrastForeground } from "./DisplayScreen";
 import type { MenuItem } from "./types";
-import { layoutForViewport, paginateMenuByHeight } from "./paginate";
+import { layoutForViewport, minMenuColumnWidth, paginateMenuByHeight } from "./paginate";
 import { formatRussianText } from "./typography";
 import { remainingBreakSeconds } from "./break";
 
@@ -18,17 +18,19 @@ export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connect
   const [heights, setHeights] = useState<Record<string, number>>({});
   const [fontRevision, setFontRevision] = useState(0);
   const measureRef = useRef<HTMLDivElement>(null);
-  const scale = bounded(venue.displayScalePercent, 100, 50, 160) / 100;
-  const width = viewport.width / scale;
+  const active = venue.breakActive === true;
+  const panelWidth = bounded(venue.breakPanelWidthPercent, 36, 30, 50);
+  const scale = bounded(venue.displayScalePercent, 100, 50, 160) / 100 * (active ? (100 - panelWidth) / 100 : 1);
+  const width = viewport.width * (active ? (100 - panelWidth) / 100 : 1) / scale;
   const height = viewport.height / scale;
   const inset = width < 1400 ? 28 : 40;
   const contentWidth = width - inset * 2;
-  const columnCount = layoutForViewport(contentWidth, height).columnCount;
   const gutter = 28;
-  const columnWidth = (contentWidth - (columnCount - 1) * gutter) / columnCount;
   const columnScales = [venue.columnScale1Percent, venue.columnScale2Percent, venue.columnScale3Percent].map(value => bounded(value, 100, 50, 160) / 100);
-  const maxColumnScale = Math.max(...columnScales.slice(0, columnCount));
   const fontSize = bounded(venue.menuItemFontSizePx, 34, 22, 54);
+  const columnCount = layoutForViewport(contentWidth, height, height, minMenuColumnWidth(fontSize * Math.max(...columnScales), items)).columnCount;
+  const columnWidth = (contentWidth - (columnCount - 1) * gutter) / columnCount;
+  const maxColumnScale = Math.max(...columnScales.slice(0, columnCount));
   const itemGap = bounded(venue.menuItemGapPx, 12, 4, 28);
   const background = /^#[0-9a-f]{6}$/i.test(venue.backgroundColor) ? venue.backgroundColor : "#56965B";
   const accent = /^#[0-9a-f]{6}$/i.test(venue.accentColor) ? venue.accentColor : "#FFFFFF";
@@ -43,8 +45,6 @@ export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connect
   const headerHeight = Math.max(100, showLogo && logoTop ? logoInset + logoHeight - inset + 20 : 0);
   const footerHeight = Math.max(32, showLogo && !logoTop ? logoInset + logoHeight - inset + 12 : 0);
   const availableHeight = Math.max(1, height - inset * 2 - headerHeight - footerHeight);
-  const active = venue.breakActive === true;
-  const panelWidth = bounded(venue.breakPanelWidthPercent, 36, 30, 50);
   const seconds = remainingBreakSeconds(active, venue.breakEndsAt, now);
   const transition = bounded(venue.breakTransitionMs, 600, 200, 1200);
 

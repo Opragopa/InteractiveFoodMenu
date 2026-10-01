@@ -35,6 +35,18 @@ describe("display break timer", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1_100); });
     expect(screen.getByText("Скоро буду")).toBeTruthy();
   });
+
+  it("fits the menu beside the break panel and restores full width afterwards", () => {
+    const { container, rerender } = render(<DisplayScreen venue={{ ...venue, breakActive: false, breakPanelWidthPercent: 40, displayScaleMode: "manual", displayScalePercent: 100 }} categories={[]} items={[]} logoUrl="" connected />);
+    const menu = container.querySelector(".display-menu") as HTMLElement;
+    const fullWidth = parseFloat(menu.style.width) * parseFloat(menu.style.zoom);
+    rerender(<DisplayScreen venue={{ ...venue, breakPanelWidthPercent: 40, displayScaleMode: "manual", displayScalePercent: 100 }} categories={[]} items={[]} logoUrl="" connected />);
+    expect(parseFloat(menu.style.width) * parseFloat(menu.style.zoom)).toBeCloseTo(fullWidth * .6);
+    expect(menu.style.zoom).toBe("0.6");
+    rerender(<DisplayScreen venue={{ ...venue, breakActive: false, breakPanelWidthPercent: 40, displayScaleMode: "manual", displayScalePercent: 100 }} categories={[]} items={[]} logoUrl="" connected />);
+    expect(parseFloat(menu.style.width) * parseFloat(menu.style.zoom)).toBeCloseTo(fullWidth);
+    expect(menu.style.zoom).toBe("1");
+  });
 });
 
 describe("legacy display", () => {

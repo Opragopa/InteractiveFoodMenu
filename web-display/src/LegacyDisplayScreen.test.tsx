@@ -77,4 +77,15 @@ describe("legacy screen states", () => {
     expect(container.querySelectorAll(".tv-column")).toHaveLength(2);
     expect(container.querySelector(".tv-meta > span")).toBeNull();
   });
+
+  it("reflows the menu into the width left of the break panel", () => {
+    const venue = { ...props.venue, breakPanelWidthPercent: 40 };
+    const { container, rerender } = render(<LegacyDisplayScreen {...props} venue={venue} />);
+    const menu = container.querySelector(".tv-menu") as HTMLElement;
+    expect(parseFloat(menu.style.width)).toBe(1024);
+    rerender(<LegacyDisplayScreen {...props} venue={{ ...venue, breakActive: true }} />);
+    expect(parseFloat(menu.style.width) * parseFloat(menu.style.zoom)).toBeCloseTo(1024 * .6);
+    expect(menu.style.zoom).toBe("0.6");
+    expect((container.querySelector(".tv-column") as HTMLElement).style.width).not.toBe("");
+  });
 });

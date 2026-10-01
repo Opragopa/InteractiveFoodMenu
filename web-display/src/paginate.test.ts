@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoScaleForMenu, itemNameScale, layoutForViewport, MIN_DISPLAY_COLUMN_WIDTH, paginateMenu, paginateMenuByHeight } from "./paginate";
+import { autoScaleForMenu, itemNameScale, layoutForViewport, minMenuColumnWidth, MIN_DISPLAY_COLUMN_WIDTH, paginateMenu, paginateMenuByHeight } from "./paginate";
 import { contrastForeground } from "./DisplayScreen";
 import type { Category, MenuItem } from "./types";
 
@@ -53,6 +53,13 @@ describe("paginateMenu", () => {
   it("keeps automatic scale in a legible range", () => {
     expect(autoScaleForMenu(categories, items, 1920, 1080)).toBeLessThanOrEqual(1.2);
     expect(itemNameScale("Очень длинное название блюда с большим количеством слов")).toBe(1);
+  });
+
+  it("uses fewer columns when enlarged text needs more room for names and prices", () => {
+    expect(layoutForViewport(1366, 768, 768, minMenuColumnWidth(34)).columnCount).toBe(2);
+    expect(layoutForViewport(1366, 768, 768, minMenuColumnWidth(54 * 1.6)).columnCount).toBe(1);
+    const longItems = [{ ...items[0], name: "Филе цыплёнка с картофельным пюре и сливочным соусом" }];
+    expect(layoutForViewport(1270, 768, 768, minMenuColumnWidth(34, longItems)).columnCount).toBe(1);
   });
 
   it("keeps a small section together and repeats an oversized section heading", () => {
