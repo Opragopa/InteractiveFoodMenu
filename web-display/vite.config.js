@@ -31,7 +31,8 @@ export default defineConfig({
         // Older Samsung and LG TVs can use Vite's ES5 bundle and runtime polyfills.
         legacy({
             targets: ["chrome >= 38"],
-            polyfills: ["es.promise", "es.symbol", "es.array.iterator", "es.object.assign"],
+            polyfills: true,
+            additionalLegacyPolyfills: ["core-js/modules/es.object.assign", "core-js/modules/es.array.iterator"],
             renderLegacyChunks: true,
         }),
         // Older TV engines may pass Vite's module probe but still fail on modern JS.

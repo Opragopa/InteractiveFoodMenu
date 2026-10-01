@@ -31,3 +31,7 @@ firestore-debug.log
 ui-debug.log
 storage-debug.log
 .runtimeconfig.json
+
+# Local browser verification artifacts.
+.playwright-cli/
+output/playwright/

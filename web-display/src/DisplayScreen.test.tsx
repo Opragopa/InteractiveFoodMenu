@@ -36,3 +36,31 @@ describe("display break timer", () => {
     expect(screen.getByText("Скоро буду")).toBeTruthy();
   });
 });
+
+describe("legacy display", () => {
+  beforeEach(() => {
+    document.documentElement.classList.add("legacy-tv");
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T12:00:00.000Z"));
+  });
+  afterEach(() => {
+    cleanup();
+    document.documentElement.classList.remove("legacy-tv");
+    vi.useRealTimers();
+  });
+  it("applies staff nutrition changes to visible rows and pagination measurements", () => {
+    const props = { venue: { ...venue, breakActive: false }, categories: [{ id: "c1", venueId: "v1", name: "Обед", sortOrder: 0 }], items: [{ id: "i1", venueId: "v1", categoryId: "c1", name: "Суп", priceMinor: 15000, servingSize: "250 г", caloriesKcal: 120, sortOrder: 0, isAvailable: true }], logoUrl: "", connected: true };
+    const { container, rerender } = render(<DisplayScreen {...props} />);
+    expect(container.querySelector(".tv-page .tv-row-details")).toBeNull();
+    rerender(<DisplayScreen {...props} venue={{ ...props.venue, showServingSize: true, showCalories: true }} />);
+    expect(container.querySelector(".tv-page .tv-row-details")?.textContent).toBe("Выход: 250 г120 ккал");
+    expect(container.querySelector(".tv-measure .tv-row-details")?.textContent).toBe("Выход: 250 г120 ккал");
+  });
+  it("finishes the break timer and uses the configured panel width", async () => {
+    const { container } = render(<DisplayScreen venue={{ ...venue, breakEndsAt: new Date(Date.now() + 1000).toISOString(), breakPanelWidthPercent: 48 }} categories={[]} items={[]} logoUrl="" connected />);
+    expect(screen.getByText("0:01")).toBeTruthy();
+    expect((container.querySelector(".tv-break") as HTMLElement).style.width).toBe("48%");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1100); });
+    expect(screen.getByText("Скоро буду")).toBeTruthy();
+  });
+});

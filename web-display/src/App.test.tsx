@@ -4,6 +4,8 @@ import { App } from "./App";
 
 const mocks = vi.hoisted(() => ({
   staffLogin: vi.fn(),
+  displayLogin: vi.fn(),
+  menuVersion: vi.fn(),
   menu: vi.fn(),
   updateItemsAvailability: vi.fn(),
 }));
@@ -11,6 +13,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./api", () => ({
   api: {
     staffLogin: mocks.staffLogin,
+    displayLogin: mocks.displayLogin,
+    menuVersion: mocks.menuVersion,
     menu: mocks.menu,
     updateItemsAvailability: mocks.updateItemsAvailability,
     updateItem: vi.fn(),
@@ -73,5 +77,19 @@ describe("staff application flow", () => {
     expect(toolbar).not.toBeNull();
     fireEvent.click(within(toolbar as HTMLElement).getByRole("button", { name: "В наличии" }));
     await waitFor(() => expect(updateItemsAvailability).toHaveBeenCalledWith("staff-token", ["tea"], true));
+  });
+});
+
+describe("display links after nginx redirect", () => {
+  afterEach(() => cleanup());
+  it.each(["/", "/connect", "/connect/"])("opens the menu from %s with a display hash", async path => {
+    window.history.replaceState({}, "", `${path}#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789`);
+    mocks.displayLogin.mockResolvedValue({ token: "screen-token" });
+    mocks.menu.mockResolvedValue({ venue, categories, items });
+    mocks.menuVersion.mockResolvedValue({ version: 4 });
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Зимний сад" })).toBeTruthy());
+    expect(mocks.displayLogin).toHaveBeenCalledWith("pairingtoken123", "abcdEFGH0123456789abcdEFGH0123456789");
+    expect(screen.queryByText("Подключение экрана")).toBeNull();
   });
 });

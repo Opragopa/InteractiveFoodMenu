@@ -3,6 +3,7 @@ import { autoScaleForMenu, layoutForViewport, paginateMenuByHeight } from "./pag
 import type { Category, MenuItem, Venue } from "./types";
 import { formatRussianText } from "./typography";
 import { remainingBreakSeconds } from "./break";
+import { LegacyDisplayScreen } from "./LegacyDisplayScreen";
 
 const money = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2 });
 
@@ -27,9 +28,16 @@ function formatLocalDateTime(now: number) {
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(now).replace(",", "");
 }
 
-export function DisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt }: {
+export type DisplayScreenProps = {
   venue: Venue; categories: Category[]; items: MenuItem[]; logoUrl: string; connected: boolean; updatedAt?: number | null;
-}) {
+};
+
+export function DisplayScreen(props: DisplayScreenProps) {
+  return document.documentElement.classList.contains("legacy-tv")
+    ? <LegacyDisplayScreen {...props} /> : <ModernDisplayScreen {...props} />;
+}
+
+function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt }: DisplayScreenProps) {
   const [pageIndex, setPageIndex] = useState(0);
   const [viewport, setViewport] = useState(readViewport);
   const [now, setNow] = useState(Date.now());

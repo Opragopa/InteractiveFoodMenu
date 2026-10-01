@@ -36,7 +36,7 @@ function parseDisplayHash() {
 
 export function App() {
   if (window.location.pathname === "/hub") return <BackendHub />;
-  if (window.location.pathname === "/connect") return <ConnectScreen />;
+  if (/^\/connect\/?$/.test(window.location.pathname) && !parseDisplayHash()) return <ConnectScreen />;
   if (window.location.pathname === "/staff") return <StaffScreen />;
   if (window.location.pathname === "/pair") return <PairScreen />;
   const [sessionToken, setSessionToken] = useState("");

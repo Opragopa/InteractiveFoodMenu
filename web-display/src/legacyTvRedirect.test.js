@@ -36,7 +36,7 @@ describe("legacy TV display fallback", () => {
 
   it("normalizes old Firebase display links to the Appwrite hash route", () => {
     expect(redirectFor("Mozilla/5.0 (TV; old WebKit)", "", "/display/pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789"))
-      .toBe("/#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789");
+      .toBe("/connect#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789");
   });
 
   it("does not redirect malformed or ordinary browser URLs", () => {
@@ -59,4 +59,13 @@ describe("legacy TV display fallback", () => {
     new Function("navigator", "window", script)({ userAgent: "Mozilla/5.0 (TV; old WebKit)" }, fakeWindow);
     expect(destination).toBe("/connect-legacy.html");
   });
+});
+
+// Nginx preserves the fragment when redirecting / to /connect.
+it.each(["Mozilla/5.0 (Web0S; Linux) Chrome/38.0", "Mozilla/5.0 (SMART-TV; Tizen 5.0) Chrome/63.0", "Chrome/136.0"])("preserves display credentials after the root redirect: %s", userAgent => {
+  expect(redirectFor(userAgent, displayHash, "/connect")).toBe("");
+  expect(redirectFor(userAgent, displayHash, "/connect/")).toBe("");
+});
+it("routes Chromium 38 connect with a fetch polyfill to the static page", () => {
+  expect(redirectFor("Chrome/38.0", "", "/connect/")).toBe("/connect-legacy.html");
 });

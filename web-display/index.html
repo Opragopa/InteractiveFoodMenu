@@ -23,14 +23,16 @@
         if (legacyChromium || oldTv) document.documentElement.className += " legacy-tv";
         // Some older TVs do not identify themselves as webOS/Tizen but still
         // lack fetch. The static XHR-based page is compatible with them.
-        if (oldTv && window.location.pathname === "/connect") {
+        // A root redirect preserves #credentials: /connect#... is a display,
+        // not a new pairing. Never drop that fragment on the static page.
+        if ((oldTv || legacyChromium) && /^\/connect\/?$/.test(window.location.pathname) && !hashDisplay) {
           window.location.replace("/connect-legacy.html");
           return;
         }
         // Legacy TV displays stay in React; the ES5 entry supplies fetch and
         // language polyfills. The connect flow remains XHR-based.
         if (legacyPathDisplay) {
-          window.location.replace("/#" + legacyPathDisplay[1] + "." + legacyPathDisplay[2]);
+          window.location.replace("/connect#" + legacyPathDisplay[1] + "." + legacyPathDisplay[2]);
         }
       })(navigator, window);
     </script>

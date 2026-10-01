@@ -30,3 +30,33 @@ HTML/JSON отчёты Stryker находятся в `backend-api/reports/mutati
 ## CI и ручная выкладка
 
 CI выполняет unit, build, Docker build и Android unit/debug build. Перед production дополнительно выполняются `npm run integration`, `npm run coverage`, `npm run mutation`, затем health-only load smoke и проверки `/health`/`/ready` по [production runbook](./production-runbook.md).
+
+## Редирект корня и старые ТВ
+
+Внешний nginx может перенаправлять только точный `/` на `/connect`:
+
+```nginx
+location = / {
+    return 302 /connect$is_args$args;
+}
+```
+
+`location /` должен по-прежнему проксировать приложение: `/staff`, `/hub`,
+`/pair`, `/assets/`, `/fonts/`, `/connect-legacy.html`. Уже установленный 301
+тоже поддерживается. Фрагмент `#token.secret` nginx не получает; браузер
+сохраняет его при редиректе без собственного фрагмента в Location.
+`/connect#token.secret` открывает меню; `/connect` без данных экрана запускает
+подключение. Старый `/display/token.secret` нормализуется на `/connect#...`.
+
+ТВ-ветка `LegacyDisplayScreen` использует статические TTF, численные размеры,
+Flexbox без gap и анимации transform/opacity. Общий масштаб берётся из сохранённого
+процента. Пагинация измеряет те же строки и реальные заголовки при максимальном
+масштабе используемых столбцов; это консервативно оставляет запас в меньших
+столбцах. После загрузки шрифта измерение повторяется. Современная ветка отдельная.
+
+Для проверки нужна production-сборка (`npm --prefix web-display run build`,
+затем `npm --prefix web-display run preview`), поскольку dev-сервер не выдаёт
+старый ES5 bundle. Проверять обычное меню, выход/ккал, несколько страниц,
+масштабы, включение/завершение перерыва и обновление данных. Использование
+User-Agent webOS в современном браузере проверяет выбор legacy bundle и вёрстку,
+но не заменяет запуск на настоящем Chromium 38/телевизоре.
