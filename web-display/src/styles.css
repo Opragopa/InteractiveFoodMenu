@@ -624,3 +624,41 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .tv-break { position: fixed; z-index: 12; top: 0; bottom: 0; left: 100%; height: 100%; padding: 40px 24px; color: #201f1c; background: #f6eee5; }
 .tv-break-label { color: #a95112; font-size: 34px; line-height: 1.15; font-weight: 700; text-align: center; }
 .tv-break-value { position: absolute; top: 50%; left: 0; width: 100%; padding: 0 20px; transform: translateY(-50%); line-height: 1.15; text-align: center; word-wrap: break-word; }
+
+/* Staff pages have their own spacing and surfaces; keep the TV styles isolated. */
+.auth-shell .staff-login { width: min(100%, 520px); min-height: 0; max-width: none; margin: 0; padding: clamp(24px, 5vw, 42px); align-content: start; background: var(--ui-surface); box-shadow: var(--ui-shadow); }
+.auth-shell .staff-login h1 { line-height: 1.08; }
+.auth-shell .staff-login button:not(.link-button) { min-height: 48px; }
+.staff-dashboard { padding: clamp(16px, 3vw, 40px) clamp(16px, 4vw, 64px) 64px; }
+.staff-dashboard .staff-topbar { min-height: 0; align-items: flex-start; gap: 24px; margin-bottom: 22px; padding: clamp(20px, 3vw, 32px); border: 1px solid var(--staff-border); border-radius: 20px; background: var(--staff-surface); box-shadow: 0 12px 32px rgba(40, 93, 54, .06); }
+.staff-dashboard .staff-topbar .staff-actions { max-width: 700px; }
+.staff-dashboard .staff-tabs { gap: 6px; margin-bottom: 22px; padding: 7px; border: 1px solid var(--staff-border); border-radius: 14px; background: var(--staff-surface); box-shadow: 0 6px 20px rgba(40, 93, 54, .04); }
+.staff-dashboard .staff-tabs button { flex: 1 1 auto; white-space: nowrap; }
+.staff-dashboard > section:not(.staff-overview):not(.staff-pairing):not(.venue-settings):not(.experimental-settings),
+.staff-dashboard > section.availability-workspace { padding: clamp(18px, 2.5vw, 30px); border: 1px solid var(--staff-border); border-radius: 18px; background: var(--staff-surface); box-shadow: 0 8px 24px rgba(40, 93, 54, .04); }
+.staff-dashboard > section.availability-workspace { margin-top: 0; }
+.staff-dashboard > section:not(.staff-overview):not(.staff-pairing):not(.venue-settings):not(.experimental-settings) > h2 { margin: 0 0 18px; padding: 0 0 12px; color: var(--staff-ink); border-bottom: 1px solid var(--staff-border); font-size: clamp(23px, 3vw, 30px); }
+.staff-dashboard .workspace-heading { margin-bottom: 22px; }
+.staff-dashboard .availability-list { gap: 12px; }
+.staff-dashboard .availability-list section { box-shadow: none; }
+@media (max-width: 760px) {
+  .staff-dashboard .staff-topbar { display: grid; gap: 18px; }
+  .staff-dashboard .staff-topbar .staff-actions { max-width: none; justify-content: flex-start; }
+  .staff-dashboard .staff-tabs { overflow-x: auto; }
+}
+@media (max-width: 600px) {
+  .auth-shell { padding: 16px; }
+  .auth-shell .staff-login { padding: 26px 22px; }
+  .staff-dashboard { padding: 16px 14px calc(40px + env(safe-area-inset-bottom)); }
+  .staff-dashboard .staff-topbar { margin: 0 0 16px; padding: 18px; border-radius: 16px; }
+  .staff-dashboard .staff-topbar .staff-actions { gap: 8px; }
+  .staff-dashboard .staff-tabs { position: sticky; top: 0; right: auto; bottom: auto; left: auto; z-index: 8; display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; margin: 0 0 16px; padding: 6px; border-radius: 12px; background: rgba(255, 255, 255, .98); box-shadow: 0 8px 24px rgba(24, 59, 36, .09); scrollbar-width: thin; }
+  .staff-dashboard .staff-tabs button { flex: 0 0 auto; min-width: 0; min-height: 42px; padding: 9px 13px; font-size: 13px; white-space: nowrap; }
+  .staff-dashboard .staff-tabs button:last-child { font-size: 13px; }
+  .staff-dashboard .staff-tabs button:last-child::after { content: none; }
+  .staff-dashboard > section:not(.staff-overview):not(.staff-pairing):not(.venue-settings):not(.experimental-settings),
+  .staff-dashboard > section.availability-workspace { padding: 18px 14px; border-radius: 16px; }
+  .staff-dashboard .staff-overview { gap: 10px; margin-bottom: 16px; }
+  .staff-dashboard > section.availability-workspace { margin-top: 0; }
+  .staff-dashboard .availability-toolbar { margin-right: 0; margin-left: 0; padding: 8px 0; }
+}

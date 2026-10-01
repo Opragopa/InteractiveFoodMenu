@@ -184,6 +184,9 @@ function StaffScreen() {
     setMenuLoading(true);
     try {
       const menu = await api.menu(sessionToken);
+      if (!menu?.venue || !Array.isArray(menu.categories) || !Array.isArray(menu.items)) {
+        throw new Error("Не удалось загрузить меню. Проверьте подключение к серверу.");
+      }
       setVenue(menu.venue as Venue);
       setCategories(menu.categories as Category[]);
       setItems(menu.items as MenuItem[]);
