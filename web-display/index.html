@@ -4,9 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f7f4ee" />
-    <title>Меню</title>
+    <title>Меню — InteractiveFoodMenu</title>
     <script>
       (function (navigator, window) {
+        if (window.location.pathname === "/hub") document.title = "Хаб — InteractiveFoodMenu";
+        if (window.location.pathname === "/staff") document.title = "Кабинет сотрудника — InteractiveFoodMenu";
         var userAgent = navigator.userAgent || "";
         var webOs = /Web0S|webOS/i.test(userAgent);
         var webOsVersion = /(?:Web0S|webOS)[\s/]+(\d+(?:\.\d+)?)/i.exec(userAgent);

@@ -53,6 +53,10 @@ export function App() {
   const legacyBrowser = typeof window.fetch !== "function";
 
   useEffect(() => {
+    document.title = venue?.name ? `Меню — ${venue.name}` : "Меню — InteractiveFoodMenu";
+  }, [venue?.name]);
+
+  useEffect(() => {
     const online = () => setConnected(true);
     const offline = () => setConnected(false);
     addEventListener("online", online);
@@ -140,6 +144,9 @@ function StaffScreen() {
   const [pin, setPin] = useState(savedCredentials.pin);
   const [sessionToken, setSessionToken] = useState(() => localStorage.getItem("ifm-staff-session") ?? "");
   const [venue, setVenue] = useState<Venue | null>(null);
+  useEffect(() => {
+    document.title = venue?.name ? `Кабинет сотрудника — ${venue.name}` : "Кабинет сотрудника — InteractiveFoodMenu";
+  }, [venue?.name]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [error, setError] = useState("");

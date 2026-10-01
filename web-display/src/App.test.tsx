@@ -49,6 +49,7 @@ describe("staff application flow", () => {
 
   async function login() {
     render(<App />);
+    expect(document.title).toBe("Кабинет сотрудника — InteractiveFoodMenu");
     fireEvent.change(screen.getByLabelText("Код точки"), { target: { value: "wintercafe123" } });
     fireEvent.change(screen.getByLabelText("Шестизначный PIN"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "Войти в кабинет" }));
@@ -57,6 +58,7 @@ describe("staff application flow", () => {
 
   it("logs in and shows the daily dashboard with onboarding", async () => {
     await login();
+    expect(document.title).toBe("Кабинет сотрудника — Зимний сад");
     expect(screen.getByText("Быстрый старт")).toBeTruthy();
     expect(screen.getByText("Латте")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Понятно" }));
@@ -80,6 +82,17 @@ describe("staff application flow", () => {
   });
 });
 
+describe("hub page title", () => {
+  afterEach(() => cleanup());
+
+  it("identifies the hub on its browser tab", () => {
+    window.history.replaceState({}, "", "/hub");
+    localStorage.clear();
+    render(<App />);
+    expect(document.title).toBe("Хаб — InteractiveFoodMenu");
+  });
+});
+
 describe("display links after nginx redirect", () => {
   afterEach(() => cleanup());
   it.each(["/", "/connect", "/connect/"])("opens the menu from %s with a display hash", async path => {
@@ -89,6 +102,7 @@ describe("display links after nginx redirect", () => {
     mocks.menuVersion.mockResolvedValue({ version: 4 });
     render(<App />);
     await waitFor(() => expect(screen.getByRole("heading", { name: "Зимний сад" })).toBeTruthy());
+    expect(document.title).toBe("Меню — Зимний сад");
     expect(mocks.displayLogin).toHaveBeenCalledWith("pairingtoken123", "abcdEFGH0123456789abcdEFGH0123456789");
     expect(screen.queryByText("Подключение экрана")).toBeNull();
   });

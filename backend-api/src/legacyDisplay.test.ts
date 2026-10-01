@@ -11,6 +11,7 @@ test("legacy menu moves enlarged rows to new pages without dropping items", () =
   const venue = { name: "Кафе", backgroundColor: "#56965B", accentColor: "#FFFFFF", displayScaleMode: "manual", menuItemFontSizePx: 34 };
   const normal = renderLegacyDisplay({ ...venue, displayScalePercent: 100 }, categories, items, 1366, 768, "test");
   const enlarged = renderLegacyDisplay({ ...venue, displayScalePercent: 160 }, categories, items, 1366, 768, "test");
+  assert.match(normal, /<title>Меню — Кафе<\/title>/);
   const pages = (html: string) => (html.match(/data-page="\d+"/g) ?? []).length;
 
   assert.ok(pages(enlarged) > pages(normal));

@@ -204,6 +204,7 @@ function HubDisplays({ token, venue, busy: parentBusy }: { token: string; venue:
 }
 
 export function BackendHub() {
+  useEffect(() => { document.title = "Хаб — InteractiveFoodMenu"; }, []);
   const [hubToken, setHubToken] = useState(() => localStorage.getItem("ifm-hub-session") ?? "");
   const [accessKey, setAccessKey] = useState("");
   const [overview, setOverview] = useState<HubOverview | null>(null);
