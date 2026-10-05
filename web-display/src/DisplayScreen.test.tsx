@@ -47,6 +47,14 @@ describe("display break timer", () => {
     expect(parseFloat(menu.style.width) * parseFloat(menu.style.zoom)).toBeCloseTo(fullWidth);
     expect(menu.style.zoom).toBe("1");
   });
+
+  it("marks zero stock unavailable without showing the quantity on the modern menu", () => {
+    const categories = [{ id: "c1", venueId: "v1", name: "Обед", sortOrder: 0 }];
+    const items = [{ id: "i1", venueId: "v1", categoryId: "c1", name: "Суп", priceMinor: 15000, sortOrder: 0, isAvailable: true, stockQuantity: 0 }];
+    const { container } = render(<DisplayScreen venue={{ ...venue, breakActive: false }} categories={categories} items={items} logoUrl="" connected />);
+    expect(container.querySelector(".menu-item.unavailable")).toBeTruthy();
+    expect(container.textContent).not.toContain("0 шт.");
+  });
 });
 
 describe("legacy display", () => {
@@ -67,6 +75,13 @@ describe("legacy display", () => {
     rerender(<DisplayScreen {...props} venue={{ ...props.venue, showServingSize: true, showCalories: true }} />);
     expect(container.querySelector(".tv-page .tv-row-details")?.textContent).toBe("Выход: 250 г120 ккал");
     expect(container.querySelector(".tv-measure .tv-row-details")?.textContent).toBe("Выход: 250 г120 ккал");
+  });
+  it("marks zero stock unavailable without showing quantity on the legacy React menu", () => {
+    const categories = [{ id: "c1", venueId: "v1", name: "Обед", sortOrder: 0 }];
+    const items = [{ id: "i1", venueId: "v1", categoryId: "c1", name: "Суп", priceMinor: 15000, sortOrder: 0, isAvailable: true, stockQuantity: 0 }];
+    const { container } = render(<DisplayScreen venue={{ ...venue, breakActive: false }} categories={categories} items={items} logoUrl="" connected />);
+    expect(container.querySelector(".tv-page .tv-row.unavailable")).toBeTruthy();
+    expect(container.querySelector(".tv-page")?.textContent).not.toContain("0 шт.");
   });
   it("finishes the break timer and uses the configured panel width", async () => {
     const { container } = render(<DisplayScreen venue={{ ...venue, breakEndsAt: new Date(Date.now() + 1000).toISOString(), breakPanelWidthPercent: 48 }} categories={[]} items={[]} logoUrl="" connected />);

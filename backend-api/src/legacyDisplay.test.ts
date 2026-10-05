@@ -31,3 +31,14 @@ test("server-rendered menu reflows into the space beside the break panel", () =>
   assert.match(active, /font-size:calc\(20px \* var\(--column-scale\)\)/);
   assert.equal((active.match(/class="item"/g) ?? []).length, items.length);
 });
+
+test("server-rendered legacy menu uses stock status without revealing quantity", () => {
+  const html = renderLegacyDisplay(
+    { name: "Кафе" },
+    [{ id: "main", name: "Обед" }],
+    [{ id: "soup", categoryId: "main", name: "Суп", priceMinor: 15000, isAvailable: true, stockQuantity: 0 }],
+    1366, 768, "test",
+  );
+  assert.match(html, /class="item unavailable"/);
+  assert.doesNotMatch(html, /0 шт\./);
+});

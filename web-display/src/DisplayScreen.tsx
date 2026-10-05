@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { autoScaleForMenu, layoutForViewport, minMenuColumnWidth, paginateMenuByHeight } from "./paginate";
-import type { Category, MenuItem, Venue } from "./types";
+import { itemIsAvailable, type Category, type MenuItem, type Venue } from "./types";
 import { formatRussianText } from "./typography";
 import { remainingBreakSeconds } from "./break";
 import { LegacyDisplayScreen } from "./LegacyDisplayScreen";
@@ -148,7 +148,7 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
           const columnScale = columnScales[columnIndex] ?? 1;
           return <div className="column" key={columnIndex} style={{ "--column-scale": columnScale } as React.CSSProperties}>{column.map((entry, rowIndex) => entry.kind === "category" ?
             <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor, fontSize: `${32 * columnScale}px` }}><span>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2> :
-            <div className={`menu-item menu-item-enter ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""} ${entry.item.isAvailable ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms`, fontSize: `${itemBaseSize * columnScale}px` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{entry.item.servingSize || "—"}</span>}<span className="price">{money.format(entry.item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{entry.item.caloriesKcal ?? "—"}</span>}</div>)}</div>;
+            <div className={`menu-item menu-item-enter ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""} ${itemIsAvailable(entry.item) ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms`, fontSize: `${itemBaseSize * columnScale}px` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{entry.item.servingSize || "—"}</span>}<span className="price">{money.format(entry.item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{entry.item.caloriesKcal ?? "—"}</span>}</div>)}</div>;
         })}
       </section>}
       <footer ref={footerRef}>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>

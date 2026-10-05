@@ -1,14 +1,25 @@
+import type { MenuItem } from "./types";
+
 export type CsvMenuRow = {
   category: string;
   name: string;
   priceMinor: number;
-  isAvailable: boolean;
+  stockQuantity: number;
 };
+
+export function normalizeCsvKey(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+}
+
+export function matchingCsvItems(items: MenuItem[], categoryId: string, name: string): MenuItem[] {
+  const key = normalizeCsvKey(name);
+  return items.filter(item => item.categoryId === categoryId && normalizeCsvKey(item.name) === key);
+}
 
 const categoryHeaders = new Set(["категория", "category", "раздел"]);
 const nameHeaders = new Set(["название", "позиция", "блюдо", "name", "item"]);
 const priceHeaders = new Set(["цена", "price", "стоимость"]);
-const availabilityHeaders = new Set(["в наличии", "наличие", "available", "availability"]);
+const quantityHeaders = new Set(["количество", "quantity"]);
 
 export function parseMenuCsv(content: string): CsvMenuRow[] {
   const lines = records(content.replace(/^\uFEFF/, "")).filter(line => line.trim());
@@ -18,8 +29,8 @@ export function parseMenuCsv(content: string): CsvMenuRow[] {
   const categoryIndex = header.findIndex(value => categoryHeaders.has(value));
   const nameIndex = header.findIndex(value => nameHeaders.has(value));
   const priceIndex = header.findIndex(value => priceHeaders.has(value));
-  const availabilityIndex = header.findIndex(value => availabilityHeaders.has(value));
-  if (categoryIndex < 0 || nameIndex < 0 || priceIndex < 0) throw new Error("Нужны столбцы: Категория, Название, Цена.");
+  const quantityIndex = header.findIndex(value => quantityHeaders.has(value));
+  if (categoryIndex < 0 || nameIndex < 0 || priceIndex < 0 || quantityIndex < 0) throw new Error("Нужны столбцы: Категория, Название, Цена, Количество.");
 
   return lines.slice(1).map((line, index) => {
     const row = split(line, delimiter);
@@ -27,11 +38,13 @@ export function parseMenuCsv(content: string): CsvMenuRow[] {
     const category = field(categoryIndex);
     const name = field(nameIndex);
     const price = priceToMinor(field(priceIndex));
+    const quantityText = field(quantityIndex);
     const lineNumber = index + 2;
     if (!category || category.length > 50) throw new Error(`Строка ${lineNumber}: укажите категорию до 50 символов.`);
     if (!name || name.length > 80) throw new Error(`Строка ${lineNumber}: укажите название до 80 символов.`);
     if (price === null) throw new Error(`Строка ${lineNumber}: некорректная цена.`);
-    return { category, name, priceMinor: price, isAvailable: availabilityIndex < 0 || parseAvailability(field(availabilityIndex), lineNumber) };
+    if (!/^\d+$/.test(quantityText) || Number(quantityText) > 2_000_000_000) throw new Error(`Строка ${lineNumber}: количество должно быть целым числом от 0 до 2000000000.`);
+    return { category, name, priceMinor: price, stockQuantity: Number(quantityText) };
   });
 }
 
@@ -42,12 +55,6 @@ function priceToMinor(value: string): number | null {
   if (!/^\d+(?:[,.]\d{1,2})?$/.test(value.trim())) return null;
   const result = Math.round(Number(value.replace(",", ".")) * 100);
   return Number.isSafeInteger(result) && result >= 0 && result <= 99_999_999 ? result : null;
-}
-
-function parseAvailability(value: string, line: number): boolean {
-  if (["", "да", "yes", "true", "1", "в наличии"].includes(normalize(value))) return true;
-  if (["нет", "no", "false", "0", "нет в наличии"].includes(normalize(value))) return false;
-  throw new Error(`Строка ${line}: значение наличия должно быть Да или Нет.`);
 }
 
 function records(content: string): string[] {

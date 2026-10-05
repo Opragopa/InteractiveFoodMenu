@@ -85,6 +85,7 @@ export const TABLES: TableDefinition[] = [
       { key: "caloriesKcal", type: "integer", required: false, min: 0, max: 100000 },
       { key: "sortOrder", type: "integer", required: true },
       { key: "isAvailable", type: "boolean", required: true },
+      { key: "stockQuantity", type: "integer", required: false, min: 0, max: 2000000000 },
       { key: "imageFileId", type: "varchar", size: 36, required: false },
       ...commonAuditColumns,
     ],
@@ -234,6 +235,7 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   const itemColumns = await tables.listColumns({ databaseId, tableId: "items", queries: [Query.limit(100)] });
   if (!itemColumns.columns.some(column => column.key === "servingSize")) await tables.createVarcharColumn({ databaseId, tableId: "items", key: "servingSize", size: 40, required: false });
   if (!itemColumns.columns.some(column => column.key === "caloriesKcal")) await tables.createIntegerColumn({ databaseId, tableId: "items", key: "caloriesKcal", required: false, min: 0, max: 100000 });
+  if (!itemColumns.columns.some(column => column.key === "stockQuantity")) await tables.createIntegerColumn({ databaseId, tableId: "items", key: "stockQuantity", required: false, min: 0, max: 2000000000 });
   const displayColumns = await tables.listColumns({ databaseId, tableId: "display_tokens", queries: [Query.limit(100)] });
   if (!displayColumns.columns.some(column => column.key === "label")) await tables.createVarcharColumn({ databaseId, tableId: "display_tokens", key: "label", size: 80, required: false });
   if (!displayColumns.columns.some(column => column.key === "lastSeenAt")) await tables.createDatetimeColumn({ databaseId, tableId: "display_tokens", key: "lastSeenAt", required: false });

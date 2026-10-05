@@ -62,6 +62,11 @@ function integer(value: unknown, minimum: number, maximum: number): number {
   return result;
 }
 
+function stockQuantity(value: unknown): number {
+  if (typeof value !== "number") throw new ApiError(400, "invalid_argument", "Количество должно быть целым числом от 0 до 2000000000.");
+  return integer(value, 0, 2_000_000_000);
+}
+
 export function normalizeBulkAvailabilityIds(value: unknown): string[] {
   if (!Array.isArray(value)) throw new ApiError(400, "invalid_argument", "Нужен массив позиций.");
   const ids = [...new Set(value.map((item) => String(item ?? "").trim()).filter(Boolean))];
@@ -85,7 +90,14 @@ function publicRow(row: RowData): Record<string, unknown> {
   for (const [key, value] of Object.entries(row)) {
     if (!key.startsWith("$") && !["pinHash", "tokenHash"].includes(key)) result[key] = value;
   }
+  if (row.isAvailable !== undefined && row.stockQuantity !== undefined && row.stockQuantity !== null) {
+    result.isAvailable = Number(row.stockQuantity) > 0;
+  }
   return result;
+}
+
+function trackedStock(row: RowData): boolean {
+  return row.stockQuantity !== undefined && row.stockQuantity !== null;
 }
 
 async function venueByCode(services: AppwriteServices, config: BackendConfig, code: string): Promise<RowData | null> {
@@ -137,17 +149,26 @@ async function audit(services: AppwriteServices, config: BackendConfig, action: 
   });
 }
 
+const pendingMenuVersionUpdates = new Map<string, Promise<void>>();
+
 async function bumpMenuVersion(services: AppwriteServices, databaseId: string, venueId: string) {
-  // Keep this compatible with self-hosted Appwrite versions where the
-  // increment endpoint can acknowledge the request without updating the
-  // row used by display polling.
-  const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId });
-  await services.tables.updateRow({
-    databaseId,
-    tableId: "venues",
-    rowId: venueId,
-    data: { menuVersion: Number(venue.menuVersion ?? 1) + 1 },
+  // The self-hosted increment endpoint has acknowledged updates without
+  // changing the value used by display polling. Serialize the read/write
+  // fallback so rapid stock changes cannot publish the same version twice.
+  const key = `${databaseId}:${venueId}`;
+  const previous = pendingMenuVersionUpdates.get(key) ?? Promise.resolve();
+  const update = previous.catch(() => undefined).then(async () => {
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId });
+    await services.tables.updateRow({
+      databaseId,
+      tableId: "venues",
+      rowId: venueId,
+      data: { menuVersion: Number(venue.menuVersion ?? 1) + 1 },
+    });
   });
+  pendingMenuVersionUpdates.set(key, update);
+  try { await update; }
+  finally { if (pendingMenuVersionUpdates.get(key) === update) pendingMenuVersionUpdates.delete(key); }
 }
 
 async function deleteVenueRows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string, onRow?: (row: RowData) => void) {
@@ -573,6 +594,10 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const claims = requireRole(request, config, ["staff"]);
     const categoryId = text(request.body?.categoryId, 36);
     await ownedRow(services, config, "categories", categoryId, claims.venueId!);
+    const initialStock = request.body?.stockQuantity === undefined ? null : stockQuantity(request.body.stockQuantity);
+    if (initialStock !== null && request.body?.isAvailable !== undefined && request.body.isAvailable !== (initialStock > 0)) {
+      throw new ApiError(400, "invalid_argument", "Наличие определяется количеством штук.");
+    }
     const row = await services.tables.createRow<RowData>({
       databaseId, tableId: "items", rowId: ID.unique(),
       data: {
@@ -580,7 +605,9 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
         priceMinor: integer(request.body?.priceMinor, 0, 2_000_000_000), sortOrder: integer(request.body?.sortOrder ?? 0, 0, 100000),
         ...(request.body?.servingSize !== undefined && request.body.servingSize !== null && request.body.servingSize !== "" ? { servingSize: text(request.body.servingSize, 40) } : {}),
         ...(request.body?.caloriesKcal !== undefined && request.body.caloriesKcal !== null && request.body.caloriesKcal !== "" ? { caloriesKcal: integer(request.body.caloriesKcal, 0, 100000) } : {}),
-        isAvailable: request.body?.isAvailable !== false, updatedAt: new Date().toISOString(), updatedBy: "staff-api",
+        ...(initialStock === null ? {} : { stockQuantity: initialStock }),
+        isAvailable: initialStock === null ? request.body?.isAvailable !== false : initialStock > 0,
+        updatedAt: new Date().toISOString(), updatedBy: "staff-api",
       },
     });
     await bumpMenuVersion(services, databaseId, claims.venueId!);
@@ -595,6 +622,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     }
     const isAvailable = request.body.isAvailable;
     const existing = await Promise.all(itemIds.map((itemId) => ownedRow(services, config, "items", itemId, claims.venueId!)));
+    if (existing.some(trackedStock)) throw new ApiError(409, "stock_managed", "Для позиции с остатком измените количество штук.");
     const now = new Date().toISOString();
     const updated = await Promise.all(existing.map((item) => services.tables.updateRow<RowData>({
       databaseId, tableId: "items", rowId: item.$id,
@@ -605,15 +633,42 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     response.json({ updatedCount: updated.length, items: updated.map(publicRow), menuVersion: Number(venue.menuVersion ?? 1) });
   }));
 
+  router.post("/items/:id/stock/adjust", asyncRoute(async (request, response) => {
+    const claims = requireRole(request, config, ["staff"]);
+    const rowId = routeId(request.params.id);
+    const current = await ownedRow(services, config, "items", rowId, claims.venueId!);
+    if (!trackedStock(current)) throw new ApiError(409, "stock_unset", "Сначала задайте количество штук.");
+    const delta = Number(request.body?.delta);
+    if (delta !== 1 && delta !== -1) throw new ApiError(400, "invalid_argument", "Изменение количества должно быть +1 или −1.");
+    if (delta < 0 && Number(current.stockQuantity) === 0) throw new ApiError(409, "stock_empty", "Остаток уже равен нулю.");
+    const args = { databaseId, tableId: "items", rowId, column: "stockQuantity", value: 1 };
+    let row: RowData;
+    try {
+      row = delta < 0
+        ? await services.tables.decrementRowColumn<RowData>({ ...args, min: 0 })
+        : await services.tables.incrementRowColumn<RowData>({ ...args, max: 2_000_000_000 });
+    } catch (cause) {
+      const latest = await services.tables.getRow<RowData>({ databaseId, tableId: "items", rowId }).catch(() => null);
+      if (latest && ((delta < 0 && Number(latest.stockQuantity) === 0) || (delta > 0 && Number(latest.stockQuantity) >= 2_000_000_000))) {
+        throw new ApiError(409, "stock_limit", delta < 0 ? "Остаток уже равен нулю." : "Достигнут предел количества штук.");
+      }
+      throw cause;
+    }
+    await bumpMenuVersion(services, databaseId, claims.venueId!);
+    response.json({ item: publicRow(row) });
+  }));
+
   router.patch("/items/:id", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff"]);
     const rowId = routeId(request.params.id);
-    await ownedRow(services, config, "items", rowId, claims.venueId!);
+    const current = await ownedRow(services, config, "items", rowId, claims.venueId!);
     const data: Record<string, unknown> = { updatedAt: new Date().toISOString(), updatedBy: "staff-api" };
     if (request.body?.isAvailable !== undefined) {
+      if (trackedStock(current) || request.body?.stockQuantity !== undefined) throw new ApiError(409, "stock_managed", "Для позиции с остатком измените количество штук.");
       if (typeof request.body.isAvailable !== "boolean") throw new ApiError(400, "invalid_argument", "Поле isAvailable должно быть логическим.");
       data.isAvailable = request.body.isAvailable;
     }
+    if (request.body?.stockQuantity !== undefined) data.stockQuantity = stockQuantity(request.body.stockQuantity);
     if (request.body?.name !== undefined) data.name = text(request.body.name, 200);
     if (request.body?.priceMinor !== undefined) data.priceMinor = integer(request.body.priceMinor, 0, 2_000_000_000);
     if (request.body?.servingSize !== undefined) data.servingSize = request.body.servingSize === null || request.body.servingSize === "" ? null : text(request.body.servingSize, 40);

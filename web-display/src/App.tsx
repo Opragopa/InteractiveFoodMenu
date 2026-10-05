@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEffect as useEffectQr } from "react";
 import { contrastForeground, DisplayScreen } from "./DisplayScreen";
-import type { Category, MenuItem, Venue } from "./types";
+import { itemIsAvailable, type Category, type MenuItem, type Venue } from "./types";
 import QRCode from "qrcode";
-import { parseMenuCsv, type CsvMenuRow } from "./csv";
+import { matchingCsvItems, normalizeCsvKey, parseMenuCsv, type CsvMenuRow } from "./csv";
 import { forgetVenueCredentials, saveVenueCredentials, savedVenueCredentials } from "./venueCredentials";
 import { reportClientError } from "./clientLogger";
 import { BackendHub } from "./BackendHub";
 import { api, ApiRequestError } from "./api";
 import { displayPresets, normalizeVenueAppearance, type DisplayPreset, type VenueAppearance } from "./venueSettings";
 import { estimateMenuPages } from "./paginate";
-import { filterMenuItems, selectionIncludesAll, type AvailabilityFilter } from "./staffFilters";
+import { filterMenuItems, type AvailabilityFilter } from "./staffFilters";
 
 const previewSizes = {
   "1366x768": { width: 1366, height: 768, label: "1366 × 768" },
@@ -155,7 +155,7 @@ function StaffScreen() {
   const [tab, setTab] = useState<"availability" | "categories" | "items" | "nutrition" | "settings" | "experimental">("availability");
   const [newCategory, setNewCategory] = useState("");
   const [editingName, setEditingName] = useState<{ kind: "category" | "item"; id: string; name: string } | null>(null);
-  const [newItem, setNewItem] = useState({ name: "", price: "", categoryId: "", servingSize: "", caloriesKcal: "" });
+  const [newItem, setNewItem] = useState({ name: "", price: "", stockQuantity: "", categoryId: "", servingSize: "", caloriesKcal: "" });
   const [nutritionDrafts, setNutritionDrafts] = useState<Record<string, { servingSize: string; caloriesKcal: string }>>({});
   const [csvRows, setCsvRows] = useState<CsvMenuRow[]>([]);
   const [csvProgress, setCsvProgress] = useState<{ current: number; total: number; failed: string[] } | null>(null);
@@ -163,8 +163,8 @@ function StaffScreen() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [selectionBusy, setSelectionBusy] = useState(false);
+  const [stockDrafts, setStockDrafts] = useState<Record<string, string>>({});
+  const [stockBusyId, setStockBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -199,7 +199,6 @@ function StaffScreen() {
       setItems(menu.items as MenuItem[]);
       setBreakDuration(Number(menu.venue.breakDurationMinutes ?? 10));
       setLastUpdatedAt(Date.now());
-      setSelectedIds(new Set());
       setShowOnboarding(localStorage.getItem(`ifm-staff-onboarding-${code}`) !== "dismissed");
     } finally {
       setMenuLoading(false);
@@ -245,44 +244,28 @@ function StaffScreen() {
   if (sessionToken && menuLoading && !venue) return <main className="staff-menu staff-dashboard"><div className="loading-panel" role="status" aria-live="polite"><span className="loading-spinner" aria-hidden="true" />Загружаем меню…</div></main>;
   if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button type="button" onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button type="button" className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
   const filteredItems = filterMenuItems(items, search, categoryFilter, availabilityFilter);
-  const grouped = [...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: filteredItems.filter(item => item.categoryId === category.id).sort((a, b) => Number(a.isAvailable === false) - Number(b.isAvailable === false) || a.sortOrder - b.sortOrder) })).filter(group => group.items.length);
-  const filteredIds = filteredItems.map(item => item.id);
-  const allFilteredSelected = selectionIncludesAll(filteredIds, selectedIds);
+  const grouped = [...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: filteredItems.filter(item => item.categoryId === category.id).sort((a, b) => Number(!itemIsAvailable(a)) - Number(!itemIsAvailable(b)) || a.sortOrder - b.sortOrder) })).filter(group => group.items.length);
   const pageEstimate = estimateMenuPages(categories, items, 1366, 768, venue?.menuItemFontSizePx ?? 34, venue?.menuItemGapPx ?? 12);
   const setToastMessage = (message: string) => { setToast(message); window.setTimeout(() => setToast(current => current === message ? "" : current), 3500); };
-  const toggleSelection = (itemId: string, selected: boolean) => {
-    setSelectedIds(current => {
-      const next = new Set(current);
-      if (selected) next.add(itemId); else next.delete(itemId);
-      return next;
-    });
-  };
-  const toggleSelectAll = () => {
-    setSelectedIds(current => {
-      const next = new Set(current);
-      if (allFilteredSelected) filteredIds.forEach(id => next.delete(id));
-      else filteredIds.forEach(id => next.add(id));
-      return next;
-    });
-  };
-  const bulkAvailability = async (isAvailable: boolean) => {
-    const ids = [...selectedIds].filter(id => items.some(item => item.id === id));
-    if (!ids.length) return;
-    const previous = new Map(items.map(item => [item.id, item.isAvailable]));
-    setSelectionBusy(true); setError("");
-    setItems(current => current.map(item => ids.includes(item.id) ? { ...item, isAvailable } : item));
+  const saveStock = async (item: MenuItem) => {
+    const value = (stockDrafts[item.id] ?? "").trim();
+    if (!/^\d+$/.test(value) || Number(value) > 2_000_000_000) { setError("Укажите целое количество от 0 до 2000000000."); return; }
+    setStockBusyId(item.id); setError("");
     try {
-      const result = await api.updateItemsAvailability(sessionToken, ids, isAvailable);
-      const persisted = new Map((result.items as MenuItem[]).map(item => [item.id, item]));
-      setItems(current => current.map(item => persisted.get(item.id) ?? item));
-      setSelectedIds(new Set());
-      setToastMessage(`Обновлено позиций: ${result.updatedCount}.`);
-    } catch (cause) {
-      setItems(current => current.map(item => previous.has(item.id) ? { ...item, isAvailable: previous.get(item.id)! } : item));
-      await loadMenu().catch(() => undefined);
-      reportClientError("bulk_availability_failed", cause, { count: ids.length });
-      setError(cause instanceof Error ? `Не удалось обновить наличие: ${cause.message}` : "Не удалось обновить наличие.");
-    } finally { setSelectionBusy(false); }
+      const result = await api.updateItem(sessionToken, item.id, { stockQuantity: Number(value) });
+      setItems(current => current.map(entry => entry.id === item.id ? result.item as MenuItem : entry));
+      setStockDrafts(current => { const next = { ...current }; delete next[item.id]; return next; });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить остаток."); }
+    finally { setStockBusyId(null); }
+  };
+  const adjustStock = async (item: MenuItem, delta: 1 | -1) => {
+    setStockBusyId(item.id); setError("");
+    try {
+      const result = await api.adjustItemStock(sessionToken, item.id, delta);
+      setItems(current => current.map(entry => entry.id === item.id ? result.item : entry));
+      setStockDrafts(current => { const next = { ...current }; delete next[item.id]; return next; });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось изменить остаток."); }
+    finally { setStockBusyId(null); }
   };
   const saveCategory = async () => {
     const name = newCategory.trim();
@@ -317,12 +300,13 @@ function StaffScreen() {
   const saveItem = async () => {
     const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100);
     if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor) || priceMinor < 0) { setError("Заполните название, категорию и корректную цену."); return; }
+    if (!/^\d+$/.test(newItem.stockQuantity.trim()) || Number(newItem.stockQuantity) > 2_000_000_000) { setError("Укажите целое количество от 0 до 2000000000."); return; }
     if (newItem.servingSize.trim().length > 40 || (newItem.caloriesKcal !== "" && (!/^\d+$/.test(newItem.caloriesKcal) || Number(newItem.caloriesKcal) > 100000))) { setError("Проверьте выход (до 40 символов) и калорийность (целое число до 100000)."); return; }
     setBusy(true); setError("");
     try {
-      const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, isAvailable: true, servingSize: newItem.servingSize.trim() || undefined, caloriesKcal: newItem.caloriesKcal === "" ? undefined : Number(newItem.caloriesKcal) });
+      const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, stockQuantity: Number(newItem.stockQuantity), servingSize: newItem.servingSize.trim() || undefined, caloriesKcal: newItem.caloriesKcal === "" ? undefined : Number(newItem.caloriesKcal) });
       setItems(current => [...current, result.item as MenuItem]);
-      setNewItem({ name: "", price: "", categoryId: newItem.categoryId, servingSize: "", caloriesKcal: "" });
+      setNewItem({ name: "", price: "", stockQuantity: "", categoryId: newItem.categoryId, servingSize: "", caloriesKcal: "" });
     } catch (cause) {
       reportClientError("item_create_failed", cause);
       setError(cause instanceof Error ? cause.message : "Не удалось добавить позицию.");
@@ -373,11 +357,14 @@ function StaffScreen() {
     setBusy(true); setError("");
     setCsvProgress({ current: 0, total: csvRows.length, failed: [] });
     const failed: string[] = [];
+    const failedRows = new Set<number>();
     try {
-      const categoryIds = new Map(categories.map(category => [category.name.trim().toLocaleLowerCase(), category.id]));
+      const categoryIds = new Map(categories.map(category => [normalizeCsvKey(category.name), category.id]));
+      const ambiguousCategories = new Set(categories.map(category => normalizeCsvKey(category.name)).filter((key, index, keys) => keys.indexOf(key) !== index));
       const categoryOrders = new Map(categories.map(category => [category.id, items.filter(item => item.categoryId === category.id).length]));
-      for (const [index, name] of csvRows.map(row => row.category).filter((name, index, names) => names.findIndex(other => other.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase()) === index).entries()) {
-        const key = name.trim().toLocaleLowerCase();
+      const knownItems = [...items];
+      for (const [index, name] of csvRows.map(row => row.category).filter((name, index, names) => names.findIndex(other => normalizeCsvKey(other) === normalizeCsvKey(name)) === index).entries()) {
+        const key = normalizeCsvKey(name);
         if (!categoryIds.has(key)) {
           try {
             const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length + index });
@@ -388,25 +375,41 @@ function StaffScreen() {
         }
       }
       for (const [index, row] of csvRows.entries()) {
-        const categoryId = categoryIds.get(row.category.trim().toLocaleLowerCase());
-        if (!categoryId) {
-          failed.push(row.name);
+        const categoryKey = normalizeCsvKey(row.category);
+        if (ambiguousCategories.has(categoryKey)) {
+          failed.push(`Строка ${index + 2}: найдено несколько категорий «${row.category}»`);
+          failedRows.add(index);
           setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
           continue;
         }
-        const sortOrder = categoryOrders.get(categoryId) ?? 0;
-        categoryOrders.set(categoryId, sortOrder + 1);
+        const categoryId = categoryIds.get(categoryKey);
+        if (!categoryId) {
+          failed.push(`Строка ${index + 2}: категория «${row.category}» не создана`);
+          failedRows.add(index);
+          setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
+          continue;
+        }
+        const matches = matchingCsvItems(knownItems, categoryId, row.name);
         try {
-          await api.createItem(sessionToken, { categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, isAvailable: row.isAvailable });
-        } catch {
-          failed.push(row.name);
+          if (matches.length > 1) throw new Error(`найдено несколько позиций «${row.name}» в категории «${row.category}»`);
+          if (matches.length === 1) {
+            const result = await api.updateItem(sessionToken, matches[0].id, { stockQuantity: row.stockQuantity });
+            knownItems.splice(knownItems.findIndex(item => item.id === matches[0].id), 1, result.item as MenuItem);
+          } else {
+            const sortOrder = categoryOrders.get(categoryId) ?? 0;
+            const result = await api.createItem(sessionToken, { categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, stockQuantity: row.stockQuantity });
+            knownItems.push(result.item as MenuItem);
+            categoryOrders.set(categoryId, sortOrder + 1);
+          }
+        } catch (cause) {
+          failed.push(`Строка ${index + 2}: ${cause instanceof Error ? cause.message : `не удалось сохранить «${row.name}»`}`);
+          failedRows.add(index);
         }
         setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
       }
-      const failedSet = new Set(failed);
-      setCsvRows(csvRows.filter(row => failedSet.has(row.name)));
+      setCsvRows(csvRows.filter((_, index) => failedRows.has(index)));
       await loadMenu();
-      if (failed.length) setError(`Импорт завершён частично: ошибок ${failed.length}. Исправьте строки и повторите импорт; успешно сохранённые позиции не дублируются автоматически.`);
+      if (failed.length) setError(`Импорт завершён частично: ошибок ${failed.length}. ${failed.join("; ")}. Исправьте строки и повторите импорт.`);
       else setCsvRows([]);
     } catch (cause) { setError(cause instanceof Error ? `Не удалось импортировать CSV: ${cause.message}` : "Не удалось импортировать CSV."); }
     finally { setBusy(false); }
@@ -449,28 +452,34 @@ function StaffScreen() {
         <div className="staff-pairing-code" aria-live="polite">{staffQr ? <img src={staffQr} alt="QR-код входа сотрудника в кабинет этой точки" /> : <span role="status">Создаём QR-код…</span>}<small>После сканирования сотруднику потребуется ввести PIN точки.</small></div>
       </section>}
       <section className="staff-overview" aria-label="Сводка меню">
-        <article><span>Позиций</span><strong>{items.length}</strong><small>{items.filter(item => item.isAvailable).length} доступны</small></article>
-        <article><span>Нет в наличии</span><strong>{items.filter(item => !item.isAvailable).length}</strong><small>можно включить массово</small></article>
+        <article><span>Позиций</span><strong>{items.length}</strong><small>{items.filter(itemIsAvailable).length} доступны</small></article>
+        <article><span>Нет в наличии</span><strong>{items.filter(item => !itemIsAvailable(item)).length}</strong><small>проверьте остаток</small></article>
         <article><span>Категорий</span><strong>{categories.length}</strong><small>в текущем меню</small></article>
         <article><span>Страниц ТВ</span><strong>{pageEstimate}</strong><small>при 1366 × 768</small></article>
       </section>
       {error && <p className="staff-error-banner" role="alert">{error}</p>}
       {showOnboarding && <aside className="staff-onboarding" aria-label="Быстрый старт">
         <div><span className="onboarding-kicker">Быстрый старт</span><h2>Меню под контролем</h2><p>Три действия, которые пригодятся каждый день:</p></div>
-        <ol><li><b>Наличие</b> — выберите блюда и используйте кнопки «В наличии» или «Нет в наличии».</li><li><b>Перерыв</b> — задайте минуты сверху и запустите перерыв для экрана.</li><li><b>Настройки</b> — изменяйте оформление и расширенные параметры отдельно.</li></ol>
+        <ol><li><b>Остаток</b> — задайте количество штук и отмечайте продажи кнопкой «−1».</li><li><b>Перерыв</b> — задайте минуты сверху и запустите перерыв для экрана.</li><li><b>Настройки</b> — изменяйте оформление и расширенные параметры отдельно.</li></ol>
         <button type="button" onClick={dismissOnboarding}>Понятно</button>
       </aside>}
       <nav className="staff-tabs" aria-label="Разделы кабинета">
         {([ ["availability", "Наличие"], ["categories", "Категории"], ["items", "Позиции"], ["nutrition", "Параметры"], ["settings", "Настройки"], ["experimental", "Ещё"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
       </nav>
-      {tab === "availability" && <section className="availability-workspace"><div className="workspace-heading"><div><h2>Наличие позиций</h2><p>Отметьте позиции, затем нажмите нужную кнопку сверху. Изменения сразу появятся на экране.</p></div><button type="button" className="quick-add" onClick={() => setTab("items")}>+ Добавить позицию</button></div><div className="availability-toolbar"><label className="search-field"><span className="sr-only">Поиск по позициям</span><input type="search" placeholder="Найти блюдо…" value={search} onChange={event => setSearch(event.target.value)} /></label><div className="filter-group" role="group" aria-label="Фильтр наличия">{([ ["all", "Все"], ["available", "В наличии"], ["unavailable", "Нет в наличии"] ] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={availabilityFilter === value} className={availabilityFilter === value ? "active" : ""} onClick={() => setAvailabilityFilter(value)}>{label}</button>)}</div><select aria-label="Фильтр по категории" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}><option value="">Все категории</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div className="selection-toolbar"><label><input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} disabled={!filteredIds.length} /> Выбрать показанные</label><span>{selectedIds.size ? `Выбрано: ${selectedIds.size}` : `${filteredItems.length} показано`}</span><div className="bulk-actions"><button type="button" onClick={() => void bulkAvailability(true)} disabled={selectionBusy || selectedIds.size === 0}>В наличии</button><button type="button" onClick={() => void bulkAvailability(false)} disabled={selectionBusy || selectedIds.size === 0}>Нет в наличии</button></div></div><div ref={availabilityListRef} className="availability-list">{grouped.length ? grouped.map(group => (
+      {tab === "availability" && <section className="availability-workspace"><div className="workspace-heading"><div><h2>Остатки позиций</h2><p>Укажите количество после завоза. Проданные штуки списывайте кнопкой «−1»; при нуле позиция станет недоступной на экране.</p></div><button type="button" className="quick-add" onClick={() => setTab("items")}>+ Добавить позицию</button></div><div className="availability-toolbar"><label className="search-field"><span className="sr-only">Поиск по позициям</span><input type="search" placeholder="Найти блюдо…" value={search} onChange={event => setSearch(event.target.value)} /></label><div className="filter-group" role="group" aria-label="Фильтр наличия">{([ ["all", "Все"], ["available", "В наличии"], ["unavailable", "Нет в наличии"] ] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={availabilityFilter === value} className={availabilityFilter === value ? "active" : ""} onClick={() => setAvailabilityFilter(value)}>{label}</button>)}</div><select aria-label="Фильтр по категории" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}><option value="">Все категории</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div><div ref={availabilityListRef} className="availability-list">{grouped.length ? grouped.map(group => (
         <section key={group.category.id}>
           <h2>{group.category.name}</h2>
           {group.items.map(item => (
-            <div className={`availability-item availability-row ${!item.isAvailable ? "unavailable" : ""}`} data-item-id={item.id} key={item.id}>
-              <label className="item-select-control"><input className="item-select" type="checkbox" aria-label={`Выбрать ${item.name}`} checked={selectedIds.has(item.id)} onChange={event => toggleSelection(item.id, event.target.checked)} /></label>
+            <div className={`availability-item availability-row ${!itemIsAvailable(item) ? "unavailable" : ""}`} data-item-id={item.id} key={item.id}>
               <span className="item-copy"><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span>
-              <em>{item.isAvailable ? "В наличии" : "Нет в наличии"}</em>
+              <em>{itemIsAvailable(item) ? "В наличии" : "Нет в наличии"}</em>
+              <div className="stock-controls" aria-label={`Остаток ${item.name}`}>
+                <button type="button" aria-label={`Списать одну штуку ${item.name}`} disabled={stockBusyId !== null || item.stockQuantity == null || item.stockQuantity === 0} onClick={() => void adjustStock(item, -1)}>−1</button>
+                <strong>{item.stockQuantity == null ? "Не задан" : `${item.stockQuantity} шт.`}</strong>
+                <button type="button" aria-label={`Добавить одну штуку ${item.name}`} disabled={stockBusyId !== null || item.stockQuantity == null || item.stockQuantity >= 2_000_000_000} onClick={() => void adjustStock(item, 1)}>+1</button>
+                <label><span className="sr-only">Задать остаток ${item.name}</span><input aria-label={`Задать остаток ${item.name}`} type="number" min="0" max="2000000000" step="1" inputMode="numeric" placeholder="Шт." value={stockDrafts[item.id] ?? ""} onChange={event => setStockDrafts(current => ({ ...current, [item.id]: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") void saveStock(item); }} /></label>
+                <button type="button" disabled={stockBusyId !== null || stockDrafts[item.id] === undefined || stockDrafts[item.id] === ""} onClick={() => void saveStock(item)}>Сохранить</button>
+              </div>
             </div>
           ))}
         </section>
@@ -488,6 +497,7 @@ function StaffScreen() {
           <div className="form-row">
             <label><span>Название позиции</span><input placeholder="Например, Капучино" value={newItem.name} onChange={event => setNewItem({ ...newItem, name: event.target.value })} /></label>
             <label><span>Цена, ₽</span><input placeholder="250" inputMode="decimal" value={newItem.price} onChange={event => setNewItem({ ...newItem, price: event.target.value })} /></label>
+            <label><span>Количество, шт.</span><input type="number" min="0" max="2000000000" step="1" inputMode="numeric" placeholder="0" value={newItem.stockQuantity} onChange={event => setNewItem({ ...newItem, stockQuantity: event.target.value })} /></label>
             <label><span>Выход</span><input placeholder="Например, 1/150/030" value={newItem.servingSize} onChange={event => setNewItem({ ...newItem, servingSize: event.target.value })} /></label>
             <label><span>Ккал</span><input placeholder="Необязательно" inputMode="numeric" value={newItem.caloriesKcal} onChange={event => setNewItem({ ...newItem, caloriesKcal: event.target.value })} /></label>
             <label><span>Категория</span><select aria-label="Категория позиции" value={newItem.categoryId || categories[0]?.id || ""} onChange={event => setNewItem({ ...newItem, categoryId: event.target.value })}>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
@@ -495,7 +505,7 @@ function StaffScreen() {
           </div>
           <div className="csv-import">
             <label>Загрузить CSV<input type="file" accept=".csv,text/csv" onChange={event => { void selectCsv(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
-            <small>Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.</small>
+            <small>Обязательные столбцы: Категория, Название, Цена, Количество. Совпадающей позиции импорт обновляет только остаток; новую добавляет.</small>
             {csvRows.length > 0 && <button type="button" onClick={() => void importCsv()} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>
           {items.map(item => <div className="manage-row" key={item.id}>{editingName?.kind === "item" && editingName.id === item.id ? <div className="edit-name-form"><input aria-label="Название позиции" autoFocus value={editingName.name} onChange={event => setEditingName({ ...editingName, name: event.target.value })} onKeyDown={event => { if (event.key === "Enter") void saveEditedName(); if (event.key === "Escape") setEditingName(null); }} /><button type="button" disabled={busy} onClick={() => void saveEditedName()}>Сохранить</button><button type="button" className="subtle-action" onClick={() => setEditingName(null)}>Отмена</button></div> : <><span className="manage-row-content"><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span><div className="manage-actions"><button type="button" className="icon-action" aria-label={`Изменить позицию ${item.name}`} title="Изменить" disabled={busy} onClick={() => { setError(""); setEditingName({ kind: "item", id: item.id, name: item.name }); }}><PencilIcon /></button><button type="button" className="icon-action danger-action" aria-label={`Удалить позицию ${item.name}`} title="Удалить" disabled={busy} onClick={() => void deleteItem(item)}><CrossIcon /></button></div></>}</div>)}
@@ -657,7 +667,7 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
     </div>
     <label className="preview-resolution">Разрешение предпросмотра<select value={previewSize} onChange={event => setPreviewSize(event.target.value as PreviewSize)}>{Object.entries(previewSizes).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}</select></label>
     <div className={`experimental-preview ${testBreak ? "is-break" : ""}`} style={{ "--preview-panel": `${panelWidth}%`, "--preview-dim": (100 - dimPercent) / 100, "--preview-transition": `${transitionMs}ms`, "--preview-font-size": `${fontSize}px`, "--preview-gap": `${itemGap}px`, "--preview-aspect": `${selectedPreview.width} / ${selectedPreview.height}`, "--preview-background": previewBackground, "--preview-accent": previewAccent, "--preview-foreground": contrastForeground(previewBackground) } as React.CSSProperties} aria-label={`Предпросмотр ${selectedPreview.label}`}>
-      <div className="preview-menu"><header><b>{venue.name}</b><time>29.09.2026 13:57</time></header><div className="preview-items">{previewItems.map(item => <div className={`preview-item ${item.isAvailable ? "" : "unavailable"}`} key={item.id}><span>{item.name}</span><strong>{previewMoney.format(item.priceMinor / 100)}</strong></div>)}</div><small>Страница {previewPage + 1} из {expectedPages} · единый размер {fontSize}px</small></div>
+      <div className="preview-menu"><header><b>{venue.name}</b><time>29.09.2026 13:57</time></header><div className="preview-items">{previewItems.map(item => <div className={`preview-item ${itemIsAvailable(item) ? "" : "unavailable"}`} key={item.id}><span>{item.name}</span><strong>{previewMoney.format(item.priceMinor / 100)}</strong></div>)}</div><small>Страница {previewPage + 1} из {expectedPages} · единый размер {fontSize}px</small></div>
       <div className="preview-break"><b>{testBreak ? "Перерыв" : "Проверка"}</b><strong>{testBreak ? "09:42" : "—"}</strong></div>
     </div>
     <div className="preview-controls"><button type="button" onClick={() => setPreviewPage(value => (value - 1 + expectedPages) % expectedPages)}>Предыдущая</button><button type="button" onClick={() => setPreviewPage(value => (value + 1) % expectedPages)}>Следующая</button><button type="button" onClick={() => setPaused(value => !value)}>{paused ? "Продолжить автоперелистывание" : "Пауза автоперелистывания"}</button><button type="button" onClick={() => setTestBreak(value => !value)}>{testBreak ? "Закрыть проверку перерыва" : "Проверить режим перерыва"}</button></div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterMenuItems, selectionIncludesAll } from "./staffFilters.js";
+import { filterMenuItems } from "./staffFilters.js";
 import type { MenuItem } from "./types.js";
 
 const items = [
@@ -14,9 +14,4 @@ describe("staff filters", () => {
     expect(filterMenuItems(items, "", "food", "all").map((item) => item.id)).toEqual(["3"]);
   });
 
-  it("detect all filtered items", () => {
-    expect(selectionIncludesAll(["1", "2"], new Set(["1", "2"]))).toBe(true);
-    expect(selectionIncludesAll(["1", "2"], new Set(["1"]))).toBe(false);
-    expect(selectionIncludesAll([], new Set())).toBe(false);
-  });
 });

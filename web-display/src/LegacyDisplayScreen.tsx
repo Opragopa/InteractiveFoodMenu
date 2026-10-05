@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DisplayScreenProps } from "./DisplayScreen";
 import { contrastForeground } from "./DisplayScreen";
-import type { MenuItem } from "./types";
+import { itemIsAvailable, type MenuItem } from "./types";
 import { layoutForViewport, minMenuColumnWidth, paginateMenuByHeight } from "./paginate";
 import { formatRussianText } from "./typography";
 import { remainingBreakSeconds } from "./break";
@@ -92,7 +92,7 @@ export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connect
   }, [pages.length, venue.pageDurationSeconds]);
 
   const heading = (name: string, repeated: boolean, columnScale: number, key?: string) => <h2 className="tv-heading" data-measure-key={key} style={{ color: accent, borderBottomColor: accent, fontSize: 30 * columnScale }}>{formatRussianText(name)}{repeated && <span className="tv-continued"> · продолжение</span>}</h2>;
-  const row = (item: MenuItem, columnScale: number, measure = false) => <div key={item.id} data-measure-key={measure ? `item-${item.id}` : undefined} className={`tv-row${item.isAvailable ? "" : " unavailable"}`} style={{ fontSize: fontSize * columnScale, paddingTop: itemGap * columnScale / 2, paddingBottom: itemGap * columnScale / 2 }}>
+  const row = (item: MenuItem, columnScale: number, measure = false) => <div key={item.id} data-measure-key={measure ? `item-${item.id}` : undefined} className={`tv-row${itemIsAvailable(item) ? "" : " unavailable"}`} style={{ fontSize: fontSize * columnScale, paddingTop: itemGap * columnScale / 2, paddingBottom: itemGap * columnScale / 2 }}>
     <div className="tv-row-main"><span className="item-name">{formatRussianText(item.name)}</span><span className="tv-dots" /><span className="price">{money.format(item.priceMinor / 100)} ₽</span></div>
     {(venue.showServingSize || venue.showCalories) && <div className="tv-row-details">{venue.showServingSize && <span>Выход: {item.servingSize || "—"}</span>}{venue.showCalories && <span>{item.caloriesKcal ?? "—"} ккал</span>}</div>}
   </div>;

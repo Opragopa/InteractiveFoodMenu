@@ -1,6 +1,6 @@
 type DisplayVenue = Record<string, unknown>;
 type DisplayCategory = { id: string; name: string; sortOrder?: number };
-type DisplayItem = { id: string; categoryId: string; name: string; priceMinor: number; servingSize?: string | null; caloriesKcal?: number | null; sortOrder?: number; isAvailable?: boolean };
+type DisplayItem = { id: string; categoryId: string; name: string; priceMinor: number; servingSize?: string | null; caloriesKcal?: number | null; sortOrder?: number; isAvailable?: boolean; stockQuantity?: number | null };
 
 const esc = (value: unknown) => String(value ?? "").replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char]!));
 const color = (value: unknown, fallback: string) => typeof value === "string" && /^#[\da-f]{6}$/i.test(value) ? value : fallback;
@@ -89,7 +89,7 @@ export function renderLegacyDisplay(venue: DisplayVenue, categories: DisplayCate
     const columnScale = columnScales[columnIndex] ?? 1;
     return `<div class="column">${column.map(entry => entry.kind === "category"
       ? `<h2 style="font-size:${Math.round(32 * scale * columnScale)}px"><span>${esc(entry.text)}</span>${venue.showServingSize || venue.showCalories ? `<span class="labels">${venue.showServingSize ? "Выход " : ""}Цена${venue.showCalories ? " Ккал" : ""}</span>` : ""}</h2>`
-      : `<div class="item${entry.item.isAvailable === false ? " unavailable" : ""}${venue.showServingSize || venue.showCalories ? " has-details" : ""}" style="font-size:${Math.round(displayFont * columnScale)}px"><span class="item-name">${esc(entry.item.name)}</span>${venue.showServingSize || venue.showCalories ? "" : '<span class="leader"></span>'}${venue.showServingSize ? `<span class="serving">${esc(entry.item.servingSize || "—")}</span>` : ""}<span class="price">${money(Number(entry.item.priceMinor) || 0)}</span>${venue.showCalories ? `<span class="calories">${esc(entry.item.caloriesKcal ?? "—")} ккал</span>` : ""}</div>`).join("")}</div>`;
+      : `<div class="item${(entry.item.stockQuantity == null ? entry.item.isAvailable === false : entry.item.stockQuantity === 0) ? " unavailable" : ""}${venue.showServingSize || venue.showCalories ? " has-details" : ""}" style="font-size:${Math.round(displayFont * columnScale)}px"><span class="item-name">${esc(entry.item.name)}</span>${venue.showServingSize || venue.showCalories ? "" : '<span class="leader"></span>'}${venue.showServingSize ? `<span class="serving">${esc(entry.item.servingSize || "—")}</span>` : ""}<span class="price">${money(Number(entry.item.priceMinor) || 0)}</span>${venue.showCalories ? `<span class="calories">${esc(entry.item.caloriesKcal ?? "—")} ккал</span>` : ""}</div>`).join("")}</div>`;
   }).join("")}</div></section>`).join("");
   const breakEnd = venue.breakEndsAt ? new Date(String(venue.breakEndsAt)).getTime() : now;
   const breakSeconds = Math.max(0, Math.ceil((breakEnd - now) / 1000));

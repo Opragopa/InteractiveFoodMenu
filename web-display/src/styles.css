@@ -488,14 +488,23 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 
 .legacy-tv, .legacy-tv body, .legacy-tv #root { font-family: OnestStatic, Arial, sans-serif; }
 
-/* Staff list actions: one selection checkbox per dish, with touch-sized edit/delete controls. */
+/* Staff list actions and stock controls. */
 .availability-item { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px; border-bottom: 1px solid #edf3ed; transition: opacity 220ms ease; }
 .availability-item:last-child { border-bottom: 0; }
 .availability-item > span { flex: 1; min-width: 0; display: grid; gap: 3px; }
 .availability-item b { font-size: 15px; }
 .availability-item small { color: var(--staff-muted); font-size: 13px; }
 .availability-item em { min-width: 94px; color: var(--staff-muted); font-size: 12px; font-style: normal; text-align: right; }
-.availability-item.unavailable { opacity: .55; }
+.availability-item.unavailable { opacity: 1; }
+.availability-item.unavailable .item-copy, .availability-item.unavailable em { opacity: .55; }
+.availability-item { flex-wrap: wrap; }
+.availability-item .stock-controls { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; }
+.stock-controls strong { min-width: 78px; text-align: center; font-size: 13px; }
+.stock-controls button { min-height: 40px; padding: 7px 10px; border: 1px solid var(--staff-border); border-radius: 8px; color: var(--staff-primary); background: var(--staff-muted-surface); font: inherit; font-weight: 700; cursor: pointer; }
+.stock-controls button:disabled { opacity: .48; cursor: not-allowed; }
+.availability-item .stock-controls label { flex: 0 0 86px; min-height: 0; padding: 0; border: 0; }
+.staff-menu .stock-controls input { width: 86px; height: 40px; min-height: 40px; padding: 7px; border: 1px solid var(--staff-border); border-radius: 8px; font: inherit; }
+@media (max-width: 600px) { .availability-item .stock-controls { width: 100%; justify-content: flex-start; margin-left: 0; } .availability-item .stock-controls button { min-height: 44px; } }
 .availability-list .item-select { flex: 0 0 auto; width: 20px; height: 20px; accent-color: var(--staff-accent); }
 .bulk-actions { display: flex; gap: 8px; margin-left: auto; }
 .bulk-actions button:disabled { opacity: .48; cursor: not-allowed; }

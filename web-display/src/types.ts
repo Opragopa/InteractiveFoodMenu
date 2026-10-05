@@ -43,7 +43,12 @@ export type MenuItem = {
   caloriesKcal?: number | null;
   sortOrder: number;
   isAvailable: boolean;
+  stockQuantity?: number | null;
 };
+
+export function itemIsAvailable(item: MenuItem): boolean {
+  return item.stockQuantity == null ? item.isAvailable : item.stockQuantity > 0;
+}
 
 export type PageEntry =
   | { kind: "category"; categoryId: string; name: string; repeated: boolean }

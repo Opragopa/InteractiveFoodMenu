@@ -81,6 +81,7 @@ export const api = {
   deleteCategory: (token: string, id: string) => request<void>(`/categories/${id}`, { method: "DELETE" }, token),
   createItem: (token: string, data: unknown) => request<{ item: any }>("/items", { method: "POST", body: JSON.stringify(data) }, token),
   updateItem: (token: string, id: string, data: unknown) => request<{ item: any }>(`/items/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
+  adjustItemStock: (token: string, id: string, delta: 1 | -1) => request<{ item: MenuItem }>(`/items/${id}/stock/adjust`, { method: "POST", body: JSON.stringify({ delta }) }, token),
   updateItemsAvailability: (token: string, itemIds: string[], isAvailable: boolean) => request<BulkAvailabilityResponse>("/items/bulk-availability", { method: "PATCH", body: JSON.stringify({ itemIds, isAvailable }) }, token),
   deleteItem: (token: string, id: string) => request<void>(`/items/${id}`, { method: "DELETE" }, token),
   createPairing: () => request<{ pairingToken: string; displayBaseUrl: string; expiresInSeconds: number }>("/display/pairings", { method: "POST" }),
