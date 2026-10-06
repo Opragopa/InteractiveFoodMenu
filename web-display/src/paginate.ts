@@ -1,13 +1,23 @@
 import type { Category, MenuItem, MenuPage, PageEntry } from "./types";
 
 export const MIN_DISPLAY_COLUMN_WIDTH = 580;
+const priceFormatter = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2 });
 
 // Leave room for a typical two-line name and a right-aligned price at the
 // configured font size. Extra menu entries go to the next column or page.
-export function minMenuColumnWidth(fontSize: number, items: MenuItem[] = []) {
+export function menuValueWidths(items: MenuItem[], serving: boolean, calories: boolean) {
+  const longestPrice = items.reduce((length, item) => Math.max(length, priceFormatter.format(item.priceMinor / 100).length), 0);
+  const longestServing = serving ? items.reduce((length, item) => Math.max(length, (item.servingSize || "—").length), 0) : 0;
+  const longestCalories = calories ? items.reduce((length, item) => Math.max(length, String(item.caloriesKcal ?? "—").length), 0) : 0;
+  return { price: Math.max(6.5, longestPrice * .7 + 1), serving: serving ? Math.max(5, longestServing * .7 + 1) : 0, calories: calories ? Math.max(3, longestCalories * .7 + 1) : 0 };
+}
+
+export function minMenuColumnWidth(fontSize: number, items: MenuItem[] = [], serving = false, calories = false) {
   const longestName = items.reduce((length, item) => Math.max(length, item.name.length), 0);
   const twoLineWidth = longestName * fontSize * .54 / 2 + fontSize * 4.5 + 32;
-  return Math.max(MIN_DISPLAY_COLUMN_WIDTH, Math.ceil(fontSize * 13 + 160), Math.ceil(twoLineWidth));
+  const widths = menuValueWidths(items, serving, calories);
+  const detailWidth = (serving || calories) ? fontSize * (widths.serving + widths.price + widths.calories + 2) + 32 : 0;
+  return Math.max(MIN_DISPLAY_COLUMN_WIDTH, Math.ceil(fontSize * 13 + 160), Math.ceil(twoLineWidth), Math.ceil(detailWidth));
 }
 
 export function paginateMenu(
@@ -75,29 +85,10 @@ export function layoutForViewport(width: number, height: number, rowLayoutHeight
   };
 }
 
-export function autoScaleForMenu(categories: Category[], items: MenuItem[], width: number, height: number, maxPages = 2) {
-  // Auto mode must remain legible on ordinary 1080p displays. Manual mode can
-  // still use the full 50–160% range, while automatic mode grows only as far
-  // as the viewport can comfortably render.
-  const pagesAt = (scale: number) => {
-    const scaledWidth = width / scale;
-    const scaledHeight = height / scale;
-    const layout = layoutForViewport(scaledWidth, scaledHeight, scaledHeight);
-    return paginateMenu(categories, items, layout.rowsPerColumn, layout.columnCount).length;
-  };
-  // Prefer a single complete screen. A sparse second page is harder to read
-  // and wastes the available display area.
-  for (let percent = 120; percent >= 75; percent -= 5) {
-    const scale = percent / 100;
-    if (pagesAt(scale) <= 1) return scale;
-  }
-  for (let percent = 120; percent >= 75; percent -= 5) {
-    const scale = percent / 100;
-    if (pagesAt(scale) <= maxPages) return scale;
-  }
-  // Keep TV text readable; additional pages are preferable to shrinking
-  // the entire menu below 75%.
-  return 0.75;
+export function autoScaleForMenu(_categories: Category[], _items: MenuItem[], _width: number, _height: number) {
+  // Pagination, rather than shrinking text to meet a page target, handles a
+  // crowded menu. Existing manual percentages are applied by the callers.
+  return 1;
 }
 
 export function itemNameScale(name: string) {

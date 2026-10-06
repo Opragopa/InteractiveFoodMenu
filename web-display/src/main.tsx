@@ -21,6 +21,7 @@ window.addEventListener("error", (event) => {
 });
 window.addEventListener("unhandledrejection", (event) => showStartupError(event.reason));
 if (import.meta.env.VITE_DEMO_MODE === "true") {
+  if (new URLSearchParams(window.location.search).has("legacy")) document.documentElement.classList.add("legacy-tv");
   import("./DemoApp").then(({ DemoApp }) => root.render(<StrictMode><DemoApp /></StrictMode>)).catch((cause) => showStartupError(cause));
 } else {
   import("./App").then(({ App }) => root.render(<StrictMode><App /></StrictMode>)).catch((cause) => showStartupError(cause));

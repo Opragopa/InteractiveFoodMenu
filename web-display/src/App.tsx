@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEffect as useEffectQr } from "react";
-import { contrastForeground, DisplayScreen } from "./DisplayScreen";
+import { DisplayScreen } from "./DisplayScreen";
 import { itemIsAvailable, type Category, type MenuItem, type Venue } from "./types";
 import QRCode from "qrcode";
 import { matchingCsvItems, normalizeCsvKey, parseMenuCsv, type CsvMenuRow } from "./csv";
@@ -18,7 +18,6 @@ const previewSizes = {
   "3840x2160": { width: 3840, height: 2160, label: "3840 × 2160" },
 } as const;
 type PreviewSize = keyof typeof previewSizes;
-const previewMoney = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2 });
 
 function installationId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -516,8 +515,8 @@ function StaffScreen() {
         <div className="nutrition-toggles"><label><input type="checkbox" checked={venue.showServingSize === true} onChange={event => void saveVenueSettings({ showServingSize: event.target.checked }).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки столбцов."))} disabled={busy} /> Показывать столбец «Выход»</label><label><input type="checkbox" checked={venue.showCalories === true} onChange={event => void saveVenueSettings({ showCalories: event.target.checked }).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки столбцов."))} disabled={busy} /> Показывать столбец «Ккал»</label></div>
         {categories.map(category => <div className="nutrition-category" key={category.id}><h3>{category.name}</h3>{items.filter(item => item.categoryId === category.id).map(item => { const draft = nutritionDrafts[item.id] ?? { servingSize: item.servingSize == null ? "" : String(item.servingSize), caloriesKcal: item.caloriesKcal == null ? "" : String(item.caloriesKcal) }; return <div className="nutrition-row" key={item.id}><b>{item.name}</b><label>Выход<input maxLength={40} placeholder="1/150/030" value={draft.servingSize} onChange={event => setNutritionDrafts(current => ({ ...current, [item.id]: { ...draft, servingSize: event.target.value } }))} /></label><label>Ккал<input inputMode="numeric" placeholder="—" value={draft.caloriesKcal} onChange={event => setNutritionDrafts(current => ({ ...current, [item.id]: { ...draft, caloriesKcal: event.target.value } }))} /></label><button type="button" disabled={busy} onClick={() => void saveNutrition(item)}>Сохранить</button></div>; })}</div>)}
       </section>}
-      {tab === "settings" && venue && <VenueSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
-      {tab === "experimental" && venue && <ExperimentalSettings venue={venue} categories={categories} items={items} busy={busy} onSave={saveVenueSettings} />}
+      {tab === "settings" && venue && <VenueSettings venue={venue} categories={categories} items={items} busy={busy} onSave={saveVenueSettings} />}
+      {tab === "experimental" && venue && <ExperimentalSettings venue={venue} busy={busy} onSave={saveVenueSettings} />}
       {toast && <p className="staff-toast" role="status" aria-live="polite">{toast}</p>}
       {csvProgress && <p className="staff-import-status" role="status" aria-live="polite">Импорт: {csvProgress.current} из {csvProgress.total}{csvProgress.failed.length ? ` · ошибок: ${csvProgress.failed.length}` : ""}</p>}
       {confirmDelete && <div className="modal-backdrop" role="presentation"><section className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-delete-title"><h2 id="confirm-delete-title">Удалить {confirmDelete.kind === "category" ? "категорию" : "позицию"}?</h2><p>«{confirmDelete.name}» будет удалено. {confirmDelete.kind === "category" ? "Сначала убедитесь, что в категории не осталось позиций." : "Автоматически восстановить позицию нельзя."}</p><div><button type="button" onClick={() => setConfirmDelete(null)} disabled={busy}>Отмена</button><button type="button" className="danger-action" onClick={() => void performDelete()} disabled={busy}>{busy ? "Удаляем…" : "Удалить"}</button></div></section></div>}
@@ -528,96 +527,116 @@ function StaffScreen() {
 function PencilIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 4 4 4"/><path d="m18 2 4 4L8 20l-5 1 1-5Z"/></svg>; }
 function CrossIcon() { return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>; }
 
-function VenueSettings({ venue, busy, onSave }: {
-  venue: Venue;
-  busy: boolean;
-  onSave: (settings: Pick<Venue, "name" | "backgroundColor" | "accentColor" | "pageDurationSeconds" | "displayScalePercent" | "columnScale1Percent" | "columnScale2Percent" | "columnScale3Percent">) => Promise<void>;
+export function VenueSettings({ venue, categories, items, busy, onSave }: {
+  venue: Venue; categories: Category[]; items: MenuItem[]; busy: boolean;
+  onSave: (settings: Partial<Venue>) => Promise<void>;
 }) {
   const [name, setName] = useState(venue.name);
   const [backgroundColor, setBackgroundColor] = useState(venue.backgroundColor);
   const [accentColor, setAccentColor] = useState(venue.accentColor);
   const [duration, setDuration] = useState(venue.pageDurationSeconds);
-  const [displayScale, setDisplayScale] = useState(Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)));
+  const [fontSize, setFontSize] = useState(venue.menuItemFontSizePx ?? 34);
+  const [displayScale, setDisplayScale] = useState(venue.displayScalePercent ?? 100);
+  const [displayScaleMode, setDisplayScaleMode] = useState<"auto" | "manual">(venue.displayScaleMode ?? "auto");
   const [columnScales, setColumnScales] = useState([venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100]);
+  const [previewSize, setPreviewSize] = useState<PreviewSize>("1366x768");
+  const [previewPage, setPreviewPage] = useState(0);
+  const [previewPages, setPreviewPages] = useState(1);
+  const [previewPaused, setPreviewPaused] = useState(false);
+  const [previewBreak, setPreviewBreak] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(800);
+  const previewRef = useRef<HTMLDivElement>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const initialColumnScales = [venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100];
-  const dirty = name !== venue.name || backgroundColor.toUpperCase() !== venue.backgroundColor.toUpperCase() || accentColor.toUpperCase() !== venue.accentColor.toUpperCase() || duration !== venue.pageDurationSeconds || displayScale !== Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)) || columnScales.some((value, index) => value !== initialColumnScales[index]);
+  const dirty = name !== venue.name || backgroundColor.toUpperCase() !== venue.backgroundColor.toUpperCase() || accentColor.toUpperCase() !== venue.accentColor.toUpperCase() || duration !== venue.pageDurationSeconds || fontSize !== (venue.menuItemFontSizePx ?? 34) || displayScale !== (venue.displayScalePercent ?? 100) || displayScaleMode !== (venue.displayScaleMode ?? "auto") || columnScales.some((value, index) => value !== initialColumnScales[index]);
 
   useEffect(() => {
-    setName(venue.name);
-    setBackgroundColor(venue.backgroundColor);
-    setAccentColor(venue.accentColor);
-    setDuration(venue.pageDurationSeconds);
-    setDisplayScale(Math.min(160, Math.max(80, venue.displayScalePercent ?? 100)));
+    setName(venue.name); setBackgroundColor(venue.backgroundColor); setAccentColor(venue.accentColor);
+    setDuration(venue.pageDurationSeconds); setFontSize(venue.menuItemFontSizePx ?? 34);
+    setDisplayScale(venue.displayScalePercent ?? 100); setDisplayScaleMode(venue.displayScaleMode ?? "auto");
     setColumnScales([venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100]);
   }, [venue]);
-
+  useLayoutEffect(() => {
+    const node = previewRef.current;
+    if (!node) return;
+    const resize = () => setPreviewWidth(Math.max(1, node.clientWidth || 800));
+    resize();
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver(resize);
+      observer.observe(node);
+      return () => observer.disconnect();
+    }
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     addEventListener("beforeunload", warn);
     return () => removeEventListener("beforeunload", warn);
   }, [dirty]);
-
+  useEffect(() => {
+    if (previewPaused || previewPages <= 1) return;
+    const timer = window.setInterval(() => setPreviewPage(value => (value + 1) % previewPages), duration * 1000);
+    return () => window.clearInterval(timer);
+  }, [previewPaused, previewPages, duration]);
+  const updatePreviewPages = useCallback((count: number) => {
+    setPreviewPages(count);
+    setPreviewPage(value => Math.min(value, count - 1));
+  }, []);
+  const selectedPreview = previewSizes[previewSize];
+  const previewScale = Math.min(1, previewWidth / selectedPreview.width);
+  const previewVenue: Venue = {
+    ...venue, name, backgroundColor, accentColor, pageDurationSeconds: duration,
+    menuItemFontSizePx: fontSize, displayScalePercent: displayScale, displayScaleMode,
+    columnScale1Percent: columnScales[0], columnScale2Percent: columnScales[1], columnScale3Percent: columnScales[2],
+    breakActive: previewBreak, breakEndsAt: previewBreak ? new Date(Date.now() + 10 * 60_000).toISOString() : venue.breakEndsAt,
+  };
   const save = async () => {
     const normalizedName = name.trim();
     if (!normalizedName || normalizedName.length > 80) { setError("Название должно содержать от 1 до 80 символов."); return; }
     if (!/^#[0-9a-f]{6}$/i.test(backgroundColor) || !/^#[0-9a-f]{6}$/i.test(accentColor)) { setError("Укажите цвета в формате #RRGGBB."); return; }
     setError(""); setMessage("");
     try {
-      await onSave({ name: normalizedName, backgroundColor: backgroundColor.toUpperCase(), accentColor: accentColor.toUpperCase(), pageDurationSeconds: duration, displayScalePercent: displayScale, columnScale1Percent: columnScales[0], columnScale2Percent: columnScales[1], columnScale3Percent: columnScales[2] });
+      await onSave({ name: normalizedName, backgroundColor: backgroundColor.toUpperCase(), accentColor: accentColor.toUpperCase(), pageDurationSeconds: duration, menuItemFontSizePx: fontSize, displayScalePercent: displayScale, displayScaleMode, columnScale1Percent: columnScales[0], columnScale2Percent: columnScales[1], columnScale3Percent: columnScales[2] });
       setMessage("Настройки сохранены. Экран обновится автоматически.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
 
-  return <section className="venue-settings"><div className="settings-title"><div><h2>Оформление меню</h2><p>Изменения применятся на экране после сохранения.</p></div>{dirty && <span className="unsaved-indicator" role="status">Есть несохранённые изменения</span>}</div>
+  return <section className="venue-settings"><div className="settings-title"><div><h2>Оформление меню</h2><p>Настройте размер текста и проверьте реальный вид ТВ-экрана до сохранения.</p></div>{dirty && <span className="unsaved-indicator" role="status">Есть несохранённые изменения</span>}</div>
     <label className="setting-field"><span>Название точки</span><input maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label>
     <ColorSetting label="Цвет фона" value={backgroundColor} onChange={setBackgroundColor} />
     <ColorSetting label="Акцентный цвет" value={accentColor} onChange={setAccentColor} />
-    <div className="setting-field duration-setting"><span>Смена страниц</span><div className="duration-control"><button type="button" aria-label="Уменьшить интервал" disabled={duration <= 5} onClick={() => setDuration(value => Math.max(5, value - 1))}>−</button><strong>{duration} сек.</strong><button type="button" aria-label="Увеличить интервал" disabled={duration >= 30} onClick={() => setDuration(value => Math.min(30, value + 1))}>+</button></div><small>Если меню не помещается на одной странице, ТВ будет переключать страницы с этим интервалом.</small></div>
-    <div className="setting-field duration-setting"><span>Масштаб меню ТВ</span><div className="duration-control"><button type="button" aria-label="Уменьшить масштаб" disabled={displayScale <= 80} onClick={() => setDisplayScale(value => Math.max(80, value - 5))}>−</button><strong>{displayScale}%</strong><button type="button" aria-label="Увеличить масштаб" disabled={displayScale >= 160} onClick={() => setDisplayScale(value => Math.min(160, value + 5))}>+</button></div><small>Увеличивает текст и отступы; при крупном масштабе на странице будет меньше позиций.</small></div>
-    <div className="setting-field column-scale-settings"><span>Масштаб столбцов</span>{columnScales.map((value, index) => <label key={index}>Столбец {index + 1}<input aria-label={`Масштаб столбца ${index + 1}, процентов`} type="range" min="50" max="160" step="5" value={value} onChange={event => setColumnScales(current => current.map((scale, column) => column === index ? Number(event.target.value) : scale))} /><strong>{value}%</strong></label>)}<small>Настройте размер текста отдельно для каждого столбца. Если на странице меньше столбцов, лишние настройки не используются.</small></div>
+    <div className="setting-field duration-setting"><span>Размер текста меню</span><div className="duration-control"><button type="button" aria-label="Уменьшить размер текста" disabled={fontSize <= 22} onClick={() => setFontSize(value => Math.max(22, value - 1))}>−</button><strong>{fontSize} px</strong><button type="button" aria-label="Увеличить размер текста" disabled={fontSize >= 54} onClick={() => setFontSize(value => Math.min(54, value + 1))}>+</button></div><small>Базовый размер для 1366 × 768; на экранах с большим разрешением увеличивается пропорционально. Крупный текст создаёт больше страниц.</small></div>
+    <div className="setting-field duration-setting"><span>Смена страниц</span><div className="duration-control"><button type="button" aria-label="Уменьшить интервал" disabled={duration <= 5} onClick={() => setDuration(value => Math.max(5, value - 1))}>−</button><strong>{duration} сек.</strong><button type="button" aria-label="Увеличить интервал" disabled={duration >= 30} onClick={() => setDuration(value => Math.min(30, value + 1))}>+</button></div><small>Когда меню занимает несколько страниц, ТВ перелистывает их с этим интервалом.</small></div>
+    <details className="advanced-scale-settings"><summary>Дополнительные настройки масштаба</summary>
+      <label className="setting-field"><span>Режим масштаба экрана</span><select value={displayScaleMode} onChange={event => setDisplayScaleMode(event.target.value as "auto" | "manual")}><option value="auto">Авто — сохранять размер текста</option><option value="manual">Ручной</option></select></label>
+      {displayScaleMode === "manual" && <div className="setting-field duration-setting"><span>Общий масштаб экрана</span><div className="duration-control"><button type="button" aria-label="Уменьшить масштаб" disabled={displayScale <= 50} onClick={() => setDisplayScale(value => Math.max(50, value - 1))}>−</button><strong>{displayScale}%</strong><button type="button" aria-label="Увеличить масштаб" disabled={displayScale >= 160} onClick={() => setDisplayScale(value => Math.min(160, value + 1))}>+</button></div><small>Влияет на весь экран меню. В автоматическом режиме сохранённое значение не используется.</small></div>}
+      <div className="setting-field column-scale-settings"><span>Размер отдельных колонок</span>{columnScales.map((value, index) => <label key={index}>Колонка {index + 1}<input aria-label={`Масштаб столбца ${index + 1}, процентов`} type="range" min="50" max="160" step="1" value={value} onChange={event => setColumnScales(current => current.map((scale, column) => column === index ? Number(event.target.value) : scale))} /><strong>{value}%</strong></label>)}<small>Меняет текст только в выбранной колонке. При нехватке места экран покажет меньше колонок и больше страниц.</small></div>
+    </details>
+    <div className="display-preview-controls"><label className="preview-resolution">Разрешение предпросмотра<select value={previewSize} onChange={event => { setPreviewSize(event.target.value as PreviewSize); setPreviewPage(0); }}>{Object.entries(previewSizes).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}</select></label><span className="page-estimate">Страница {Math.min(previewPage + 1, previewPages)} из {previewPages}</span></div>
+    <div ref={previewRef} className="real-display-preview" aria-label={`Предпросмотр меню ${selectedPreview.label}`} style={{ height: selectedPreview.height * previewScale }}><div className="real-display-preview-inner" style={{ width: selectedPreview.width, height: selectedPreview.height, transform: `scale(${previewScale})` }}><DisplayScreen venue={previewVenue} categories={categories} items={items} logoUrl="" connected previewViewport={selectedPreview} previewPageIndex={previewPage} pauseAutoPaging onPageCount={updatePreviewPages} /></div></div>
+    <div className="preview-controls"><button type="button" disabled={previewPages <= 1} onClick={() => setPreviewPage(value => (value - 1 + previewPages) % previewPages)}>Предыдущая</button><button type="button" disabled={previewPages <= 1} onClick={() => setPreviewPage(value => (value + 1) % previewPages)}>Следующая</button><button type="button" onClick={() => setPreviewPaused(value => !value)}>{previewPaused ? "Продолжить перелистывание" : "Пауза перелистывания"}</button><button type="button" onClick={() => setPreviewBreak(value => !value)}>{previewBreak ? "Выключить перерыв" : "Проверить перерыв"}</button></div>
     <button className="save-settings" type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить оформление"}</button>
-    {message && <p className="settings-success">{message}</p>}{error && <p className="status-error">{error}</p>}
+    {message && <p className="settings-success" role="status">{message}</p>}{error && <p className="status-error" role="alert">{error}</p>}
   </section>;
 }
 
-function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
+function ExperimentalSettings({ venue, busy, onSave }: {
   venue: Venue;
-  categories: Category[];
-  items: MenuItem[];
   busy: boolean;
   onSave: (settings: Partial<Venue>) => Promise<void>;
 }) {
   const [preset, setPreset] = useState<DisplayPreset>(venue.displayPreset ?? "balanced");
   const [panelWidth, setPanelWidth] = useState(venue.breakPanelWidthPercent ?? 36);
   const [dimPercent, setDimPercent] = useState(venue.breakMenuDimPercent ?? 45);
-  const [fontSize, setFontSize] = useState(venue.menuItemFontSizePx ?? 34);
   const [itemGap, setItemGap] = useState(venue.menuItemGapPx ?? 12);
-  const [pageDuration, setPageDuration] = useState(Math.min(30, venue.pageDurationSeconds || 10));
   const [transitionMs, setTransitionMs] = useState(venue.breakTransitionMs ?? 600);
   const [expiredText, setExpiredText] = useState(venue.breakExpiredText ?? "Скоро буду");
-  const [testBreak, setTestBreak] = useState(false);
-  const [previewPage, setPreviewPage] = useState(0);
-  const [previewSize, setPreviewSize] = useState<PreviewSize>("1366x768");
-  const [paused, setPaused] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const dirty = panelWidth !== (venue.breakPanelWidthPercent ?? 36) || dimPercent !== (venue.breakMenuDimPercent ?? 45) || fontSize !== (venue.menuItemFontSizePx ?? 34) || itemGap !== (venue.menuItemGapPx ?? 12) || pageDuration !== Math.min(30, venue.pageDurationSeconds || 10) || transitionMs !== (venue.breakTransitionMs ?? 600) || expiredText !== (venue.breakExpiredText ?? "Скоро буду") || preset !== (venue.displayPreset ?? "balanced");
-  const selectedPreview = previewSizes[previewSize];
-  const previewBackground = /^#[0-9a-f]{6}$/i.test(venue.backgroundColor ?? "") ? venue.backgroundColor! : "#56965B";
-  const previewAccent = /^#[0-9a-f]{6}$/i.test(venue.accentColor ?? "") ? venue.accentColor! : "#FFFFFF";
-  const previewWidth = selectedPreview.width * (testBreak ? (100 - panelWidth) / 100 : 1);
-  const expectedPages = Math.max(1, estimateMenuPages(categories, items, previewWidth, selectedPreview.height, fontSize, itemGap));
-  const previewItems = items.slice(0, 8);
-
-  useEffect(() => { setPreviewPage((value) => Math.min(value, expectedPages - 1)); }, [expectedPages]);
-  useEffect(() => {
-    if (paused || expectedPages <= 1) return;
-    const timer = window.setInterval(() => setPreviewPage((value) => (value + 1) % expectedPages), pageDuration * 1000);
-    return () => window.clearInterval(timer);
-  }, [paused, expectedPages, pageDuration]);
+  const dirty = panelWidth !== (venue.breakPanelWidthPercent ?? 36) || dimPercent !== (venue.breakMenuDimPercent ?? 45) || itemGap !== (venue.menuItemGapPx ?? 12) || transitionMs !== (venue.breakTransitionMs ?? 600) || expiredText !== (venue.breakExpiredText ?? "Скоро буду") || preset !== (venue.displayPreset ?? "balanced");
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -628,7 +647,7 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
   const applyPreset = (next: DisplayPreset) => {
     const values = displayPresets[next];
     setPreset(next); setPanelWidth(values.breakPanelWidthPercent!); setDimPercent(values.breakMenuDimPercent!);
-    setFontSize(values.menuItemFontSizePx!); setItemGap(values.menuItemGapPx!); setPageDuration(values.pageDurationSeconds); setTransitionMs(values.breakTransitionMs!);
+    setItemGap(values.menuItemGapPx!); setTransitionMs(values.breakTransitionMs!);
   };
   const reset = () => { applyPreset("balanced"); setExpiredText("Скоро буду"); };
   const save = async () => {
@@ -636,16 +655,16 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
     try {
       const normalized = normalizeVenueAppearance({
         name: venue.name, backgroundColor: venue.backgroundColor, accentColor: venue.accentColor,
-        pageDurationSeconds: pageDuration, displayScalePercent: venue.displayScalePercent ?? 100,
+        pageDurationSeconds: venue.pageDurationSeconds, displayScalePercent: venue.displayScalePercent ?? 100,
         displayScaleMode: venue.displayScaleMode, logoPosition: venue.logoPosition ?? "top-right", logoInsetPercent: venue.logoInsetPercent ?? 3,
         columnScale1Percent: venue.columnScale1Percent ?? 100, columnScale2Percent: venue.columnScale2Percent ?? 100, columnScale3Percent: venue.columnScale3Percent ?? 100,
         logoScalePercent: venue.logoScalePercent ?? 100, logoVisible: venue.logoVisible, menuRefreshSeconds: venue.menuRefreshSeconds,
         breakFontSizePercent: venue.breakFontSizePercent, breakPanelWidthPercent: panelWidth, breakMenuDimPercent: dimPercent,
-        menuItemFontSizePx: fontSize, menuItemGapPx: itemGap, breakTransitionMs: transitionMs, displayPreset: preset, breakExpiredText: expiredText,
+        menuItemFontSizePx: venue.menuItemFontSizePx ?? 34, menuItemGapPx: itemGap, breakTransitionMs: transitionMs, displayPreset: preset, breakExpiredText: expiredText,
       });
       await onSave({
-        pageDurationSeconds: normalized.pageDurationSeconds, breakPanelWidthPercent: normalized.breakPanelWidthPercent,
-        breakMenuDimPercent: normalized.breakMenuDimPercent, menuItemFontSizePx: normalized.menuItemFontSizePx,
+        breakPanelWidthPercent: normalized.breakPanelWidthPercent,
+        breakMenuDimPercent: normalized.breakMenuDimPercent,
         menuItemGapPx: normalized.menuItemGapPx, breakTransitionMs: normalized.breakTransitionMs,
         displayPreset: normalized.displayPreset, breakExpiredText: normalized.breakExpiredText,
       });
@@ -653,24 +672,15 @@ function ExperimentalSettings({ venue, categories, items, busy, onSave }: {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить настройки."); }
   };
 
-  return <section className="experimental-settings"><div className="experimental-heading"><div><h2>Расширенные настройки</h2><p>Настройте пагинацию и двухколоночный режим перерыва.</p>{dirty && <span className="unsaved-indicator" role="status">Есть несохранённые изменения</span>}</div><span className="page-estimate">Ожидается страниц: <b>{expectedPages}</b></span></div>
-    <div className="preset-buttons">{(["compact", "balanced", "large"] as DisplayPreset[]).map(value => <button type="button" className={preset === value ? "active" : ""} key={value} onClick={() => applyPreset(value)}>{({ compact: "Компактный", balanced: "Сбалансированный", large: "Крупный" })[value]}</button>)}</div>
-    {expectedPages > 5 && <p className="settings-warning">При выбранном размере текста и отступах меню будет состоять более чем из пяти страниц.</p>}
+  return <section className="experimental-settings"><div className="experimental-heading"><div><h2>Расширенные настройки</h2><p>Настройте экран перерыва и отступы строк. Полный предпросмотр находится в разделе «Оформление меню».</p>{dirty && <span className="unsaved-indicator" role="status">Есть несохранённые изменения</span>}</div></div>
+    <div className="preset-buttons">{(["compact", "balanced", "large"] as DisplayPreset[]).map(value => <button type="button" className={preset === value ? "active" : ""} key={value} onClick={() => applyPreset(value)}>{({ compact: "Компактные отступы", balanced: "Обычные отступы", large: "Просторные отступы" })[value]}</button>)}</div>
     <div className="experimental-grid">
       <RangeSetting label="Ширина панели перерыва" value={panelWidth} unit="%" min={30} max={50} step={1} onChange={setPanelWidth} />
       <RangeSetting label="Приглушение меню" value={dimPercent} unit="%" min={25} max={75} step={5} onChange={setDimPercent} />
-      <RangeSetting label="Размер названий" value={fontSize} unit="px" min={22} max={54} step={1} onChange={setFontSize} />
       <RangeSetting label="Вертикальные отступы" value={itemGap} unit="px" min={4} max={28} step={1} onChange={setItemGap} />
-      <RangeSetting label="Смена страниц" value={pageDuration} unit="сек." min={5} max={30} step={1} onChange={setPageDuration} />
       <RangeSetting label="Переход часов и таймера" value={transitionMs} unit="мс" min={200} max={1200} step={100} onChange={setTransitionMs} />
       <label className="experimental-text">Текст после окончания таймера<input maxLength={80} value={expiredText} onChange={event => setExpiredText(event.target.value)} /></label>
     </div>
-    <label className="preview-resolution">Разрешение предпросмотра<select value={previewSize} onChange={event => setPreviewSize(event.target.value as PreviewSize)}>{Object.entries(previewSizes).map(([value, option]) => <option key={value} value={value}>{option.label}</option>)}</select></label>
-    <div className={`experimental-preview ${testBreak ? "is-break" : ""}`} style={{ "--preview-panel": `${panelWidth}%`, "--preview-dim": (100 - dimPercent) / 100, "--preview-transition": `${transitionMs}ms`, "--preview-font-size": `${fontSize}px`, "--preview-gap": `${itemGap}px`, "--preview-aspect": `${selectedPreview.width} / ${selectedPreview.height}`, "--preview-background": previewBackground, "--preview-accent": previewAccent, "--preview-foreground": contrastForeground(previewBackground) } as React.CSSProperties} aria-label={`Предпросмотр ${selectedPreview.label}`}>
-      <div className="preview-menu"><header><b>{venue.name}</b><time>29.09.2026 13:57</time></header><div className="preview-items">{previewItems.map(item => <div className={`preview-item ${itemIsAvailable(item) ? "" : "unavailable"}`} key={item.id}><span>{item.name}</span><strong>{previewMoney.format(item.priceMinor / 100)}</strong></div>)}</div><small>Страница {previewPage + 1} из {expectedPages} · единый размер {fontSize}px</small></div>
-      <div className="preview-break"><b>{testBreak ? "Перерыв" : "Проверка"}</b><strong>{testBreak ? "09:42" : "—"}</strong></div>
-    </div>
-    <div className="preview-controls"><button type="button" onClick={() => setPreviewPage(value => (value - 1 + expectedPages) % expectedPages)}>Предыдущая</button><button type="button" onClick={() => setPreviewPage(value => (value + 1) % expectedPages)}>Следующая</button><button type="button" onClick={() => setPaused(value => !value)}>{paused ? "Продолжить автоперелистывание" : "Пауза автоперелистывания"}</button><button type="button" onClick={() => setTestBreak(value => !value)}>{testBreak ? "Закрыть проверку перерыва" : "Проверить режим перерыва"}</button></div>
     <div className="experimental-actions"><button type="button" onClick={reset}>Вернуть рекомендуемые значения</button><button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Сохраняем…" : "Сохранить настройки"}</button></div>
     {message && <p className="settings-success">{message}</p>}{error && <p className="status-error">{error}</p>}
   </section>;

@@ -49,24 +49,7 @@ h2 { margin: 8px 0 4px; padding-bottom: 7px; border-bottom: 3px solid #9c3d24; b
 .display-menu .menu-item:not(.has-serving):not(.has-calories) .item-name, .menu-measure .menu-item:not(.has-serving):not(.has-calories) .item-name { flex: 0 1 auto; }
 .display-menu .menu-item:not(.has-serving):not(.has-calories) .dots, .menu-measure .menu-item:not(.has-serving):not(.has-calories) .dots { flex: 1 1 12px; }
 .display-menu .menu-item:not(.has-serving):not(.has-calories) .price, .menu-measure .menu-item:not(.has-serving):not(.has-calories) .price { flex: 0 0 auto; width: auto; }
-.menu-item.has-serving:not(.has-calories) { grid-template-columns: minmax(0, 1fr) minmax(0, .1fr) 4.6em 5.6em; font-size: min(calc(var(--item-font-size) * var(--column-scale)), calc(18px * var(--column-scale))); }
-.menu-item.has-calories:not(.has-serving) { grid-template-columns: minmax(0, 1fr) minmax(0, .1fr) 5.6em 2.6em; font-size: min(calc(var(--item-font-size) * var(--column-scale)), calc(18px * var(--column-scale))); }
-.menu-item.has-serving.has-calories { grid-template-columns: minmax(0, 1fr) minmax(0, .08fr) 4.6em 5.6em 2.6em; gap: 8px; font-size: min(calc(var(--item-font-size) * var(--column-scale)), calc(16px * var(--column-scale))); }
-.menu-item.has-serving .item-name, .menu-item.has-calories .item-name { grid-column: 1 / -1; grid-row: 1; }
-.menu-item.has-serving .dots, .menu-item.has-calories .dots { display: none; }
-.menu-item.has-serving .serving-size { grid-column: 3; grid-row: 2; }
-.menu-item.has-serving:not(.has-calories) .price, .menu-item.has-calories:not(.has-serving) .price { grid-column: 4; grid-row: 2; width: auto; flex: initial; text-align: right; }
-.menu-item.has-calories:not(.has-serving) .price { grid-column: 3; }
-.menu-item.has-calories .calories { grid-column: 4; grid-row: 2; }
-.menu-item.has-serving.has-calories .serving-size { grid-column: 3; grid-row: 2; }
-.menu-item.has-serving.has-calories .price { grid-column: 4; grid-row: 2; width: auto; flex: initial; text-align: right; }
-.menu-item.has-serving.has-calories .calories { grid-column: 5; grid-row: 2; }
-.menu-column-labels { display: inline-grid; justify-self: end; gap: 6px; text-align: center; }
-.menu-heading.has-serving:not(.has-calories) .menu-column-labels { grid-template-columns: 4.6em 5em; }
-.menu-heading.has-calories:not(.has-serving) .menu-column-labels { grid-template-columns: 5em 2.6em; }
-.menu-heading.has-serving.has-calories .menu-column-labels { grid-template-columns: 4.6em 5em 2.6em; }
-.serving-size, .calories { align-self: end; text-align: center; font-size: .88em; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 650; }
-.menu-item.has-serving .price, .menu-item.has-calories .price { font-size: .88em; }
+.serving-size, .calories { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 650; }
 .page-transition { animation: page-in 520ms cubic-bezier(.2,.8,.2,1); }
 .menu-item-enter { animation: item-in 420ms both; animation-delay: var(--row-delay, 0ms); }
 .menu-item.unavailable.menu-item-enter { animation-name: item-in-unavailable; }
@@ -87,6 +70,50 @@ h2 { margin: 8px 0 4px; padding-bottom: 7px; border-bottom: 3px solid #9c3d24; b
 .page-indicator { padding: 4px 10px; border: 1px solid currentColor; border-radius: 999px; font-variant-numeric: tabular-nums; }
 .menu-measure { position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; }
 .menu-measure h2 { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; margin: calc(8px * var(--column-scale)) 0 calc(4px * var(--column-scale)); padding-bottom: calc(7px * var(--column-scale)); border-bottom-width: calc(3px * var(--column-scale)); }
+/* Nutrition occupies a second line; it never reduces the dish name or price. */
+.display-menu .menu-item.has-serving, .display-menu .menu-item.has-calories,
+.menu-measure .menu-item.has-serving, .menu-measure .menu-item.has-calories { display: block; font-size: calc(var(--item-font-size) * var(--column-scale)); }
+.menu-item.has-serving .item-name, .menu-item.has-calories .item-name { display: block; width: 100%; }
+.menu-item .item-values { display: grid; grid-template-columns: minmax(0, 1fr) var(--price-width); align-items: end; gap: .65em; width: 100%; margin-top: .12em; }
+.menu-item.has-serving .item-values { grid-template-columns: minmax(0, 1fr) var(--serving-width) var(--price-width); }
+.menu-item.has-calories .item-values { grid-template-columns: minmax(0, 1fr) var(--price-width) var(--calories-width); }
+.menu-item.has-serving.has-calories .item-values { grid-template-columns: minmax(0, 1fr) var(--serving-width) var(--price-width) var(--calories-width); }
+.menu-item .item-values .serving-size, .menu-item .item-values .calories, .menu-item .item-values .price { grid-column: auto; grid-row: auto; width: auto; min-width: 0; margin: 0; font-size: 1em; text-align: right; white-space: nowrap; }
+.menu-item .item-values .serving-size { grid-column: 2; }
+.menu-item .item-values .price { grid-column: 2; }
+.menu-item.has-serving .item-values .price { grid-column: 3; }
+.menu-item .item-values .calories { grid-column: 3; }
+.menu-item.has-serving.has-calories .item-values .calories { grid-column: 4; }
+.menu-item.has-serving:not(.has-calories) .item-values .serving-size,
+.menu-item.has-serving.has-calories .item-values .serving-size { grid-column: 2; }
+.menu-item.has-serving:not(.has-calories) .item-values .price,
+.menu-item.has-serving.has-calories .item-values .price { grid-column: 3; }
+.menu-item.has-calories:not(.has-serving) .item-values .price { grid-column: 2; }
+.menu-item.has-calories:not(.has-serving) .item-values .calories { grid-column: 3; }
+.page .menu-heading.has-serving, .page .menu-heading.has-calories,
+.menu-measure .menu-heading.has-serving, .menu-measure .menu-heading.has-calories { display: block; }
+.menu-heading.has-serving .menu-column-labels, .menu-heading.has-calories .menu-column-labels { display: grid; width: 100%; margin-top: .25em; gap: .65em; font-size: calc(var(--item-font-size) * var(--column-scale)); text-align: right; }
+.menu-heading .menu-column-labels span { font-size: .65em; }
+.menu-heading.has-serving .menu-column-labels { grid-template-columns: minmax(0, 1fr) var(--serving-width) var(--price-width); }
+.menu-heading.has-calories .menu-column-labels { grid-template-columns: minmax(0, 1fr) var(--price-width) var(--calories-width); }
+.menu-heading.has-serving.has-calories .menu-column-labels { grid-template-columns: minmax(0, 1fr) var(--serving-width) var(--price-width) var(--calories-width); }
+.menu-heading .menu-column-labels span { grid-column: auto; }
+.menu-heading .menu-column-labels span:first-child { grid-column: 2; }
+.menu-heading.has-serving .menu-column-labels span:nth-child(2) { grid-column: 3; }
+.menu-heading.has-calories:not(.has-serving) .menu-column-labels span:nth-child(2) { grid-column: 3; }
+.menu-heading.has-serving.has-calories .menu-column-labels span:nth-child(3) { grid-column: 4; }
+.menu-item .item-values::before { content: ""; grid-column: 1; }
+.display-shell.preview-display { position: absolute; inset: 0; }
+.display-shell.preview-display .break-panel { position: absolute; }
+.real-display-preview { position: relative; width: 100%; overflow: hidden; border: 1px solid #c6dcc8; border-radius: 12px; background: #17281b; }
+.real-display-preview-inner { position: absolute; top: 0; left: 0; transform-origin: top left; overflow: hidden; }
+.display-preview-controls { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+.advanced-scale-settings { padding: 14px 18px; border: 1px solid #d8e7d9; border-radius: 10px; }
+.advanced-scale-settings summary { cursor: pointer; font-weight: 700; }
+.advanced-scale-settings .setting-field { margin-top: 12px; }
+.advanced-scale-settings select { width: 100%; min-height: 44px; padding: 10px; border: 1px solid #c7bdb0; border-radius: 9px; font: inherit; }
+.tv-screen.preview-tv { position: absolute; }
+.tv-screen.preview-tv .tv-break { position: absolute; }
 .unavailable { opacity: .38; }
 .unavailable .item-name, .unavailable .price { text-decoration: line-through; text-decoration-thickness: 2px; }
 .empty { display: flex; align-items: center; justify-content: center; color: #77716a; color: color-mix(in srgb, currentColor 50%, transparent); font-size: 36px; font-size: clamp(28px, 3vw, 48px); }
@@ -631,8 +658,8 @@ footer { display: flex; justify-content: space-between; align-items: center; min
 .tv-row .item-name { flex: 0 1 auto; min-width: 0; word-wrap: break-word; }
 .tv-dots { flex: 1 0 12px; margin: 0 10px .24em; border-bottom: 1px dotted; opacity: .45; }
 .tv-row .price { flex: 0 0 auto; width: auto; margin: 0; font-size: 1em; white-space: nowrap; font-weight: 600; }
-.tv-row-details { margin-top: 4px; font-size: .6em; line-height: 1.25; opacity: .8; }
-.tv-row-details > span { display: inline-block; margin-right: 20px; }
+.tv-row-details { display: flex; justify-content: flex-end; gap: 1em; margin-top: .12em; font-size: .85em; line-height: 1.25; }
+.tv-row-details > span { display: inline-block; min-width: 3em; text-align: right; white-space: nowrap; }
 .tv-footer { display: block; min-height: 0; padding-top: 10px; font-size: 16px; line-height: 1.2; }
 .tv-empty { font-size: 32px; }
 .tv-measure { position: fixed; top: 0; left: -20000px; visibility: hidden; }

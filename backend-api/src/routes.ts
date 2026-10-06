@@ -519,6 +519,11 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (request.body?.pageDurationSeconds !== undefined) data.pageDurationSeconds = integer(request.body.pageDurationSeconds, 5, 30);
     if (request.body?.displayScalePercent !== undefined) data.displayScalePercent = integer(request.body.displayScalePercent, 50, 160);
     for (const field of ["columnScale1Percent", "columnScale2Percent", "columnScale3Percent"] as const) if (request.body?.[field] !== undefined) data[field] = integer(request.body[field], 50, 160);
+    if (request.body?.displayScaleMode !== undefined) {
+      const mode = String(request.body.displayScaleMode);
+      if (mode !== "auto" && mode !== "manual") throw new ApiError(400, "invalid_argument", "Некорректный режим масштаба.");
+      data.displayScaleMode = mode;
+    }
     if (request.body?.logoInsetPercent !== undefined) data.logoInsetPercent = integer(request.body.logoInsetPercent, 0, 20);
     if (request.body?.logoScalePercent !== undefined) data.logoScalePercent = integer(request.body.logoScalePercent, 50, 200);
     if (request.body?.breakPanelWidthPercent !== undefined) data.breakPanelWidthPercent = integer(request.body.breakPanelWidthPercent, 30, 50);

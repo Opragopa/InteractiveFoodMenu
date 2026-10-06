@@ -101,6 +101,10 @@ test("stock controls availability, refuses negative stock and preserves legacy i
       const response = await fetch(`${baseUrl}${path}`, { method, headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined });
       return { status: response.status, data: await response.json() as Record<string, any> };
     };
+    assert.equal((await request("/venue", "PATCH", { displayScaleMode: "manual", displayScalePercent: 115 })).status, 200);
+    assert.equal(venue.displayScaleMode, "manual");
+    assert.equal(venue.displayScalePercent, 115);
+    assert.equal((await request("/venue", "PATCH", { displayScaleMode: "invalid" })).status, 400);
     let menu = await request("/menu");
     assert.equal(menu.data.items.find((item: { id: string }) => item.id === "legacy").isAvailable, false);
     assert.equal(menu.data.items.find((item: { id: string }) => item.id === "legacy").stockQuantity, undefined);

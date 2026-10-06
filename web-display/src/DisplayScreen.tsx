@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { autoScaleForMenu, layoutForViewport, minMenuColumnWidth, paginateMenuByHeight } from "./paginate";
+import { autoScaleForMenu, layoutForViewport, menuValueWidths, minMenuColumnWidth, paginateMenuByHeight } from "./paginate";
 import { itemIsAvailable, type Category, type MenuItem, type Venue } from "./types";
 import { formatRussianText } from "./typography";
 import { remainingBreakSeconds } from "./break";
@@ -30,6 +30,7 @@ function formatLocalDateTime(now: number) {
 
 export type DisplayScreenProps = {
   venue: Venue; categories: Category[]; items: MenuItem[]; logoUrl: string; connected: boolean; updatedAt?: number | null;
+  previewViewport?: { width: number; height: number }; previewPageIndex?: number; pauseAutoPaging?: boolean; onPageCount?: (count: number) => void;
 };
 
 export function DisplayScreen(props: DisplayScreenProps) {
@@ -37,9 +38,10 @@ export function DisplayScreen(props: DisplayScreenProps) {
     ? <LegacyDisplayScreen {...props} /> : <ModernDisplayScreen {...props} />;
 }
 
-function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt }: DisplayScreenProps) {
+function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt, previewViewport, previewPageIndex, pauseAutoPaging, onPageCount }: DisplayScreenProps) {
   const [pageIndex, setPageIndex] = useState(0);
-  const [viewport, setViewport] = useState(readViewport);
+  const [windowViewport, setViewport] = useState(readViewport);
+  const viewport = previewViewport ?? windowViewport;
   const [now, setNow] = useState(Date.now());
   const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
   const [verticalSpace, setVerticalSpace] = useState(190);
@@ -56,11 +58,13 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
   const breakActive = venue.breakActive === true;
   const panelWidth = Math.min(50, Math.max(30, venue.breakPanelWidthPercent ?? 36));
   const dimPercent = Math.min(75, Math.max(25, venue.breakMenuDimPercent ?? 45));
-  const itemFontSize = Math.min(54, Math.max(22, venue.menuItemFontSizePx ?? 34));
+  const resolutionScale = Math.max(1, viewport.height / 768);
+  const itemFontSize = Math.min(54, Math.max(22, venue.menuItemFontSizePx ?? 34)) * resolutionScale;
+  const headingFontSize = 32 * resolutionScale;
   const itemGap = Math.min(28, Math.max(4, venue.menuItemGapPx ?? 12));
-  const itemBaseSize = venue.showServingSize && venue.showCalories ? Math.min(itemFontSize, 16) : venue.showServingSize || venue.showCalories ? Math.min(itemFontSize, 18) : itemFontSize;
   const columnScales = [venue.columnScale1Percent ?? 100, venue.columnScale2Percent ?? 100, venue.columnScale3Percent ?? 100].map(value => Math.min(160, Math.max(50, value)) / 100);
   const largestColumnScale = Math.max(...columnScales);
+  const valueWidths = useMemo(() => menuValueWidths(items, venue.showServingSize === true, venue.showCalories === true), [items, venue.showServingSize, venue.showCalories]);
   const transitionMs = Math.min(1200, Math.max(200, venue.breakTransitionMs ?? 600));
   const breakFontScale = Math.min(200, Math.max(50, venue.breakFontSizePercent ?? 100)) / 100;
 
@@ -95,7 +99,7 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
   const menuGap = Math.min(32, Math.max(16, viewport.width * .02));
   const pageGap = Math.min(64, Math.max(28, viewport.width * .03));
   const contentWidth = Math.max(1, usableWidth / scale - menuPadding * 2);
-  const layout = useMemo(() => layoutForViewport(contentWidth, viewport.height / scale, viewport.height / scale, minMenuColumnWidth(itemBaseSize * largestColumnScale, items)), [contentWidth, viewport.height, scale, itemBaseSize, largestColumnScale, items]);
+  const layout = useMemo(() => layoutForViewport(contentWidth, viewport.height / scale, viewport.height / scale, minMenuColumnWidth(itemFontSize * largestColumnScale, items, venue.showServingSize === true, venue.showCalories === true)), [contentWidth, viewport.height, scale, itemFontSize, largestColumnScale, items, venue.showServingSize, venue.showCalories]);
   const availableHeight = Math.max(1, viewport.height / scale - verticalSpace);
   const columnWidth = Math.max(1, (contentWidth - Math.max(0, layout.columnCount - 1) * pageGap) / layout.columnCount);
 
@@ -103,7 +107,7 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
     const root = measureRef.current;
     if (!root) return;
     const next: Record<string, number> = {};
-    root.querySelectorAll<HTMLElement>("[data-measure-key]").forEach((element) => { next[element.dataset.measureKey ?? ""] = Math.ceil(element.getBoundingClientRect().height); });
+    root.querySelectorAll<HTMLElement>("[data-measure-key]").forEach((element) => { next[element.dataset.measureKey ?? ""] = Math.ceil(element.offsetHeight || element.getBoundingClientRect().height); });
     setMeasuredHeights((current) => {
       const keys = Object.keys(next);
       if (keys.length === Object.keys(current).length && keys.every((key) => current[key] === next[key])) return current;
@@ -112,9 +116,11 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
   }, [categories, items, columnWidth, itemFontSize, itemGap, scale, largestColumnScale, venue.showServingSize, venue.showCalories]);
 
   const pages = useMemo(() => paginateMenuByHeight(categories, items, availableHeight, layout.columnCount, {
-    category: Math.max(52 * largestColumnScale, ...categories.map(category => measuredHeights[`category-${category.id}`] ?? 0)),
-    item: (item) => Math.max(48 * largestColumnScale, measuredHeights[`item-${item.id}`] ?? (itemBaseSize * 1.4 + itemGap * 2) * largestColumnScale),
-  }), [categories, items, availableHeight, largestColumnScale, layout.columnCount, measuredHeights, itemBaseSize, itemGap]);
+    category: Math.max(52 * resolutionScale * largestColumnScale, ...categories.map(category => measuredHeights[`category-${category.id}`] ?? 0)),
+    item: (item) => Math.max(48 * largestColumnScale, measuredHeights[`item-${item.id}`] ?? (itemFontSize * (venue.showServingSize || venue.showCalories ? 2.2 : 1.4) + itemGap * 2) * largestColumnScale),
+  }), [categories, items, availableHeight, largestColumnScale, layout.columnCount, measuredHeights, itemFontSize, itemGap, venue.showServingSize, venue.showCalories, resolutionScale]);
+
+  useEffect(() => { onPageCount?.(Math.max(1, pages.length)); }, [onPageCount, pages.length]);
 
   useLayoutEffect(() => {
     const header = headerRef.current;
@@ -127,35 +133,48 @@ function ModernDisplayScreen({ venue, categories, items, logoUrl, connected, upd
   useEffect(() => { setPageIndex(0); }, [breakActive]);
   useEffect(() => {
     setPageIndex((current) => pages.length ? Math.min(current, pages.length - 1) : 0);
-    if (pages.length <= 1) return;
+    if (pages.length <= 1 || pauseAutoPaging) return;
     const timer = window.setInterval(() => setPageIndex((current) => (current + 1) % pages.length), Math.min(30, Math.max(5, venue.pageDurationSeconds || 10)) * 1000);
     return () => window.clearInterval(timer);
-  }, [pages.length, venue.pageDurationSeconds]);
+  }, [pages.length, venue.pageDurationSeconds, pauseAutoPaging]);
 
-  const page = pages[pageIndex];
+  const visiblePageIndex = previewPageIndex === undefined ? pageIndex : Math.min(previewPageIndex, Math.max(0, pages.length - 1));
+  const page = pages[visiblePageIndex];
   const style = {
     backgroundColor, color: foregroundColor, "--background": backgroundColor, "--accent": accentColor, "--foreground": foregroundColor,
     "--logo-inset": `${logoInset}%`, "--logo-scale": logoScale, "--break-panel-width": `${panelWidth}%`,
     "--menu-dim-opacity": (100 - dimPercent) / 100, "--item-font-size": `${itemFontSize}px`, "--item-gap": `${itemGap}px`, "--break-transition": `${transitionMs}ms`,
+    "--serving-width": `${valueWidths.serving}em`, "--price-width": `${valueWidths.price}em`, "--calories-width": `${valueWidths.calories}em`,
   } as React.CSSProperties;
 
-  return <main ref={shellRef} className={`display-shell ${breakActive ? "break-active" : ""}`} lang="ru" style={style}>
+  return <main ref={shellRef} className={`display-shell ${previewViewport ? "preview-display" : ""} ${breakActive ? "break-active" : ""}`} lang="ru" style={style}>
     <section className={`display-menu logo-${logoPosition}`} style={{ zoom: scale, width: usableWidth / scale, height: viewport.height / scale, minHeight: viewport.height / scale }}>
-      <header ref={headerRef} className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><div className="display-header-meta"><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time>{pages.length > 1 && <span className="page-indicator" aria-live="polite" aria-label={`Страница ${pageIndex + 1} из ${pages.length}`}>{pageIndex + 1} / {pages.length}</span>}</div></header>
+      <header ref={headerRef} className="display-header"><h1 style={{ color: accentColor }}>{formatRussianText(venue.name)}</h1><div className="display-header-meta"><time className="display-clock" dateTime={new Date(now).toISOString()}>{formatLocalDateTime(now)}</time>{pages.length > 1 && <span className="page-indicator" aria-live="polite" aria-label={`Страница ${visiblePageIndex + 1} из ${pages.length}`}>{visiblePageIndex + 1} / {pages.length}</span>}</div></header>
       {logoUrl && venue.logoVisible !== false && <img className="logo" src={logoUrl} alt="Логотип точки" />}
-      {!page ? <div className="empty">Меню пока не заполнено</div> : <section className="page page-transition" key={`${pageIndex}-${items.length}-${breakActive}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
+      {!page ? <div className="empty">Меню пока не заполнено</div> : <section className="page page-transition" key={`${visiblePageIndex}-${items.length}-${breakActive}`} style={{ gridTemplateColumns: `repeat(${page.columns.length}, minmax(0, 1fr))` }}>
         {page.columns.map((column, columnIndex) => {
           const columnScale = columnScales[columnIndex] ?? 1;
           return <div className="column" key={columnIndex} style={{ "--column-scale": columnScale } as React.CSSProperties}>{column.map((entry, rowIndex) => entry.kind === "category" ?
-            <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} key={`${entry.categoryId}-${rowIndex}`} style={{ color: accentColor, borderBottomColor: accentColor, fontSize: `${32 * columnScale}px` }}><span>{formatRussianText(entry.name)}{entry.repeated && <span className="continued"> · продолжение</span>}</span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2> :
-            <div className={`menu-item menu-item-enter ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""} ${itemIsAvailable(entry.item) ? "" : "unavailable"}`} key={entry.item.id} style={{ "--row-delay": `${Math.min(rowIndex, 12) * 35}ms`, fontSize: `${itemBaseSize * columnScale}px` } as React.CSSProperties}><span className="item-name">{formatRussianText(entry.item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{entry.item.servingSize || "—"}</span>}<span className="price">{money.format(entry.item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{entry.item.caloriesKcal ?? "—"}</span>}</div>)}</div>;
+            <MenuHeading key={`${entry.categoryId}-${rowIndex}`} name={entry.name} repeated={entry.repeated} serving={venue.showServingSize === true} calories={venue.showCalories === true} scale={columnScale} baseSize={headingFontSize} accent={accentColor} /> :
+            <MenuRow key={entry.item.id} item={entry.item} serving={venue.showServingSize === true} calories={venue.showCalories === true} scale={columnScale} delay={Math.min(rowIndex, 12) * 35} />)}</div>;
         })}
       </section>}
       <footer ref={footerRef}>{!connected ? <span className="connection offline">{freshnessLabel(updatedAt ?? null)}</span> : <span />}</footer>
     </section>
     <BreakPanel active={breakActive} endsAt={venue.breakEndsAt} expiredText={venue.breakExpiredText ?? "Скоро буду"} fontScale={breakFontScale} panelWidth={panelWidth} viewport={viewport} />
-    <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, fontSize: itemBaseSize * largestColumnScale, "--column-scale": largestColumnScale, "--item-font-size": `${itemBaseSize * largestColumnScale}px`, "--item-gap": `${itemGap * largestColumnScale}px` } as React.CSSProperties}>{categories.map(category => <h2 className={`menu-heading ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} data-measure-key={`category-${category.id}`} key={category.id} style={{ fontSize: 32 * largestColumnScale }}><span>{formatRussianText(category.name)}<span className="continued"> · продолжение</span></span><span className="menu-column-labels" aria-hidden="true">{venue.showServingSize && <span>Выход</span>}<span>Цена</span>{venue.showCalories && <span>Ккал</span>}</span></h2>)}{items.map((item) => <div className={`menu-item ${venue.showServingSize ? "has-serving" : ""} ${venue.showCalories ? "has-calories" : ""}`} data-measure-key={`item-${item.id}`} key={item.id}><span className="item-name">{formatRussianText(item.name)}</span><span className="dots" />{venue.showServingSize && <span className="serving-size">{item.servingSize || "—"}</span>}<span className="price">{money.format(item.priceMinor / 100)}</span>{venue.showCalories && <span className="calories">{item.caloriesKcal ?? "—"}</span>}</div>)}</div>
+    <div ref={measureRef} className="menu-measure" aria-hidden="true" style={{ width: columnWidth, "--column-scale": largestColumnScale, "--item-font-size": `${itemFontSize}px`, "--item-gap": `${itemGap}px`, "--serving-width": `${valueWidths.serving}em`, "--price-width": `${valueWidths.price}em`, "--calories-width": `${valueWidths.calories}em` } as React.CSSProperties}>{categories.map(category => <MenuHeading key={category.id} measureKey={`category-${category.id}`} name={category.name} repeated serving={venue.showServingSize === true} calories={venue.showCalories === true} scale={largestColumnScale} baseSize={headingFontSize} accent={accentColor} />)}{items.map(item => <MenuRow key={item.id} measureKey={`item-${item.id}`} item={item} serving={venue.showServingSize === true} calories={venue.showCalories === true} scale={largestColumnScale} />)}</div>
   </main>;
+}
+
+function MenuHeading({ name, repeated, serving, calories, scale, baseSize, accent, measureKey }: { name: string; repeated: boolean; serving: boolean; calories: boolean; scale: number; baseSize: number; accent: string; measureKey?: string }) {
+  return <h2 className={`menu-heading ${serving ? "has-serving" : ""} ${calories ? "has-calories" : ""}`} data-measure-key={measureKey} style={{ color: accent, borderBottomColor: accent, fontSize: `${baseSize * scale}px`, "--column-scale": scale } as React.CSSProperties}><span>{formatRussianText(name)}{repeated && <span className="continued"> · продолжение</span>}</span>{(serving || calories) && <span className="menu-column-labels" aria-hidden="true">{serving && <span>Выход</span>}<span>Цена</span>{calories && <span>Ккал</span>}</span>}</h2>;
+}
+
+function MenuRow({ item, serving, calories, scale, delay = 0, measureKey }: { item: MenuItem; serving: boolean; calories: boolean; scale: number; delay?: number; measureKey?: string }) {
+  const details = serving || calories;
+  return <div className={`menu-item ${measureKey ? "" : "menu-item-enter"} ${serving ? "has-serving" : ""} ${calories ? "has-calories" : ""} ${itemIsAvailable(item) ? "" : "unavailable"}`} data-measure-key={measureKey} style={{ "--row-delay": `${delay}ms`, "--column-scale": scale } as React.CSSProperties}>
+    <span className="item-name">{formatRussianText(item.name)}</span>{!details && <span className="dots" />}{details ? <span className="item-values">{serving && <span className="serving-size">{item.servingSize || "—"}</span>}<span className="price">{money.format(item.priceMinor / 100)}</span>{calories && <span className="calories">{item.caloriesKcal ?? "—"}</span>}</span> : <span className="price">{money.format(item.priceMinor / 100)}</span>}
+  </div>;
 }
 
 function BreakPanel({ active, endsAt, expiredText, fontScale, panelWidth, viewport }: {

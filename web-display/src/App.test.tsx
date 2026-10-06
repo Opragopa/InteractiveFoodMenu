@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { App, VenueSettings } from "./App";
 
 const mocks = vi.hoisted(() => ({
   staffLogin: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock("./api", () => ({
 const { staffLogin, menu, updateItem, adjustItemStock, createItem } = mocks;
 
 const venue = {
-  name: "Зимний сад", currency: "RUB", backgroundColor: "#56965B", accentColor: "#FFFFFF", logoPath: "",
+  name: "Зимний сад", currency: "RUB" as const, backgroundColor: "#56965B", accentColor: "#FFFFFF", logoPath: "",
   pageDurationSeconds: 10, breakDurationMinutes: 10, menuVersion: 4,
 };
 const categories = [{ id: "coffee", venueId: "venue-1", name: "Кофе", sortOrder: 1 }];
@@ -119,6 +119,21 @@ describe("hub page title", () => {
     localStorage.clear();
     render(<App />);
     expect(document.title).toBe("Хаб — InteractiveFoodMenu");
+  });
+});
+
+describe("TV settings preview", () => {
+  afterEach(() => cleanup());
+
+  it("renders the actual menu with both nutrition columns and updates before save", () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { container } = render(<VenueSettings venue={{ ...venue, showServingSize: true, showCalories: true, displayScaleMode: "auto" }} categories={categories} items={[{ ...items[0], servingSize: "250 г", caloriesKcal: 180 }]} busy={false} onSave={save} />);
+    expect(container.querySelector(".real-display-preview .display-shell")).toBeTruthy();
+    expect(container.querySelector(".real-display-preview .menu-item.has-serving.has-calories")).toBeTruthy();
+    expect(container.querySelector(".experimental-preview")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Увеличить размер текста" }));
+    expect((container.querySelector(".real-display-preview .display-shell") as HTMLElement).style.getPropertyValue("--item-font-size")).toBe("35px");
+    expect(save).not.toHaveBeenCalled();
   });
 });
 

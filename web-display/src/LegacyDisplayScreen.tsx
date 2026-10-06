@@ -11,8 +11,9 @@ const viewportSize = () => ({ width: document.documentElement.clientWidth || inn
 const money = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 
 /** Chromium 38: literal lengths, static fonts, flex and ordinary block layout. */
-export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt }: DisplayScreenProps) {
-  const [viewport, setViewport] = useState(viewportSize);
+export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connected, updatedAt, previewViewport, previewPageIndex, pauseAutoPaging, onPageCount }: DisplayScreenProps) {
+  const [windowViewport, setViewport] = useState(viewportSize);
+  const viewport = previewViewport ?? windowViewport;
   const [now, setNow] = useState(Date.now());
   const [pageIndex, setPageIndex] = useState(0);
   const [heights, setHeights] = useState<Record<string, number>>({});
@@ -20,15 +21,17 @@ export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connect
   const measureRef = useRef<HTMLDivElement>(null);
   const active = venue.breakActive === true;
   const panelWidth = bounded(venue.breakPanelWidthPercent, 36, 30, 50);
-  const scale = bounded(venue.displayScalePercent, 100, 50, 160) / 100 * (active ? (100 - panelWidth) / 100 : 1);
+  const configuredScale = venue.displayScaleMode === "manual" ? bounded(venue.displayScalePercent, 100, 50, 160) / 100 : 1;
+  const scale = configuredScale * (active ? (100 - panelWidth) / 100 : 1);
   const width = viewport.width * (active ? (100 - panelWidth) / 100 : 1) / scale;
   const height = viewport.height / scale;
   const inset = width < 1400 ? 28 : 40;
   const contentWidth = width - inset * 2;
   const gutter = 28;
   const columnScales = [venue.columnScale1Percent, venue.columnScale2Percent, venue.columnScale3Percent].map(value => bounded(value, 100, 50, 160) / 100);
-  const fontSize = bounded(venue.menuItemFontSizePx, 34, 22, 54);
-  const columnCount = layoutForViewport(contentWidth, height, height, minMenuColumnWidth(fontSize * Math.max(...columnScales), items)).columnCount;
+  const resolutionScale = Math.max(1, viewport.height / 768);
+  const fontSize = bounded(venue.menuItemFontSizePx, 34, 22, 54) * resolutionScale;
+  const columnCount = layoutForViewport(contentWidth, height, height, minMenuColumnWidth(fontSize * Math.max(...columnScales), items, venue.showServingSize === true, venue.showCalories === true)).columnCount;
   const columnWidth = (contentWidth - (columnCount - 1) * gutter) / columnCount;
   const maxColumnScale = Math.max(...columnScales.slice(0, columnCount));
   const itemGap = bounded(venue.menuItemGapPx, 12, 4, 28);
@@ -76,7 +79,7 @@ export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connect
     // NodeList.forEach is absent in Chromium 38.
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i];
-      next[node.getAttribute("data-measure-key")!] = Math.ceil(node.getBoundingClientRect().height);
+      next[node.getAttribute("data-measure-key")!] = Math.ceil(node.offsetHeight || node.getBoundingClientRect().height);
     }
     setHeights(next);
   }, [items, categories, columnWidth, maxColumnScale, fontSize, itemGap, venue.showServingSize, venue.showCalories, fontRevision]);
@@ -84,25 +87,27 @@ export function LegacyDisplayScreen({ venue, categories, items, logoUrl, connect
     category: Math.max(60, ...categories.map(category => heights[`category-${category.id}`] || 60)),
     item: item => heights[`item-${item.id}`] || (fontSize * 2.5 + itemGap * 2) * maxColumnScale,
   }), [categories, items, availableHeight, columnCount, heights, fontSize, itemGap, maxColumnScale]);
+  useEffect(() => { onPageCount?.(Math.max(1, pages.length)); }, [onPageCount, pages.length]);
   useEffect(() => {
     setPageIndex(0);
-    if (pages.length < 2) return;
+    if (pages.length < 2 || pauseAutoPaging) return;
     const timer = window.setInterval(() => setPageIndex(index => (index + 1) % pages.length), bounded(venue.pageDurationSeconds, 10, 5, 30) * 1000);
     return () => window.clearInterval(timer);
-  }, [pages.length, venue.pageDurationSeconds]);
+  }, [pages.length, venue.pageDurationSeconds, pauseAutoPaging]);
 
-  const heading = (name: string, repeated: boolean, columnScale: number, key?: string) => <h2 className="tv-heading" data-measure-key={key} style={{ color: accent, borderBottomColor: accent, fontSize: 30 * columnScale }}>{formatRussianText(name)}{repeated && <span className="tv-continued"> · продолжение</span>}</h2>;
+  const heading = (name: string, repeated: boolean, columnScale: number, key?: string) => <h2 className="tv-heading" data-measure-key={key} style={{ color: accent, borderBottomColor: accent, fontSize: 30 * resolutionScale * columnScale }}>{formatRussianText(name)}{repeated && <span className="tv-continued"> · продолжение</span>}</h2>;
   const row = (item: MenuItem, columnScale: number, measure = false) => <div key={item.id} data-measure-key={measure ? `item-${item.id}` : undefined} className={`tv-row${itemIsAvailable(item) ? "" : " unavailable"}`} style={{ fontSize: fontSize * columnScale, paddingTop: itemGap * columnScale / 2, paddingBottom: itemGap * columnScale / 2 }}>
     <div className="tv-row-main"><span className="item-name">{formatRussianText(item.name)}</span><span className="tv-dots" /><span className="price">{money.format(item.priceMinor / 100)} ₽</span></div>
     {(venue.showServingSize || venue.showCalories) && <div className="tv-row-details">{venue.showServingSize && <span>Выход: {item.servingSize || "—"}</span>}{venue.showCalories && <span>{item.caloriesKcal ?? "—"} ккал</span>}</div>}
   </div>;
-  const page = pages[Math.min(pageIndex, Math.max(0, pages.length - 1))];
+  const visiblePageIndex = previewPageIndex === undefined ? pageIndex : Math.min(previewPageIndex, Math.max(0, pages.length - 1));
+  const page = pages[visiblePageIndex];
   const logoStyle = { width: logoWidth, height: logoHeight, top: logoTop ? logoInset : undefined, bottom: logoTop ? undefined : logoInset, left: logoLeft ? logoInset : undefined, right: logoLeft ? undefined : logoInset };
-  return <main className="tv-screen" lang="ru" style={{ backgroundColor: background, color: contrastForeground(background) }}>
+  return <main className={`tv-screen${previewViewport ? " preview-tv" : ""}`} lang="ru" style={{ backgroundColor: background, color: contrastForeground(background) }}>
     <section className="tv-menu" style={{ width, height, padding: inset, zoom: scale, opacity: active ? (100 - bounded(venue.breakMenuDimPercent, 45, 25, 75)) / 100 : 1, transition: `opacity ${transition}ms ease` }}>
       <header className="tv-header" style={{ height: headerHeight, paddingLeft: showLogo && logoTop && logoLeft ? logoWidth + logoInset : 0, paddingRight: showLogo && logoTop && !logoLeft ? logoWidth + logoInset : 0 }}>
-        <h1 style={{ color: accent }}>{formatRussianText(venue.name)}</h1>
-        <div className="tv-meta"><time style={{ opacity: active ? 0 : 1 }}>{new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(now)}</time>{pages.length > 1 && <span>{pageIndex + 1} / {pages.length}</span>}</div>
+        <h1 style={{ color: accent, fontSize: 44 * resolutionScale }}>{formatRussianText(venue.name)}</h1>
+        <div className="tv-meta"><time style={{ opacity: active ? 0 : 1 }}>{new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(now)}</time>{pages.length > 1 && <span>{visiblePageIndex + 1} / {pages.length}</span>}</div>
       </header>
       {showLogo && <img className="tv-logo" style={logoStyle} src={logoUrl} alt="Логотип точки" />}
       <section className="tv-page" style={{ height: availableHeight }}>

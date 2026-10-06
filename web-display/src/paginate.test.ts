@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoScaleForMenu, itemNameScale, layoutForViewport, minMenuColumnWidth, MIN_DISPLAY_COLUMN_WIDTH, paginateMenu, paginateMenuByHeight } from "./paginate";
+import { autoScaleForMenu, itemNameScale, layoutForViewport, menuValueWidths, minMenuColumnWidth, MIN_DISPLAY_COLUMN_WIDTH, paginateMenu, paginateMenuByHeight } from "./paginate";
 import { contrastForeground } from "./DisplayScreen";
 import type { Category, MenuItem } from "./types";
 
@@ -62,17 +62,26 @@ describe("paginateMenu", () => {
     expect(layoutForViewport(1270, 768, 768, minMenuColumnWidth(34, longItems)).columnCount).toBe(1);
   });
 
+  it("reserves room for long serving sizes, calorie counts and prices", () => {
+    const detailed = [{ ...items[0], servingSize: "1/150/030", caloriesKcal: 12345, priceMinor: 123456789 }];
+    const widths = menuValueWidths(detailed, true, true);
+    expect(widths.serving).toBeGreaterThan(5);
+    expect(widths.price).toBeGreaterThan(6.5);
+    expect(layoutForViewport(1366, 768, 768, minMenuColumnWidth(34, detailed, true, true)).columnCount).toBe(1);
+  });
+
   it("keeps a small section together and repeats an oversized section heading", () => {
     const result = paginateMenuByHeight(categories, items, 160, 1, { category: 40, item: () => 50 });
     expect(result).toHaveLength(4);
     expect(result[1].columns[0][0]).toMatchObject({ kind: "category", repeated: true });
   });
 
-  it("prefers one page when shrinking makes the menu fit", () => {
+  it("keeps readable scale and adds pages for a crowded menu", () => {
     const manyItems: MenuItem[] = Array.from({ length: 20 }, (_, index) => ({ ...itemsFixture(`many-${index}`, true), sortOrder: index }));
     const scale = autoScaleForMenu(categories, manyItems, 1366, 768);
     const layout = layoutForViewport(1366 / scale, 768 / scale);
-    expect(paginateMenu(categories, manyItems, layout.rowsPerColumn, layout.columnCount)).toHaveLength(1);
+    expect(scale).toBe(1);
+    expect(paginateMenu(categories, manyItems, layout.rowsPerColumn, layout.columnCount).length).toBeGreaterThan(1);
   });
 });
 

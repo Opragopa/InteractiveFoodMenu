@@ -42,3 +42,18 @@ test("server-rendered legacy menu uses stock status without revealing quantity",
   assert.match(html, /class="item unavailable"/);
   assert.doesNotMatch(html, /0 шт\./);
 });
+
+test("server menu keeps full-size prices and gives nutrition rows enough pages", () => {
+  const categories = [{ id: "main", name: "Обед" }];
+  const items = Array.from({ length: 16 }, (_, index) => ({ id: `item-${index}`, categoryId: "main", name: index ? `Блюдо ${index}` : "Филе цыплёнка с картофельным пюре и сливочным соусом", priceMinor: index ? 25000 : 123456789, servingSize: index ? "250 г" : "1/150/030", caloriesKcal: index ? 250 : 12345 }));
+  const venue = { displayScaleMode: "auto", menuItemFontSizePx: 34 };
+  const plain = renderLegacyDisplay(venue, categories, items, 1366, 768, "test");
+  const detailed = renderLegacyDisplay({ ...venue, showServingSize: true, showCalories: true }, categories, items, 1366, 768, "test");
+  const pages = (html: string) => (html.match(/data-page="\d+"/g) ?? []).length;
+  assert.ok(pages(detailed) >= pages(plain));
+  assert.equal((detailed.match(/class="item has-details"/g) ?? []).length, items.length);
+  assert.match(detailed, /font-size:34px"><div class="main-row">/);
+  assert.match(detailed, /Выход: 1\/150\/030/);
+  const ultraHd = renderLegacyDisplay({ ...venue, showCalories: true }, categories, items, 3840, 2160, "test");
+  assert.match(ultraHd, /font-size:96px"><div class="main-row">/);
+});
