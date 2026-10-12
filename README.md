@@ -86,6 +86,8 @@ docker compose -f compose.yaml --env-file .env.deploy ps
 
 API слушает `127.0.0.1:8091`, а web proxy — `127.0.0.1:8088`. Внешний HTTPS завершается host Nginx; примеры находятся в `docker/host-nginx-appwrite.conf.example` и `docker/host-nginx-menu.conf.example`.
 
+Для старых ТВ конфигурация menu-домена должна проксировать `/tv/` и `/api/venue-assets/` к API. `/tv/connect` выдаёт QR-код, `/tv/activate#token.secret` принимает ранее выданную ссылку, после чего меню работает через cookie и `/tv/menu` без секрета в адресе. Перед включением маршрутов выполните `npm run bootstrap` для новой таблицы `statistics_events`. Хаб показывает статистику по точке и периоду; сброс создаёт архивный период, а не удаляет события. Сравнение аналогичных сервисов — в [`docs/competitors.md`](docs/competitors.md).
+
 Проверка после обновления:
 
 ```bash

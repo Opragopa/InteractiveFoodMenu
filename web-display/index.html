@@ -27,12 +27,12 @@
         // lack fetch. The static XHR-based page is compatible with them.
         // A root redirect preserves #credentials: /connect#... is a display,
         // not a new pairing. Never drop that fragment on the static page.
-        if ((oldTv || legacyChromium) && /^\/connect\/?$/.test(window.location.pathname) && !hashDisplay) {
-          window.location.replace("/connect-legacy.html");
-          return;
+        if (oldTv || legacyChromium) {
+          if (legacyPathDisplay) { window.location.replace("/tv/activate#" + legacyPathDisplay[1] + "." + legacyPathDisplay[2]); return; }
+          if (hashDisplay && (window.location.pathname === "/" || /^\/connect\/?$/.test(window.location.pathname))) { window.location.replace("/tv/activate" + window.location.hash); return; }
+          if (window.location.pathname === "/" || /^\/connect\/?$/.test(window.location.pathname)) { window.location.replace("/tv/connect"); return; }
         }
-        // Legacy TV displays stay in React; the ES5 entry supplies fetch and
-        // language polyfills. The connect flow remains XHR-based.
+        // Modern browsers keep the React display. Old TVs use server HTML.
         if (legacyPathDisplay) {
           window.location.replace("/connect#" + legacyPathDisplay[1] + "." + legacyPathDisplay[2]);
         }

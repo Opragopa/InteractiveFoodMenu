@@ -16,7 +16,8 @@ test("legacy menu moves enlarged rows to new pages without dropping items", () =
 
   assert.ok(pages(enlarged) > pages(normal));
   assert.equal((enlarged.match(/class="item"/g) ?? []).length, items.length);
-  assert.match(enlarged, /\.price\{display:block;flex:0 0 auto;width:auto/);
+  assert.match(enlarged, /\.main-row\{display:table/);
+  assert.doesNotMatch(enlarged, /var\(--column-scale\)/);
 });
 
 test("server-rendered menu reflows into the space beside the break panel", () => {
@@ -25,10 +26,10 @@ test("server-rendered menu reflows into the space beside the break panel", () =>
   const venue = { name: "Кафе", displayScaleMode: "manual", displayScalePercent: 100, breakPanelWidthPercent: 40 };
   const normal = renderLegacyDisplay(venue, categories, items, 1366, 768, "test");
   const active = renderLegacyDisplay({ ...venue, breakActive: true }, categories, items, 1366, 768, "test");
-  const contentWidth = (html: string) => Number(html.match(/\.pages\{height:88%;width:([\d.]+)px\}/)?.[1]);
+  const contentWidth = (html: string) => Number(html.match(/\.pages\{height:[\d.]+px;width:([\d.]+)px\}/)?.[1]);
   assert.ok(contentWidth(active) < contentWidth(normal) * .65);
   assert.match(active, /\.break\.active\{display:block;left:60%\}/);
-  assert.match(active, /font-size:calc\(20px \* var\(--column-scale\)\)/);
+  assert.doesNotMatch(active, /var\(--column-scale\)/);
   assert.equal((active.match(/class="item"/g) ?? []).length, items.length);
 });
 
@@ -56,4 +57,10 @@ test("server menu keeps full-size prices and gives nutrition rows enough pages",
   assert.match(detailed, /Выход: 1\/150\/030/);
   const ultraHd = renderLegacyDisplay({ ...venue, showCalories: true }, categories, items, 3840, 2160, "test");
   assert.match(ultraHd, /font-size:96px"><div class="main-row">/);
+});
+
+test("break text cannot end the menu script", () => {
+  const html = renderLegacyDisplay({ breakActive: true, breakExpiredText: "</script><script>alert('x')</script>" }, [], [], 1366, 768, "test");
+  assert.equal((html.match(/<script>/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /<script>alert/);
 });

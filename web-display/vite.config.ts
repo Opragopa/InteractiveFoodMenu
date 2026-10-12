@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import legacy from "@vitejs/plugin-legacy";
 
 const emulatorProxy = {
+  "/tv": { target: "http://127.0.0.1:8091", changeOrigin: true },
+  "/api/venue-assets": { target: "http://127.0.0.1:8091", changeOrigin: true },
   "/interactivefoodmenu": {
     target: "http://127.0.0.1:5001",
     changeOrigin: true,

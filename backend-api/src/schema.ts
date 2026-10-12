@@ -141,6 +141,21 @@ export const TABLES: TableDefinition[] = [
     ],
   },
   {
+    id: "statistics_events",
+    name: "Venue statistics events",
+    columns: [
+      { key: "venueId", type: "varchar", size: 36, required: true },
+      { key: "eventType", type: "varchar", size: 48, required: true },
+      { key: "actor", type: "varchar", size: 24, required: true },
+      { key: "resourceId", type: "varchar", size: 36, required: false },
+      { key: "createdAt", type: "datetime", required: true },
+    ],
+    indexes: [
+      { key: "statistics_venue_time", type: "key", attributes: ["venueId", "createdAt"] },
+      { key: "statistics_venue_type_time", type: "key", attributes: ["venueId", "eventType", "createdAt"] },
+    ],
+  },
+  {
     id: "admin_audit_logs",
     name: "Admin audit logs",
     columns: [

@@ -7,6 +7,8 @@ import { loadConfig, type BackendConfig } from "./config.js";
 import { ApiError, createApiRouter } from "./routes.js";
 import { consumeRateLimit, pruneRateLimitBuckets } from "./rateLimit.js";
 import { TABLES } from "./schema.js";
+import { randomUUID } from "node:crypto";
+import { createTvRouter } from "./tvRoutes.js";
 
 export function createApp(config: BackendConfig, services: AppwriteServices) {
   const app = express();
@@ -26,6 +28,18 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }));
   app.use(express.json({ limit: "8mb" }));
+  app.use((request, response, next) => {
+    const requestId = randomUUID();
+    const started = performance.now();
+    response.setHeader("X-Request-Id", requestId);
+    response.on("finish", () => {
+      if (request.path === "/health" || request.path === "/ready") return;
+      console.log(JSON.stringify({ event: "http_request", requestId, method: request.method,
+        route: request.route?.path ? `${request.baseUrl}${request.route.path}` : (response.statusCode === 404 ? "unmatched" : "middleware"),
+        status: response.statusCode, durationMs: Math.round(performance.now() - started) }));
+    });
+    next();
+  });
   const limitAuthAttempts = (scope: string) => (request: express.Request, response: express.Response, next: express.NextFunction) => {
     const now = Date.now();
     if (authRateLimitBuckets.size > 1000) pruneRateLimitBuckets(authRateLimitBuckets, now);
@@ -42,6 +56,8 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
   app.post("/api/hub/login", limitAuthAttempts("hub"));
   app.post("/api/display/pairings", limitAuthAttempts("display-pairing-create"));
   app.post("/api/display/pairings/complete", limitAuthAttempts("display-pairing"));
+  app.post("/tv/session", limitAuthAttempts("tv-session"));
+  app.get("/tv/connect", limitAuthAttempts("tv-pairing-create"));
 
   app.get("/health", (_request, response) => {
   response.json({ status: "ok", service: "interactive-food-menu-api" });
@@ -56,12 +72,13 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
     ]);
     response.json({ status: "ready", datastore: "appwrite" });
   } catch (error) {
-    console.error("Appwrite readiness check failed", error);
+    console.error(JSON.stringify({ event: "readiness_failed", kind: error instanceof Error ? error.name : "unknown" }));
     response.status(503).json({ status: "not-ready", datastore: "appwrite" });
   }
   });
 
   app.use("/api", createApiRouter(services, config));
+  app.use("/tv", createTvRouter(services, config));
 
   app.use((_request, response) => {
     response.status(404).json({ error: "not_found" });
@@ -72,7 +89,7 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
       response.status(error.status).json({ error: error.code, message: error.message });
       return;
     }
-    console.error("Unhandled API error", error);
+    console.error(JSON.stringify({ event: "api_error", kind: error instanceof Error ? error.name : "unknown" }));
     response.status(500).json({ error: "internal_error" });
   });
   return app;

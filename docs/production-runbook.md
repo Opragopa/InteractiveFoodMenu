@@ -28,6 +28,7 @@ git checkout main
 git pull --ff-only origin main
 $env:BUILD_VERSION = git rev-parse --short HEAD
 docker compose -f compose.yaml --env-file .env.deploy build --pull api web
+docker compose -f compose.yaml --env-file .env.deploy run --rm api npm run bootstrap
 docker compose -f compose.yaml --env-file .env.deploy up -d --force-recreate api web proxy
 ```
 
@@ -40,6 +41,7 @@ Invoke-WebRequest https://foodmenu.cloudopragopa.online/build-version.txt | Sele
 ```
 
 The API `/ready` endpoint must report Appwrite readiness, not only process liveness.
+For the server-rendered TV path, apply `docker/host-nginx-menu.conf.example` to the HTTPS menu host so `/tv/` and `/api/venue-assets/` reach the API. Then check `/tv/connect` on the menu domain and complete a real pairing. The new routes are not reached if the host Nginx configuration still sends all paths to the web container.
 
 ## Backups
 

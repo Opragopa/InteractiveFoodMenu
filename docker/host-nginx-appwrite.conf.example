@@ -39,6 +39,15 @@ server {
         proxy_read_timeout 3600s;
     }
 
+    # Legacy screen URLs and pairing status may contain a credential in path/query.
+    location ~ ^/api/display/(legacy/|pairings/) {
+        access_log off;
+        proxy_pass http://127.0.0.1:8091;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
     location /api/ {
         proxy_pass http://127.0.0.1:8091;
         proxy_http_version 1.1;

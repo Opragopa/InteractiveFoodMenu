@@ -12,6 +12,7 @@ WORKDIR /srv/api
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /srv/api/dist ./dist
+COPY assets ./assets
 USER node
 EXPOSE 3000
 CMD ["node", "dist/server.js"]

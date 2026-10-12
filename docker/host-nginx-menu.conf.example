@@ -16,6 +16,29 @@ server {
 
     client_max_body_size 5m;
 
+    location /tv/ {
+        proxy_pass http://127.0.0.1:8091/tv/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /api/venue-assets/ {
+        proxy_pass http://127.0.0.1:8091/api/venue-assets/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    # Older path-style screen links can contain credentials in the path.
+    location ~ ^/display/ {
+        access_log off;
+        proxy_pass http://127.0.0.1:8088;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8088;
         proxy_http_version 1.1;

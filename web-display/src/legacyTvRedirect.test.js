@@ -14,14 +14,14 @@ function redirectFor(userAgent, hash = displayHash, pathname = "/") {
 }
 
 describe("legacy TV display fallback", () => {
-  it("keeps the Appwrite hash display on Samsung Tizen 5 TVs", () => {
+  it("routes Samsung Tizen 5 displays to server HTML", () => {
     expect(redirectFor("Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) Chrome/63.0 TV Safari/537.36"))
-      .toBe("");
+      .toBe("/tv/activate" + displayHash);
   });
 
-  it("opens the no-SDK pairing page for Samsung Tizen 5 TVs", () => {
+  it("opens server pairing for Samsung Tizen 5 TVs", () => {
     expect(redirectFor("Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) Chrome/63.0 TV Safari/537.36", "", "/connect"))
-      .toBe("/connect-legacy.html");
+      .toBe("/tv/connect");
   });
 
   it("keeps the normal React display on newer Samsung TVs", () => {
@@ -29,19 +29,19 @@ describe("legacy TV display fallback", () => {
       .toBe("");
   });
 
-  it("keeps the Appwrite hash display on webOS TVs", () => {
+  it("routes webOS displays to server HTML", () => {
     expect(redirectFor("Mozilla/5.0 (Web0S; Linux) AppleWebKit/537.36 TV Safari/537.36"))
-      .toBe("");
+      .toBe("/tv/activate" + displayHash);
   });
 
-  it("normalizes old Firebase display links to the Appwrite hash route", () => {
-    expect(redirectFor("Mozilla/5.0 (TV; old WebKit)", "", "/display/pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789"))
-      .toBe("/connect#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789");
+  it("accepts old path credentials on server HTML", () => {
+    expect(redirectFor("Mozilla/5.0 (Web0S; Linux) Chrome/38.0", "", "/display/pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789"))
+      .toBe("/tv/activate#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789");
   });
 
-  it("does not redirect malformed or ordinary browser URLs", () => {
+  it("opens pairing for a malformed old-TV link and leaves ordinary browsers alone", () => {
     expect(redirectFor("Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0)", "#not-a-display-token"))
-      .toBe("");
+      .toBe("/tv/connect");
     expect(redirectFor("Mozilla/5.0 Chrome/136.0 Safari/537.36"))
       .toBe("");
   });
@@ -53,19 +53,20 @@ describe("legacy TV display fallback", () => {
     expect(destination).toBe("");
   });
 
-  it("uses the static pairing page when an old browser has no fetch", () => {
+  it("uses server pairing when an old browser has no fetch", () => {
     let destination = "";
     const fakeWindow = { location: { pathname: "/connect", hash: "", replace: (url) => { destination = url; } } };
     new Function("navigator", "window", script)({ userAgent: "Mozilla/5.0 (TV; old WebKit)" }, fakeWindow);
-    expect(destination).toBe("/connect-legacy.html");
+    expect(destination).toBe("/tv/connect");
   });
 });
 
 // Nginx preserves the fragment when redirecting / to /connect.
 it.each(["Mozilla/5.0 (Web0S; Linux) Chrome/38.0", "Mozilla/5.0 (SMART-TV; Tizen 5.0) Chrome/63.0", "Chrome/136.0"])("preserves display credentials after the root redirect: %s", userAgent => {
-  expect(redirectFor(userAgent, displayHash, "/connect")).toBe("");
-  expect(redirectFor(userAgent, displayHash, "/connect/")).toBe("");
+  const expected = userAgent === "Chrome/136.0" ? "" : "/tv/activate" + displayHash;
+  expect(redirectFor(userAgent, displayHash, "/connect")).toBe(expected);
+  expect(redirectFor(userAgent, displayHash, "/connect/")).toBe(expected);
 });
-it("routes Chromium 38 connect with a fetch polyfill to the static page", () => {
-  expect(redirectFor("Chrome/38.0", "", "/connect/")).toBe("/connect-legacy.html");
+it("routes Chromium 38 connect with a fetch polyfill to server pairing", () => {
+  expect(redirectFor("Chrome/38.0", "", "/connect/")).toBe("/tv/connect");
 });
