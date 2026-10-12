@@ -54,6 +54,23 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "volatile-ttl"]
+    networks:
+      - menu_internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
 
   # Internal web proxy retained for container-to-container development only.
   # On Windows the host Nginx connects directly to the web container below.

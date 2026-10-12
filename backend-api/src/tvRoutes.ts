@@ -55,10 +55,12 @@ async function activate(services: AppwriteServices, config: BackendConfig, respo
 
 async function rows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string) {
   const all: Row[] = [];
-  for (let offset = 0; ; offset += 500) {
-    const result = await services.tables.listRows<Row>({ databaseId, tableId, queries: [Query.equal("venueId", [venueId]), Query.limit(500), Query.offset(offset)] });
+  let cursor: string | undefined;
+  for (;;) {
+    const result = await services.tables.listRows<Row>({ databaseId, tableId, queries: [Query.equal("venueId", [venueId]), Query.limit(500), ...(cursor ? [Query.cursorAfter(cursor)] : [])] });
     all.push(...result.rows);
     if (result.rows.length < 500) return all;
+    cursor = result.rows[result.rows.length - 1].$id;
   }
 }
 function publicRow(row: Row) { return Object.fromEntries(Object.entries(row).filter(([key]) => !key.startsWith("$") && key !== "pinHash" && key !== "tokenHash").concat([["id", row.$id]])); }

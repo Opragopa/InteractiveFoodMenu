@@ -12,6 +12,9 @@ test("legacy menu moves enlarged rows to new pages without dropping items", () =
   const normal = renderLegacyDisplay({ ...venue, displayScalePercent: 100 }, categories, items, 1366, 768, "test");
   const enlarged = renderLegacyDisplay({ ...venue, displayScalePercent: 160 }, categories, items, 1366, 768, "test");
   assert.match(normal, /<title>Меню — Кафе<\/title>/);
+  assert.match(normal, /руб\./);
+  assert.doesNotMatch(normal, /₽/);
+  assert.match(normal, /onest-static-regular\.ttf/);
   const pages = (html: string) => (html.match(/data-page="\d+"/g) ?? []).length;
 
   assert.ok(pages(enlarged) > pages(normal));
@@ -57,6 +60,18 @@ test("server menu keeps full-size prices and gives nutrition rows enough pages",
   assert.match(detailed, /Выход: 1\/150\/030/);
   const ultraHd = renderLegacyDisplay({ ...venue, showCalories: true }, categories, items, 3840, 2160, "test");
   assert.match(ultraHd, /font-size:96px"><div class="main-row">/);
+});
+
+test("1920 menu reserves room for long prices and completed breaks", () => {
+  const categories = [{ id: "main", name: "Обед" }];
+  const items = Array.from({ length: 24 }, (_, index) => ({ id: `item-${index}`, categoryId: "main", name: `Очень длинное название блюда с дополнительным гарниром ${index}`, priceMinor: 123456789 }));
+  const html = renderLegacyDisplay({ name: "Кафе", breakActive: true, breakEndsAt: "2020-01-01T00:00:00.000Z", breakExpiredText: "Скоро вернёмся" }, categories, items, 1920, 1080, "test", Date.now());
+  assert.ok((html.match(/data-page="\d+"/g) ?? []).length > 1);
+  assert.equal((html.match(/class="item"/g) ?? []).length, items.length);
+  assert.match(html, /1234567,89 руб\./);
+  assert.match(html, /\.main-row\{display:table;width:100%;table-layout:auto\}/);
+  assert.match(html, /break-expired/);
+  assert.match(html, /Скоро вернёмся/);
 });
 
 test("break text cannot end the menu script", () => {

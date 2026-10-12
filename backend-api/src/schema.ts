@@ -1,4 +1,4 @@
-import { AppwriteException, Query, type Models, type Storage, type TablesDB } from "node-appwrite";
+import { AppwriteException, Query, TablesDBIndexType, type Models, type Storage, type TablesDB } from "node-appwrite";
 import type { BackendConfig } from "./config.js";
 import type { AppwriteServices } from "./appwrite.js";
 
@@ -15,6 +15,49 @@ const commonAuditColumns = [
 ];
 
 export const TABLES: TableDefinition[] = [
+  {
+    id: "operators",
+    name: "Hub operators",
+    columns: [
+      { key: "username", type: "varchar", size: 40, required: true },
+      { key: "passwordHash", type: "text", required: true },
+      { key: "active", type: "boolean", required: true },
+      { key: "sessionVersion", type: "integer", required: true, min: 1 },
+      { key: "createdAt", type: "datetime", required: true },
+    ],
+    indexes: [{ key: "operators_username_unique", type: "unique", attributes: ["username"] }],
+  },
+  {
+    id: "staff_accounts",
+    name: "Personal staff accounts",
+    columns: [
+      { key: "venueId", type: "varchar", size: 36, required: true },
+      { key: "username", type: "varchar", size: 40, required: true },
+      { key: "passwordHash", type: "text", required: true },
+      { key: "active", type: "boolean", required: true },
+      { key: "sessionVersion", type: "integer", required: true, min: 1 },
+      { key: "createdAt", type: "datetime", required: true },
+    ],
+    indexes: [
+      { key: "staff_venue_username_unique", type: "unique", attributes: ["venueId", "username"] },
+      { key: "staff_venue", type: "key", attributes: ["venueId"] },
+    ],
+  },
+  {
+    id: "staff_invites",
+    name: "Single use staff invitations",
+    columns: [
+      { key: "venueId", type: "varchar", size: 36, required: true },
+      { key: "staffId", type: "varchar", size: 36, required: false },
+      { key: "tokenHash", type: "varchar", size: 64, required: true },
+      { key: "expiresAt", type: "datetime", required: true },
+      { key: "createdAt", type: "datetime", required: true },
+    ],
+    indexes: [
+      { key: "staff_invites_venue", type: "key", attributes: ["venueId"] },
+      { key: "staff_invites_staff", type: "key", attributes: ["staffId"] },
+    ],
+  },
   {
     id: "venues",
     name: "Venues",
@@ -106,7 +149,10 @@ export const TABLES: TableDefinition[] = [
       { key: "lastSeenAt", type: "datetime", required: false },
       { key: "revokedAt", type: "datetime", required: false },
     ],
-    indexes: [{ key: "display_tokens_by_venue", type: "key", attributes: ["venueId", "active"] }],
+    indexes: [
+      { key: "display_tokens_by_venue", type: "key", attributes: ["venueId", "active"] },
+      { key: "display_tokens_active", type: "key", attributes: ["active"] },
+    ],
   },
   {
     id: "display_pairings",
@@ -138,6 +184,7 @@ export const TABLES: TableDefinition[] = [
     indexes: [
       { key: "logs_by_venue", type: "key", attributes: ["venueId"] },
       { key: "logs_by_time", type: "key", attributes: ["createdAt"] },
+      { key: "logs_by_venue_level_time", type: "key", attributes: ["venueId", "level", "createdAt"] },
     ],
   },
   {
@@ -254,6 +301,13 @@ async function ensureAdditiveColumns(tables: TablesDB, databaseId: string) {
   const displayColumns = await tables.listColumns({ databaseId, tableId: "display_tokens", queries: [Query.limit(100)] });
   if (!displayColumns.columns.some(column => column.key === "label")) await tables.createVarcharColumn({ databaseId, tableId: "display_tokens", key: "label", size: 80, required: false });
   if (!displayColumns.columns.some(column => column.key === "lastSeenAt")) await tables.createDatetimeColumn({ databaseId, tableId: "display_tokens", key: "lastSeenAt", required: false });
+  for (const [tableId, key, columns] of [
+    ["display_tokens", "display_tokens_active", ["active"]],
+    ["client_logs", "logs_by_venue_level_time", ["venueId", "level", "createdAt"]],
+  ] as const) {
+    const existing = await tables.listIndexes({ databaseId, tableId, queries: [Query.limit(100)] });
+    if (!existing.indexes.some(index => index.key === key)) await tables.createIndex({ databaseId, tableId, key, type: TablesDBIndexType.Key, columns: [...columns] });
+  }
   const venues = await tables.listRows<Models.Row & Record<string, unknown>>({ databaseId, tableId: "venues", queries: [Query.limit(200)] });
   await Promise.all(venues.rows.filter(row => row.menuVersion === undefined || row.menuRefreshSeconds === undefined || row.logoVisible === undefined || row.displayScaleMode === undefined || row.columnScale1Percent === undefined || row.columnScale2Percent === undefined || row.columnScale3Percent === undefined || row.breakActive === undefined || row.breakDurationMinutes === undefined || row.breakFontSizePercent === undefined || row.breakPanelWidthPercent === undefined || row.breakMenuDimPercent === undefined || row.menuItemFontSizePx === undefined || row.menuItemGapPx === undefined || row.breakTransitionMs === undefined || row.displayPreset === undefined || row.breakExpiredText === undefined || row.showServingSize === undefined || row.showCalories === undefined).map(row => tables.updateRow({
     databaseId,

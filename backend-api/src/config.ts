@@ -11,6 +11,8 @@ export type BackendConfig = {
   sessionSecret: string;
   hubAccessKey: string;
   corsOrigins: string[];
+  redisUrl?: string;
+  legacyStaffPinEnabled?: boolean;
 };
 
 function required(name: string, minimumLength = 1) {
@@ -35,5 +37,7 @@ export function loadConfig(): BackendConfig {
     sessionSecret: required("BACKEND_SESSION_SECRET", 32),
     hubAccessKey: required("BACKEND_HUB_ACCESS_KEY", 24),
     corsOrigins: (process.env.CORS_ORIGINS ?? "").split(",").map(value => value.trim()).filter(Boolean),
+    redisUrl: required("REDIS_URL"),
+    legacyStaffPinEnabled: process.env.ALLOW_LEGACY_STAFF_PIN !== "false",
   };
 }

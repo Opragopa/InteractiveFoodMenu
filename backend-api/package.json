@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc",
     "bootstrap": "node dist/bootstrap.js",
+    "operator:create": "node dist/createOperator.js",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "test": "npm run build && node --test dist/*.test.js",
@@ -15,13 +16,15 @@
     "mutation": "stryker run"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "fontkit": "^2.0.4",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "node-appwrite": "^29.0.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "redis": "^6.3.0"
   },
   "devDependencies": {
     "@stryker-mutator/core": "^10.0.0",

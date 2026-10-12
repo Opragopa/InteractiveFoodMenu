@@ -24,6 +24,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("legacy screen states", () => {
+  it("shows the written ruble abbreviation beside legacy prices", () => {
+    const { container } = render(<LegacyDisplayScreen {...props} />);
+    expect(container.querySelector(".tv-row .price")?.textContent).toContain("руб.");
+    expect(container.querySelector(".tv-row .price")?.textContent).not.toContain("₽");
+  });
   it("rotates measured pages, wraps around, and resets after the menu shrinks", async () => {
     const { container, rerender } = render(<LegacyDisplayScreen {...props} />);
     const visible = () => container.querySelector(".tv-page")!.textContent!;

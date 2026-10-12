@@ -9,12 +9,14 @@ import { consumeRateLimit, pruneRateLimitBuckets } from "./rateLimit.js";
 import { TABLES } from "./schema.js";
 import { randomUUID } from "node:crypto";
 import { createTvRouter } from "./tvRoutes.js";
+import { accountError, accountGuard, createAccountRouter } from "./accountRoutes.js";
+import { createAuthLimiter } from "./sharedRateLimit.js";
+import { instrumentAppwrite, requestMetrics } from "./requestMetrics.js";
 
 export function createApp(config: BackendConfig, services: AppwriteServices) {
   const app = express();
-  const authRateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
-  const authRateLimitWindowMs = 15 * 60 * 1000;
-  const authRateLimitMaxAttempts = 12;
+  services = instrumentAppwrite(services);
+  const authLimiter = createAuthLimiter(config.redisUrl);
 
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
@@ -24,7 +26,7 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
       if (!origin || config.corsOrigins.includes(origin)) callback(null, true);
       else callback(new ApiError(403, "origin_not_allowed", "Источник запроса не разрешён."));
     },
-    credentials: false,
+    credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }));
   app.use(express.json({ limit: "8mb" }));
@@ -32,28 +34,31 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
     const requestId = randomUUID();
     const started = performance.now();
     response.setHeader("X-Request-Id", requestId);
-    response.on("finish", () => {
-      if (request.path === "/health" || request.path === "/ready") return;
-      console.log(JSON.stringify({ event: "http_request", requestId, method: request.method,
-        route: request.route?.path ? `${request.baseUrl}${request.route.path}` : (response.statusCode === 404 ? "unmatched" : "middleware"),
-        status: response.statusCode, durationMs: Math.round(performance.now() - started) }));
+    requestMetrics.run({ appwriteCalls: 0, appwriteDurationMs: 0 }, () => {
+      response.on("finish", () => {
+        if (request.path === "/health" || request.path === "/ready") return;
+        const metrics = requestMetrics.getStore();
+        console.log(JSON.stringify({ event: "http_request", requestId, method: request.method,
+          route: request.route?.path ? `${request.baseUrl}${request.route.path}` : (response.statusCode === 404 ? "unmatched" : "middleware"),
+          status: response.statusCode, durationMs: Math.round(performance.now() - started),
+          appwriteCalls: metrics?.appwriteCalls ?? 0, appwriteDurationMs: Math.round(metrics?.appwriteDurationMs ?? 0) }));
+      });
+      next();
     });
-    next();
   });
   const limitAuthAttempts = (scope: string) => (request: express.Request, response: express.Response, next: express.NextFunction) => {
-    const now = Date.now();
-    if (authRateLimitBuckets.size > 1000) pruneRateLimitBuckets(authRateLimitBuckets, now);
     const ip = request.ip || request.socket.remoteAddress || "unknown";
-    const result = consumeRateLimit(authRateLimitBuckets, `${scope}:${ip}`, now, authRateLimitWindowMs, authRateLimitMaxAttempts);
-    if (!result.allowed) {
-      response.setHeader("Retry-After", String(result.retryAfterSeconds));
-      next(new ApiError(429, "rate_limited", "Слишком много попыток. Повторите позже."));
-      return;
-    }
-    next();
+    const identity = scope === "staff" ? `${String(request.body?.venueCode ?? "")}:${String(request.body?.username ?? "")}` : scope === "hub" ? String(request.body?.username ?? "") : undefined;
+    void authLimiter.check(scope, ip, identity).then(result => {
+      if (!result.allowed) { response.setHeader("Retry-After", String(result.retryAfterSeconds)); next(new ApiError(429, "rate_limited", "Слишком много попыток. Повторите позже.")); }
+      else next();
+    }, () => next(new ApiError(503, "auth_unavailable", "Вход временно недоступен.")));
   };
   app.post("/api/auth/staff", limitAuthAttempts("staff"));
+  app.post("/api/auth/staff/password", limitAuthAttempts("staff"));
+  app.post("/api/auth/staff/activate", limitAuthAttempts("staff-activate"));
   app.post("/api/hub/login", limitAuthAttempts("hub"));
+  app.post("/api/hub/login/password", limitAuthAttempts("hub"));
   app.post("/api/display/pairings", limitAuthAttempts("display-pairing-create"));
   app.post("/api/display/pairings/complete", limitAuthAttempts("display-pairing"));
   app.post("/tv/session", limitAuthAttempts("tv-session"));
@@ -65,6 +70,7 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
 
   app.get("/ready", async (_request, response) => {
   try {
+    if (!(await authLimiter.healthy())) throw new Error("auth_limiter_unavailable");
     await Promise.all([
       services.tables.get({ databaseId: config.appwriteDatabaseId }),
       ...TABLES.map(table => services.tables.getTable({ databaseId: config.appwriteDatabaseId, tableId: table.id })),
@@ -77,6 +83,9 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
   }
   });
 
+  app.use("/api", accountGuard(services, config));
+  app.use("/api", accountError);
+  app.use("/api", createAccountRouter(services, config));
   app.use("/api", createApiRouter(services, config));
   app.use("/tv", createTvRouter(services, config));
 

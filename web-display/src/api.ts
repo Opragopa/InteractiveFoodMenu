@@ -13,6 +13,7 @@ function requestWithXhr<T>(url: string, options: RequestInit): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(options.method ?? "GET", url, true);
+    xhr.withCredentials = true;
     const headers = options.headers as Record<string, string> | undefined;
     Object.keys(headers ?? {}).forEach((name) => xhr.setRequestHeader(name, headers?.[name] ?? ""));
     xhr.onreadystatechange = () => {
@@ -37,9 +38,10 @@ function requestWithXhr<T>(url: string, options: RequestInit): Promise<T> {
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const requestOptions: RequestInit = {
     ...options,
+    credentials: "include",
     headers: {
       ...(options.body ? { "content-type": "application/json" } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(token && token !== "cookie" ? { authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   };
@@ -69,6 +71,9 @@ function logoContentBase64(file: File): Promise<string> {
 }
 
 export const api = {
+  staffPasswordLogin: (venueCode: string, username: string, password: string) => request<{ venueId: string }>("/auth/staff/password", { method: "POST", body: JSON.stringify({ venueCode, username, password }) }),
+  staffActivate: (invitation: string, username: string, password: string) => request<{ venueId: string }>("/auth/staff/activate", { method: "POST", body: JSON.stringify({ invitation, username, password }) }),
+  authLogout: (role: "hub" | "staff") => request<void>("/auth/logout", { method: "POST", body: JSON.stringify({ role }) }),
   staffLogin: (venueCode: string, pin: string) => request<ApiSession>("/auth/staff", { method: "POST", body: JSON.stringify({ venueCode, pin }) }),
   displayLogin: (tokenId: string, secret: string) => request<ApiSession>("/auth/display", { method: "POST", body: JSON.stringify({ tokenId, secret }) }),
   menu: (token: string) => request<{ venue: any; categories: any[]; items: any[] }>(`/menu?ts=${Date.now()}`, {}, token),
@@ -91,7 +96,12 @@ export const api = {
     return request<{ status: string; displayUrl?: string | null }>(`/display/pairings/${encodeURIComponent(id)}?secret=${encodeURIComponent(secret ?? "")}`);
   },
   clientLog: (token: string, level: string, message: string, details: unknown) => request<void>("/client-logs", { method: "POST", body: JSON.stringify({ level, message, details }) }, token),
-  hubLogin: (accessKey: string) => request<{ token: string }>("/hub/login", { method: "POST", body: JSON.stringify({ accessKey }) }),
+  hubLogin: (accessKey: string) => request<{ role: string }>("/hub/login", { method: "POST", body: JSON.stringify({ accessKey }) }),
+  hubPasswordLogin: (username: string, password: string) => request<{ role: string }>("/hub/login/password", { method: "POST", body: JSON.stringify({ username, password }) }),
+  hubStaff: (token: string, id: string) => request<{ staff: Array<{ id: string; username: string; active: boolean; createdAt: string }> }>(`/hub/venues/${encodeURIComponent(id)}/staff`, {}, token),
+  hubInviteStaff: (token: string, id: string) => request<{ url: string; expiresAt: string }>(`/hub/venues/${encodeURIComponent(id)}/staff/invitations`, { method: "POST" }, token),
+  hubResetStaff: (token: string, id: string, staffId: string) => request<{ url: string; expiresAt: string }>(`/hub/venues/${encodeURIComponent(id)}/staff/${encodeURIComponent(staffId)}/reset`, { method: "POST" }, token),
+  hubDisableStaff: (token: string, id: string, staffId: string) => request<{ disabled: boolean }>(`/hub/venues/${encodeURIComponent(id)}/staff/${encodeURIComponent(staffId)}/disable`, { method: "POST" }, token),
   hubOverview: (token: string) => request<any>("/hub/overview", {}, token),
   hubStatistics: (token: string, id: string, from: string, to: string, epochId?: string) => request<any>(`/hub/venues/${encodeURIComponent(id)}/statistics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${epochId ? `&epochId=${encodeURIComponent(epochId)}` : ""}`, {}, token),
   hubResetStatistics: (token: string, id: string) => request<{ epochId: string; startedAt: string }>(`/hub/venues/${encodeURIComponent(id)}/statistics/reset`, { method: "POST" }, token),

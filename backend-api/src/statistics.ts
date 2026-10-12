@@ -47,11 +47,13 @@ export function moscowToday(now = new Date()): string {
 
 async function listResets(services: AppwriteServices, databaseId: string, venueId: string): Promise<Row[]> {
   const rows: Row[] = [];
-  for (let offset = 0; ; offset += 500) {
+  let cursor: string | undefined;
+  for (;;) {
     const result = await services.tables.listRows<Row>({ databaseId, tableId: "statistics_events",
-      queries: [Query.equal("venueId", [venueId]), Query.equal("eventType", ["statistics_reset"]), Query.orderAsc("createdAt"), Query.limit(500), Query.offset(offset)] });
+      queries: [Query.equal("venueId", [venueId]), Query.equal("eventType", ["statistics_reset"]), Query.orderAsc("createdAt"), Query.limit(500), ...(cursor ? [Query.cursorAfter(cursor)] : [])] });
     rows.push(...result.rows);
     if (result.rows.length < 500) return rows;
+    cursor = result.rows[result.rows.length - 1].$id;
   }
 }
 

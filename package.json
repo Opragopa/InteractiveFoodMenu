@@ -9,6 +9,7 @@
     "integration": "npm --prefix backend-api run integration",
     "mutation": "npm --prefix backend-api run mutation",
     "load": "node tests/load/smoke.mjs",
+    "load:scenario": "node tests/load/scenario.mjs",
     "api:dev": "npm --prefix backend-api run dev",
     "api:bootstrap": "npm --prefix backend-api run build && npm --prefix backend-api run bootstrap",
     "web:dev": "npm --prefix web-display run dev",

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App, VenueSettings } from "./App";
 
 const mocks = vi.hoisted(() => ({
-  staffLogin: vi.fn(),
+  staffPasswordLogin: vi.fn(),
   displayLogin: vi.fn(),
   menuVersion: vi.fn(),
   menu: vi.fn(),
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./api", () => ({
   api: {
-    staffLogin: mocks.staffLogin,
+    staffPasswordLogin: mocks.staffPasswordLogin,
     displayLogin: mocks.displayLogin,
     menuVersion: mocks.menuVersion,
     menu: mocks.menu,
@@ -26,7 +26,7 @@ vi.mock("./api", () => ({
   },
 }));
 
-const { staffLogin, menu, updateItem, adjustItemStock, createItem } = mocks;
+const { staffPasswordLogin, menu, updateItem, adjustItemStock, createItem } = mocks;
 
 const venue = {
   name: "Зимний сад", currency: "RUB" as const, backgroundColor: "#56965B", accentColor: "#FFFFFF", logoPath: "",
@@ -45,7 +45,7 @@ describe("staff application flow", () => {
     window.history.replaceState({}, "", "/staff");
     localStorage.clear();
     sessionStorage.clear();
-    staffLogin.mockReset().mockResolvedValue({ token: "staff-token", venueId: "venue-1" });
+    staffPasswordLogin.mockReset().mockResolvedValue({ venueId: "venue-1" });
     menu.mockReset().mockResolvedValue({ venue, categories, items });
     updateItem.mockReset().mockResolvedValue({ item: { ...items[1], stockQuantity: 2, isAvailable: true } });
     adjustItemStock.mockReset().mockResolvedValue({ item: { ...items[1], stockQuantity: 1, isAvailable: true } });
@@ -56,7 +56,8 @@ describe("staff application flow", () => {
     render(<App />);
     expect(document.title).toBe("Кабинет сотрудника — InteractiveFoodMenu");
     fireEvent.change(screen.getByLabelText("Код точки"), { target: { value: "wintercafe123" } });
-    fireEvent.change(screen.getByLabelText("Шестизначный PIN"), { target: { value: "123456" } });
+    fireEvent.change(screen.getByLabelText("Логин"), { target: { value: "worker" } });
+    fireEvent.change(screen.getByLabelText("Пароль"), { target: { value: "personal-password" } });
     fireEvent.click(screen.getByRole("button", { name: "Войти в кабинет" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "Зимний сад" })).toBeTruthy());
   }
@@ -79,10 +80,10 @@ describe("staff application flow", () => {
     expect((screen.getByRole("button", { name: "Списать одну штуку Чай" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByRole("spinbutton", { name: "Задать остаток Чай" }), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
-    await waitFor(() => expect(updateItem).toHaveBeenCalledWith("staff-token", "tea", { stockQuantity: 2 }));
+    await waitFor(() => expect(updateItem).toHaveBeenCalledWith("cookie", "tea", { stockQuantity: 2 }));
     expect(screen.getByText("2 шт.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Списать одну штуку Чай" }));
-    await waitFor(() => expect(adjustItemStock).toHaveBeenCalledWith("staff-token", "tea", -1));
+    await waitFor(() => expect(adjustItemStock).toHaveBeenCalledWith("cookie", "tea", -1));
     expect(screen.getByText("1 шт.")).toBeTruthy();
   });
 
@@ -93,7 +94,7 @@ describe("staff application flow", () => {
     Object.defineProperty(file, "text", { value: async () => "Категория;Название;Цена;Количество\nКофе; ЛАТТЕ ;999;5" });
     fireEvent.change(screen.getByLabelText("Загрузить CSV"), { target: { files: [file] } });
     fireEvent.click(await screen.findByRole("button", { name: "Импортировать 1 поз." }));
-    await waitFor(() => expect(updateItem).toHaveBeenCalledWith("staff-token", "latte", { stockQuantity: 5 }));
+    await waitFor(() => expect(updateItem).toHaveBeenCalledWith("cookie", "latte", { stockQuantity: 5 }));
     expect(createItem).not.toHaveBeenCalled();
   });
 

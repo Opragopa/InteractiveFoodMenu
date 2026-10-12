@@ -17,6 +17,14 @@ Configure the GitHub Actions environment named `production` with this secret:
 
 The server must have Git, Docker Desktop with Compose v2, and the production `.env.deploy` / `.env.backend` files. The runner uses the signed-in account's existing Docker Desktop session. The workflow pins the commit from the triggering push, builds API and web, runs the idempotent Appwrite bootstrap, recreates services, then verifies public health, readiness, CORS, and `/build-version.txt`.
 
+Before deploying the personal-account release, add `REDIS_URL=redis://redis:6379` and `ALLOW_LEGACY_STAFF_PIN=true` to `.env.backend`. Back up Appwrite and verify a restore on a separate instance. The API requires Redis for distributed login limits; the Compose stack starts it without a published port. After bootstrap, create the initial operator from the server's interactive terminal:
+
+```powershell
+docker compose -f compose.yaml --env-file .env.deploy run --rm -it api npm run operator:create -- owner
+```
+
+The command refuses to create a second operator. Keep `BACKEND_HUB_ACCESS_KEY` as a separately stored emergency key. If the release has not yet been deployed, perform bootstrap and operator creation with the new image before switching traffic; otherwise the hub password form cannot be used. Confirm password login, reserve-key login, staff invitation, cookie revocation and Android PIN login before ending the maintenance window. Do not disable the legacy PIN until the Android app is upgraded.
+
 Do not place private keys or environment files in the repository. Protect the `production` environment with the approval and branch rules appropriate for the server.
 
 Manual deployment from the physical server terminal:
@@ -29,7 +37,7 @@ git pull --ff-only origin main
 $env:BUILD_VERSION = git rev-parse --short HEAD
 docker compose -f compose.yaml --env-file .env.deploy build --pull api web
 docker compose -f compose.yaml --env-file .env.deploy run --rm api npm run bootstrap
-docker compose -f compose.yaml --env-file .env.deploy up -d --force-recreate api web proxy
+docker compose -f compose.yaml --env-file .env.deploy up -d --force-recreate api web proxy redis
 ```
 
 ## Smoke check

@@ -61,6 +61,28 @@ function dateTime(value: string | null) {
   return value ? new Date(value).toLocaleString("ru-RU") : "—";
 }
 
+function HubStaff({ token, venue, onClose }: { token: string; venue: HubVenue; onClose: () => void }) {
+  const [members, setMembers] = useState<Array<{ id: string; username: string; active: boolean; createdAt: string }>>([]);
+  const [link, setLink] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const refresh = useCallback(async () => setMembers((await api.hubStaff(token, venue.id)).staff), [token, venue.id]);
+  useEffect(() => { void refresh().catch(cause => setError(errorMessage(cause))); }, [refresh]);
+  const action = async (operation: () => Promise<{ url?: string } | { disabled: boolean }>) => {
+    setBusy(true); setError(""); setLink("");
+    try { const result = await operation(); setLink("url" in result ? result.url ?? "" : ""); await refresh(); }
+    catch (cause) { setError(errorMessage(cause)); }
+    finally { setBusy(false); }
+  };
+  return <section className="hub-card hub-staff"><div className="hub-card-title"><h3>Сотрудники: {venue.name}</h3><button type="button" onClick={onClose}>Закрыть</button></div>
+    <p>Учётные записи создаёт оператор. Сотрудник сам задаёт логин и пароль по одноразовой ссылке.</p>
+    <button type="button" disabled={busy} onClick={() => void action(() => api.hubInviteStaff(token, venue.id))}>Пригласить сотрудника</button>
+    {link && <div className="hub-secret"><b>Одноразовая ссылка на 24 часа</b><textarea readOnly value={link} /><button type="button" onClick={() => void navigator.clipboard.writeText(link)}>Скопировать ссылку</button></div>}
+    <div className="hub-table-wrap"><table><thead><tr><th>Логин</th><th>Состояние</th><th>Действия</th></tr></thead><tbody>{members.map(member => <tr key={member.id}><td>{member.username}</td><td>{member.active ? "Активен" : "Отключён"}</td><td className="hub-actions"><button type="button" disabled={busy} onClick={() => void action(() => api.hubResetStaff(token, venue.id, member.id))}>Сбросить пароль</button><button type="button" disabled={busy || !member.active} onClick={() => void action(() => api.hubDisableStaff(token, venue.id, member.id))}>Отключить</button></td></tr>)}</tbody></table></div>
+    {error && <p className="hub-error" role="alert">{error}</p>}
+  </section>;
+}
+
 function HubVenueSettings({ venue, busy, onSave, onUploadLogo, onUseDefaultLogo, onClose }: {
   venue: HubVenue;
   busy: boolean;
@@ -208,6 +230,9 @@ export function BackendHub() {
   useEffect(() => { document.title = "Хаб — InteractiveFoodMenu"; }, []);
   const [hubToken, setHubToken] = useState(() => localStorage.getItem("ifm-hub-session") ?? "");
   const [accessKey, setAccessKey] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [useEmergencyKey, setUseEmergencyKey] = useState(false);
   const [overview, setOverview] = useState<HubOverview | null>(null);
   const [tab, setTab] = useState<"venues" | "statistics" | "functions" | "logs" | "audit">("venues");
   const [busy, setBusy] = useState(false);
@@ -216,6 +241,7 @@ export function BackendHub() {
   const [newVenue, setNewVenue] = useState({ venueCode: "", name: "", pin: "" });
   const [createdDisplayUrl, setCreatedDisplayUrl] = useState("");
   const [editingVenueId, setEditingVenueId] = useState("");
+  const [staffVenueId, setStaffVenueId] = useState("");
   const [venueSearch, setVenueSearch] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
 
@@ -235,10 +261,17 @@ export function BackendHub() {
   const login = async () => {
     setBusy(true); setError("");
     try {
-      const response = await api.hubLogin(accessKey);
-      localStorage.setItem("ifm-hub-session", response.token);
-      setHubToken(response.token);
+      if (useEmergencyKey) {
+        await api.hubLogin(accessKey);
+        localStorage.setItem("ifm-hub-session", "cookie");
+        setHubToken("cookie");
+      } else {
+        await api.hubPasswordLogin(username, password);
+        localStorage.setItem("ifm-hub-session", "cookie");
+        setHubToken("cookie");
+      }
       setAccessKey("");
+      setPassword("");
     } catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   };
@@ -346,11 +379,11 @@ export function BackendHub() {
   };
 
   if (!hubToken) return <main className="hub-login">
-    <div className="hub-login-card"><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1><p>Единый центр управления серверной частью.</p><label htmlFor="hub-access-key">Ключ оператора</label><input id="hub-access-key" type="password" autoComplete="current-password" placeholder="Введите ключ оператора" value={accessKey} onChange={event => setAccessKey(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void login(); }} /><small>Ключ даёт доступ к точкам, экранам и журналу действий.</small><button type="button" disabled={busy || !accessKey} onClick={() => void login()}>{busy ? "Проверяем…" : "Войти в хаб"}</button>{error && <p className="hub-error" role="alert">{error}</p>}</div>
+    <div className="hub-login-card"><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1><p>Единый центр управления серверной частью.</p>{useEmergencyKey ? <><label htmlFor="hub-access-key">Резервный ключ оператора</label><input id="hub-access-key" type="password" autoComplete="off" value={accessKey} onChange={event => setAccessKey(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void login(); }} /></> : <><label htmlFor="hub-username">Логин</label><input id="hub-username" autoComplete="username" value={username} onChange={event => setUsername(event.target.value)} /><label htmlFor="hub-password">Пароль</label><input id="hub-password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} onKeyDown={event => { if (event.key === "Enter") void login(); }} /></>}<button type="button" disabled={busy || (useEmergencyKey ? !accessKey : !username || !password)} onClick={() => void login()}>{busy ? "Проверяем…" : "Войти в хаб"}</button><button type="button" className="link-button" onClick={() => setUseEmergencyKey(value => !value)}>{useEmergencyKey ? "Войти по логину и паролю" : "Войти по резервному ключу"}</button>{error && <p className="hub-error" role="alert">{error}</p>}</div>
   </main>;
 
   return <main className="backend-hub">
-    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1></div><nav aria-label="Разделы Меню еды. Хаб">{([ ["venues", "Точки"], ["statistics", "Статистика"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button type="button" className="hub-signout" onClick={() => { localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
+    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1></div><nav aria-label="Разделы Меню еды. Хаб">{([ ["venues", "Точки"], ["statistics", "Статистика"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button type="button" className="hub-signout" onClick={() => { if (hubToken === "cookie") void api.authLogout("hub"); localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
     <section className="hub-content">
       <header className="hub-header"><div><span className="hub-kicker">Управление платформой</span><h2>{tab === "venues" ? "Точки и доступ" : tab === "statistics" ? "Статистика" : tab === "functions" ? "Серверные функции" : tab === "logs" ? "Ошибки клиентов" : "Журнал действий"}</h2></div><button type="button" className="hub-refresh" disabled={busy} onClick={() => void loadOverview()}>{busy ? "Обновляем…" : "Обновить"}</button></header>
       {error && <p className="hub-banner hub-error" role="alert">{error}</p>}{notice && <p className="hub-banner hub-success" role="status">{notice}</p>}
@@ -359,7 +392,7 @@ export function BackendHub() {
         <div className="hub-metrics"><article><small>Точек</small><strong>{overview.totals.venues}</strong></article><article><small>Категорий</small><strong>{overview.totals.categories}</strong></article><article><small>Позиций</small><strong>{overview.totals.items}</strong></article><article><small>Активных экранов</small><strong>{overview.totals.activeDisplays}</strong></article></div>
         {tab === "statistics" && <HubStatistics token={hubToken} venues={overview.venues} />}
         {tab === "venues" && <><div className="hub-venue-toolbar"><label><span className="sr-only">Поиск точек</span><input type="search" placeholder="Найти точку или код…" value={venueSearch} onChange={event => setVenueSearch(event.target.value)} /></label><small>{filteredVenues.length} из {overview.totals.venues} точек</small></div><div className="hub-displays-overview">{filteredVenues.map(venue => <HubDisplays key={`displays-${venue.id}`} token={hubToken} venue={venue} busy={busy} />)}</div><div className="hub-grid">
-          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{filteredVenues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{filteredVenues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button type="button" className="hub-primary-action" disabled={busy} onClick={() => void openDisplay(venue.id)}>Экран меню</button><details className="hub-actions-menu"><summary>Действия</summary><div><a className="hub-action-link" href={`${window.location.origin}/staff?venue=${encodeURIComponent(venue.code)}`} target="_blank" rel="noreferrer">Staff</a><button type="button" disabled={busy} onClick={() => setEditingVenueId(venue.id)}>Оформление</button><button type="button" disabled={busy} onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button type="button" className="danger" disabled={busy} onClick={() => void revokeSessions(venue.id)}>Отозвать</button><button type="button" className="danger" disabled={busy} onClick={() => void deleteVenue(venue.id, venue.name)}>Удалить</button></div></details></td></tr>)}</tbody></table></div>{editingVenue && <HubVenueSettings venue={editingVenue} busy={busy} onClose={() => setEditingVenueId("")} onSave={settings => saveVenueSettings(editingVenue.id, settings)} onUploadLogo={file => uploadVenueLogo(editingVenue.id, file)} onUseDefaultLogo={() => useDefaultLogo(editingVenue.id)} />}</section>
+          <section className="hub-card"><div className="hub-card-title"><h3>Все точки</h3><small>{filteredVenues.length} из {overview.totals.venues}</small></div><div className="hub-table-wrap"><table><thead><tr><th>Точка</th><th>Код</th><th>Версии</th><th>Обновлена</th><th></th></tr></thead><tbody>{filteredVenues.map(venue => <tr key={venue.id}><td><b>{venue.name}</b><small>{venue.id}</small></td><td><code>{venue.code || "—"}</code></td><td><small>staff {venue.staffVersion} · display {venue.displayVersion}</small></td><td>{dateTime(venue.updatedAt)}</td><td className="hub-actions"><button type="button" className="hub-primary-action" disabled={busy} onClick={() => void openDisplay(venue.id)}>Экран меню</button><details className="hub-actions-menu"><summary>Действия</summary><div><a className="hub-action-link" href={`${window.location.origin}/staff?venue=${encodeURIComponent(venue.code)}`} target="_blank" rel="noreferrer">Staff</a><button type="button" disabled={busy} onClick={() => setStaffVenueId(venue.id)}>Сотрудники</button><button type="button" disabled={busy} onClick={() => setEditingVenueId(venue.id)}>Оформление</button><button type="button" disabled={busy} onClick={() => void rotatePin(venue.id, venue.code)}>Сменить PIN</button><button type="button" className="danger" disabled={busy} onClick={() => void revokeSessions(venue.id)}>Отозвать</button><button type="button" className="danger" disabled={busy} onClick={() => void deleteVenue(venue.id, venue.name)}>Удалить</button></div></details></td></tr>)}</tbody></table></div>{staffVenueId && overview.venues.find(venue => venue.id === staffVenueId) && <HubStaff token={hubToken} venue={overview.venues.find(venue => venue.id === staffVenueId)!} onClose={() => setStaffVenueId("")} />}{editingVenue && <HubVenueSettings venue={editingVenue} busy={busy} onClose={() => setEditingVenueId("")} onSave={settings => saveVenueSettings(editingVenue.id, settings)} onUploadLogo={file => uploadVenueLogo(editingVenue.id, file)} onUseDefaultLogo={() => useDefaultLogo(editingVenue.id)} />}</section>
           <section className="hub-card hub-create"><h3>Новая точка</h3><label>Название<input placeholder="Кофейня на Невском" value={newVenue.name} onChange={event => setNewVenue({ ...newVenue, name: event.target.value })} /></label><label>Код для входа<input placeholder="nevsky" pattern="[a-z0-9-]{3,32}" value={newVenue.venueCode} onChange={event => setNewVenue({ ...newVenue, venueCode: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} /><small>3–32 латинских символа, цифры или дефис.</small></label><label>PIN<input type="password" inputMode="numeric" maxLength={6} placeholder="6 цифр" value={newVenue.pin} onChange={event => setNewVenue({ ...newVenue, pin: event.target.value.replace(/\D/g, "") })} /></label><button type="button" disabled={busy || !newVenue.name || newVenue.venueCode.length < 3 || newVenue.pin.length !== 6} onClick={() => void createVenue()}>Создать точку</button>{createdDisplayUrl && <div className="hub-secret"><b>Ссылка первого экрана</b><p>Она показывается только сейчас. Сохраните её безопасно.</p><textarea readOnly value={createdDisplayUrl} /><button type="button" onClick={() => void copyDisplayUrl()}>{copyNotice || "Скопировать"}</button></div>}</section>
         </div></>}
         {tab === "functions" && <div className="hub-function-groups">{groupedFunctions.map(([area, entries]) => <section className="hub-card" key={area}><div className="hub-card-title"><h3>{area}</h3><small>{entries.length}</small></div>{entries.map(entry => <article className="hub-function" key={entry.name}><div><code>{entry.name}</code><p>{entry.purpose}</p></div><span>{entry.access}</span></article>)}</section>)}</div>}

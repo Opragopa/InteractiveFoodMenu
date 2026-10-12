@@ -140,8 +140,10 @@ export function App() {
 function StaffScreen() {
   const [savedCredentials] = useState(savedVenueCredentials);
   const [code, setCode] = useState(() => new URLSearchParams(window.location.search).get("venue")?.trim().toLowerCase() || savedCredentials.code);
-  const [pin, setPin] = useState(savedCredentials.pin);
-  const [sessionToken, setSessionToken] = useState(() => localStorage.getItem("ifm-staff-session") ?? "");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [invitation] = useState(() => /^#invite=([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/.exec(window.location.hash)?.[1] ?? "");
+  const [sessionToken, setSessionToken] = useState(() => window.location.hash.startsWith("#invite=") ? "" : localStorage.getItem("ifm-staff-session") ?? "");
   const [venue, setVenue] = useState<Venue | null>(null);
   useEffect(() => {
     document.title = venue?.name ? `Кабинет сотрудника — ${venue.name}` : "Кабинет сотрудника — InteractiveFoodMenu";
@@ -175,10 +177,12 @@ function StaffScreen() {
   const login = async () => {
     setBusy(true); setError("");
     try {
-      const response = await api.staffLogin(code.trim().toLowerCase(), pin);
-      saveVenueCredentials(code, pin);
-      localStorage.setItem("ifm-staff-session", response.token);
-      setSessionToken(response.token);
+      await (invitation ? api.staffActivate(invitation, username, password) : api.staffPasswordLogin(code.trim().toLowerCase(), username, password));
+      saveVenueCredentials(code, "");
+      localStorage.setItem("ifm-staff-session", "cookie");
+      if (invitation) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setSessionToken("cookie");
+      setPassword("");
     } catch (cause) {
       reportClientError("staff_login_failed", cause);
       setError(cause instanceof Error ? cause.message : "Не удалось войти");
@@ -241,7 +245,7 @@ function StaffScreen() {
     return () => { cancelled = true; };
   }, [showStaffQr, code]);
   if (sessionToken && menuLoading && !venue) return <main className="staff-menu staff-dashboard"><div className="loading-panel" role="status" aria-live="polite"><span className="loading-spinner" aria-hidden="true" />Загружаем меню…</div></main>;
-  if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>Кабинет сотрудника</h1><p className="auth-lead">Управляйте наличием блюд и настройками точки.</p><label>Код точки<input autoComplete="username" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label><label>Шестизначный PIN<input autoComplete="current-password" placeholder="••••••" type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value)} /></label><button type="button" onClick={login} disabled={busy || !code || pin.length !== 6}>{busy ? "Проверяем…" : "Войти в кабинет"}</button><small className="saved-credentials">Код сохраняется на устройстве, PIN используется только для входа.</small><button type="button" className="link-button" onClick={() => { forgetVenueCredentials(); setCode(""); setPin(""); }}>Забыть сохранённые данные</button>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
+  if (!sessionToken) return <main className="auth-shell"><section className="auth-card staff-login"><span className="auth-kicker">InteractiveFoodMenu</span><h1>{invitation ? "Создать личный доступ" : "Кабинет сотрудника"}</h1><p className="auth-lead">{invitation ? "Выберите логин и пароль для своей учётной записи. При сбросе пароля сохраните прежний логин." : "Войдите под личной учётной записью вашей точки."}</p>{!invitation && <label>Код точки<input autoComplete="organization" placeholder="например, nevsky" value={code} onChange={e => setCode(e.target.value)} /></label>}<label>Логин<input autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} /></label><label>Пароль<input autoComplete={invitation ? "new-password" : "current-password"} type="password" value={password} onChange={e => setPassword(e.target.value)} /></label><button type="button" onClick={login} disabled={busy || (!invitation && !code) || username.length < 3 || password.length < (invitation ? 12 : 1)}>{busy ? "Проверяем…" : invitation ? "Активировать доступ" : "Войти в кабинет"}</button><small className="saved-credentials">{invitation ? "Приглашение одноразовое и действует 24 часа." : "Код точки сохраняется на устройстве. Пароль не сохраняется."}</small>{error && <p role="alert" className="status-error">{error}</p>}</section></main>;
   const filteredItems = filterMenuItems(items, search, categoryFilter, availabilityFilter);
   const grouped = [...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: filteredItems.filter(item => item.categoryId === category.id).sort((a, b) => Number(!itemIsAvailable(a)) - Number(!itemIsAvailable(b)) || a.sortOrder - b.sortOrder) })).filter(group => group.items.length);
   const pageEstimate = estimateMenuPages(categories, items, 1366, 768, venue?.menuItemFontSizePx ?? 34, venue?.menuItemGapPx ?? 12);
@@ -442,13 +446,13 @@ function StaffScreen() {
         <div className="staff-actions">
           {venue?.breakActive ? <button type="button" className="primary-action" onClick={() => void stopBreak()} disabled={busy}>Завершить перерыв</button> : <span className="break-control"><input aria-label="Длительность перерыва" type="number" min={1} max={60} value={breakDuration} onChange={e => setBreakDuration(Number(e.target.value))} /><button type="button" className="primary-action" onClick={() => void startBreak()} disabled={busy}>Начать перерыв</button></span>}
           <button type="button" onClick={() => void loadMenu().then(() => setError("")).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось обновить меню."))} disabled={busy}>Обновить</button>
-          <button type="button" className="staff-qr-action" aria-expanded={showStaffQr} onClick={() => setShowStaffQr(value => !value)}>{showStaffQr ? "Скрыть QR" : "QR для сотрудника"}</button>
-          <button type="button" className="subtle-action" onClick={() => { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
+          <button type="button" className="staff-qr-action" aria-expanded={showStaffQr} onClick={() => setShowStaffQr(value => !value)}>{showStaffQr ? "Скрыть QR" : "Вход сотрудника на новом устройстве"}</button>
+          <button type="button" className="subtle-action" onClick={() => { void api.authLogout("staff"); localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
         </div>
       </header>
       {showStaffQr && <section className="staff-pairing" aria-label="Подключение сотрудника">
-        <div><h2>Подключить сотрудника</h2><p>Покажите QR-код коллеге. Он откроет кабинет с заполненным кодом точки и введёт PIN точки.</p></div>
-        <div className="staff-pairing-code" aria-live="polite">{staffQr ? <img src={staffQr} alt="QR-код входа сотрудника в кабинет этой точки" /> : <span role="status">Создаём QR-код…</span>}<small>После сканирования сотруднику потребуется ввести PIN точки.</small></div>
+        <div><h2>Вход на новом устройстве</h2><p>QR-код откроет кабинет с заполненным кодом точки. Учётную запись и приглашение создаёт оператор в хабе.</p></div>
+        <div className="staff-pairing-code" aria-live="polite">{staffQr ? <img src={staffQr} alt="QR-код входа сотрудника в кабинет этой точки" /> : <span role="status">Создаём QR-код…</span>}<small>После сканирования сотрудник вводит личный логин и пароль.</small></div>
       </section>}
       <section className="staff-overview" aria-label="Сводка меню">
         <article><span>Позиций</span><strong>{items.length}</strong><small>{items.filter(itemIsAvailable).length} доступны</small></article>
