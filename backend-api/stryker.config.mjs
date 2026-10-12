@@ -1,7 +1,7 @@
 export default {
   testRunner: "command",
   commandRunner: {
-    command: "npm run build && node --test dist/*.test.js",
+    command: "npm run build && node --test dist/rateLimit.test.js dist/security.test.js",
   },
   mutate: ["src/rateLimit.ts", "src/security.ts"],
   reporters: ["clear-text", "html", "json"],
