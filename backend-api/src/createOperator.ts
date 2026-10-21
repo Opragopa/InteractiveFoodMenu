@@ -1,6 +1,6 @@
 import { hash } from "@node-rs/argon2";
 import { ID, Query } from "node-appwrite";
-import { createAppwriteServices } from "./appwrite.js";
+import { createServices } from "./appwrite.js";
 import { loadConfig } from "./config.js";
 
 async function hiddenPassword(): Promise<string> {
@@ -27,7 +27,7 @@ async function hiddenPassword(): Promise<string> {
 const username = String(process.argv[2] ?? "").trim().toLowerCase();
 if (!/^[a-z][a-z0-9._-]{2,39}$/.test(username)) throw new Error("Specify a username of 3–40 Latin characters, digits, dots, dashes or underscores.");
 const config = loadConfig();
-const services = createAppwriteServices(config);
+const services = await createServices(config);
 const existing = await services.tables.listRows({ databaseId: config.appwriteDatabaseId, tableId: "operators", queries: [Query.limit(1)] });
 if (existing.rows.length) throw new Error("An operator already exists; the first-operator command is disabled.");
 const password = await hiddenPassword();
@@ -35,3 +35,5 @@ if (password.length < 12 || password.length > 128 || Buffer.byteLength(password)
 await services.tables.createRow({ databaseId: config.appwriteDatabaseId, tableId: "operators", rowId: ID.unique(),
   data: { username, passwordHash: await hash(password), active: true, sessionVersion: 1, createdAt: new Date().toISOString() } });
 process.stdout.write(`Оператор ${username} создан.\n`);
+
+await services.close?.();

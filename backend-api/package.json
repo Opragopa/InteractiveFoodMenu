@@ -13,7 +13,9 @@
     "test": "npm run build && node --test dist/*.test.js",
     "coverage": "npm run build && c8 --all --src src --exclude '**/*.test.*' --exclude 'src/bootstrap.ts' --reporter=text --reporter=html node --test dist/*.test.js",
     "integration": "npm run build && node --test dist/integration.test.js",
-    "mutation": "stryker run"
+    "mutation": "stryker run",
+    "migrate:appwrite": "node dist/migrateAppwrite.js",
+    "test:postgres": "npm run build && node --test dist/postgres.test.js"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",
@@ -23,6 +25,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "node-appwrite": "^29.0.0",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "redis": "^6.3.0"
   },
@@ -34,6 +37,7 @@
     "@types/fontkit": "^2.0.9",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.15.0",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "c8": "^12.0.0",
     "tsx": "^4.20.6",

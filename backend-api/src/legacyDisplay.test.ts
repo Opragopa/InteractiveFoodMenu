@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { renderLegacyDisplay } from "./legacyDisplay.js";
 
 test("legacy menu moves enlarged rows to new pages without dropping items", () => {
@@ -14,7 +15,10 @@ test("legacy menu moves enlarged rows to new pages without dropping items", () =
   assert.match(normal, /<title>Меню — Кафе<\/title>/);
   assert.match(normal, /руб\./);
   assert.doesNotMatch(normal, /₽/);
-  assert.match(normal, /onest-static-regular\.ttf/);
+  assert.match(normal, /onest-static-regular\.ttf\?v=2/);
+  assert.match(normal, /onest-static-semibold\.ttf\?v=2/);
+  assert.match(normal, /onest-static-bold\.ttf\?v=2/);
+  assert.doesNotMatch(normal, /onest-variable/);
   const pages = (html: string) => (html.match(/data-page="\d+"/g) ?? []).length;
 
   assert.ok(pages(enlarged) > pages(normal));
@@ -78,4 +82,36 @@ test("break text cannot end the menu script", () => {
   const html = renderLegacyDisplay({ breakActive: true, breakExpiredText: "</script><script>alert('x')</script>" }, [], [], 1366, 768, "test");
   assert.equal((html.match(/<script>/g) ?? []).length, 1);
   assert.doesNotMatch(html, /<script>alert/);
+});
+
+
+test("legacy refresh retains the document on failure and replaces it after recovery", () => {
+  const html = renderLegacyDisplay({ name: "Кафе" }, [], [], 1366, 768, "test");
+  const script = html.match(/<script>([\s\S]*)<\/script>/)![1];
+  const requests: FakeXhr[] = [], timers: Array<() => void> = [], writes: string[] = [];
+  const elements: Record<string, any> = {};
+  class FakeXhr {
+    readyState = 0; status = 0; responseText = "";
+    onreadystatechange?: () => void; onerror?: () => void;
+    constructor() { requests.push(this); }
+    open() {} send() {}
+    abort() { this.readyState = 4; this.status = 0; this.onreadystatechange?.(); }
+    respond(status: number, text: string, state = 4) { this.status = status; this.responseText = text; this.readyState = state; this.onreadystatechange?.(); }
+  }
+  runInNewContext(script, {
+    XMLHttpRequest: FakeXhr,
+    window: { location: { href: "http://localhost/menu" } },
+    document: { querySelectorAll: () => [], getElementById: (id: string) => elements[id] ??= { style: {} }, body: {}, open() {}, close() {}, write(value: string) { writes.push(value); } },
+    setInterval() {}, clearInterval() {}, setTimeout(callback: () => void) { timers.push(callback); }, clearTimeout() {},
+  });
+  const changed = 'data: {"version":9,"breakActive":false,"breakEndsAt":null}\n\n';
+  requests[0].respond(200, changed, 3);
+  assert.equal(requests.length, 2);
+  requests[1].respond(503, "unavailable");
+  assert.deepEqual(writes, []);
+  assert.equal(elements.offline.style.display, "block");
+  timers.shift()!();
+  requests[2].respond(200, changed, 3);
+  requests[3].respond(200, "<!doctype html><html>Updated menu</html>");
+  assert.deepEqual(writes, ["<!doctype html><html>Updated menu</html>"]);
 });

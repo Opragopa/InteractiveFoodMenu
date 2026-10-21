@@ -19,14 +19,45 @@ server {
     location /tv/ {
         proxy_pass http://127.0.0.1:8091/tv/;
         proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 75s;
+        gzip off;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
         proxy_set_header X-Real-IP $remote_addr;
     }
 
+    location ~ ^/api/display/(legacy/|pairings/) {
+        access_log off;
+        proxy_pass http://127.0.0.1:8091;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 75s;
+        gzip off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8091;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_read_timeout 75s;
+        gzip off;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
     location /api/venue-assets/ {
         proxy_pass http://127.0.0.1:8091/api/venue-assets/;
         proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 75s;
+        gzip off;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto https;
     }
@@ -42,6 +73,10 @@ server {
     location / {
         proxy_pass http://127.0.0.1:8088;
         proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 75s;
+        gzip off;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

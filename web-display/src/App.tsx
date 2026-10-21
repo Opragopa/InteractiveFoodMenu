@@ -44,12 +44,9 @@ export function App() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [connected, setConnected] = useState(navigator.onLine);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const [menuRefreshSeconds, setMenuRefreshSeconds] = useState(5);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const hasLoadedMenuRef = useRef(false);
-  const menuVersionRef = useRef<number | null>(null);
-  const legacyBrowser = typeof window.fetch !== "function";
 
   useEffect(() => {
     document.title = venue?.name ? `Меню — ${venue.name}` : "Меню — InteractiveFoodMenu";
@@ -96,8 +93,6 @@ export function App() {
         const menu = await api.menu(sessionToken);
         if (!cancelled) {
           hasLoadedMenuRef.current = true;
-          menuVersionRef.current = Number((menu.venue as Venue).menuVersion ?? 1);
-          setMenuRefreshSeconds(Math.min(300, Math.max(5, Number((menu.venue as Venue).menuRefreshSeconds ?? 15))));
           setVenue(menu.venue as Venue); setCategories(menu.categories as Category[]); setItems(menu.items as MenuItem[]);
           setLastUpdatedAt(Date.now()); setConnected(true); setError(""); setLoading(false);
         }
@@ -108,27 +103,22 @@ export function App() {
         }
       }
     };
-    void load();
-    const timer = window.setInterval(async () => {
-      try {
-        // Chrome 38/NetCast can cache or mishandle lightweight version
-        // requests. Its XHR fallback is reliable, so refresh the full menu
-        // only on legacy TVs; modern browsers keep the cheap version poll.
-        if (legacyBrowser) {
-          await load();
-          return;
-        }
-        const version = await api.menuVersion(sessionToken);
-        if (version.version !== menuVersionRef.current) await load();
-        else setConnected(true);
-      } catch {
-        if (!cancelled) setConnected(false);
-      }
-    // Cap change detection at five seconds so break and column changes reach
-    // the TV promptly, even when a venue still stores the old 15-second value.
-    }, Math.min(5, menuRefreshSeconds) * 1000);
-    return () => { cancelled = true; window.clearInterval(timer); };
-  }, [sessionToken, menuRefreshSeconds, legacyBrowser]);
+    let running = false, pending = false;
+    const refresh = async () => {
+      if (running) { pending = true; return; }
+      running = true;
+      do { pending = false; await load(); } while (pending && !cancelled);
+      running = false;
+    };
+    // Every connection starts with a snapshot, so reconnect catches missed saves.
+    const stop = api.subscribeMenu(sessionToken, state => {
+      if (cancelled) return;
+      if (state.revoked) { setError("Экран отключён. Выполните подключение заново."); setLoading(false); return; }
+      void refresh();
+    }, online => { if (!cancelled) setConnected(online); });
+    void refresh();
+    return () => { cancelled = true; stop(); };
+  }, [sessionToken]);
 
   if (loading) return <Status text="Подключаем меню…" />;
   if (error) return <Status text={error} error />;

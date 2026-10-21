@@ -3,6 +3,8 @@ import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
 import { AppwriteException, ID, Query, type Models } from "node-appwrite";
 import { InputFile } from "node-appwrite/file";
+import { menuStream } from "./menuEvents.js";
+import { menuSnapshot, publicMenuRow } from "./menuSnapshot.js";
 import QRCode from "qrcode";
 import type { AppwriteServices } from "./appwrite.js";
 import type { BackendConfig } from "./config.js";
@@ -88,16 +90,7 @@ function logoPosition(value: unknown): string {
   return result;
 }
 
-function publicRow(row: RowData): Record<string, unknown> {
-  const result: Record<string, unknown> = { id: row.$id };
-  for (const [key, value] of Object.entries(row)) {
-    if (!key.startsWith("$") && !["pinHash", "tokenHash", "passwordHash"].includes(key)) result[key] = value;
-  }
-  if (row.isAvailable !== undefined && row.stockQuantity !== undefined && row.stockQuantity !== null) {
-    result.isAvailable = Number(row.stockQuantity) > 0;
-  }
-  return result;
-}
+const publicRow = publicMenuRow;
 
 function trackedStock(row: RowData): boolean {
   return row.stockQuantity !== undefined && row.stockQuantity !== null;
@@ -203,6 +196,10 @@ async function audit(services: AppwriteServices, config: BackendConfig, action: 
 const pendingMenuVersionUpdates = new Map<string, Promise<void>>();
 
 async function bumpMenuVersion(services: AppwriteServices, databaseId: string, venueId: string) {
+  if (services.datastore === "postgres") {
+    await services.tables.incrementRowColumn({ databaseId, tableId: "venues", rowId: venueId, column: "menuVersion", value: 1 });
+    return;
+  }
   // The self-hosted increment endpoint has acknowledged updates without
   // changing the value used by display polling. Serialize the read/write
   // fallback so rapid stock changes cannot publish the same version twice.
@@ -272,6 +269,18 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     if (!token || token.active !== true || !(await verifySecret(match[2], String(token.tokenHash ?? "")))) throw new ApiError(401, "unauthenticated", "Ссылка экрана недействительна или отозвана.");
     const venue = await services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId: "venues", rowId: String(token.venueId) });
     if (venue.active === false) throw new ApiError(403, "forbidden", "Точка отключена.");
+    if (request.query.events === "1") {
+      if (!services.events) throw new ApiError(503, "events_unavailable", "Уведомления недоступны.");
+      menuStream(request, response, services.events, String(token.venueId), async () => {
+        const [current, place] = await Promise.all([
+          services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: token.$id }),
+          services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId: "venues", rowId: String(token.venueId) }),
+        ]);
+        if (current.active !== true || place.active === false || current.venueId !== token.venueId) return { revoked: true };
+        return { version: Number(place.menuVersion ?? 1), hash: (await menuSnapshot(services, config.appwriteDatabaseId, String(token.venueId))).etag, breakActive: place.breakActive === true, breakEndsAt: place.breakEndsAt ?? null };
+      });
+      return;
+    }
     await services.tables.updateRow({ databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: token.$id, data: { lastSeenAt: new Date().toISOString() } });
     await contact(String(token.venueId), token.$id);
     response.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -279,13 +288,10 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       response.json({ version: Number(venue.menuVersion ?? 1), breakActive: venue.breakActive === true, breakEndsAt: venue.breakEndsAt ?? null });
       return;
     }
-    const [categories, items] = await Promise.all([
-      listAllRows(services, config.appwriteDatabaseId, "categories", [Query.equal("venueId", [String(token.venueId)]), Query.orderAsc("sortOrder")]),
-      listAllRows(services, config.appwriteDatabaseId, "items", [Query.equal("venueId", [String(token.venueId)])]),
-    ]);
+    const { data: menu } = await menuSnapshot(services, config.appwriteDatabaseId, String(token.venueId));
     const width = Math.max(480, Math.min(7680, Number(request.query.w) || 1920));
     const height = Math.max(360, Math.min(4320, Number(request.query.h) || 1080));
-    response.status(200).type("html").set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'").set("Referrer-Policy", "no-referrer").send(renderLegacyDisplay(venue, categories.map(publicRow) as never, items.map(publicRow) as never, width, height, `${match[1]}.${match[2]}`));
+    response.status(200).type("html").set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'").set("Referrer-Policy", "no-referrer").send(renderLegacyDisplay(menu.venue, menu.categories as never, menu.items as never, width, height, `${match[1]}.${match[2]}`));
   }));
   const databaseId = config.appwriteDatabaseId;
 
@@ -591,15 +597,33 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       await services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId, data: { lastSeenAt: new Date().toISOString() } });
       await contact(claims.venueId, claims.displayTokenId);
     }
-    const [venue, categories, items] = await Promise.all([
-      services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId }),
-      listAllRows(services, databaseId, "categories", [Query.equal("venueId", [claims.venueId]), Query.orderAsc("sortOrder")]),
-      listAllRows(services, databaseId, "items", [Query.equal("venueId", [claims.venueId])]),
-    ]);
+    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId });
     const expectedVersion = claims.role === "staff" ? venue.staffVersion : venue.displayVersion;
     if (claims.version !== Number(expectedVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните вход заново.");
-    response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    response.json({ venue: publicRow(venue), categories: categories.map(publicRow), items: items.map(publicRow) });
+    if (venue.active === false) throw new ApiError(401, "session_revoked", "Точка отключена.");
+    const { data: menu, etag } = await menuSnapshot(services, databaseId, claims.venueId);
+    response.set({ "Cache-Control": "private, no-cache", ETag: etag, Vary: "Authorization, Cookie" });
+    if (request.header("if-none-match")?.split(/,\s*/).some(tag => tag.replace(/^W\//, "") === etag)) { response.status(304).end(); return; }
+    response.json(menu);
+  }));
+
+  router.get("/menu/events", asyncRoute(async (request, response) => {
+    const claims = requireRole(request, config, ["display"]);
+    if (!claims.venueId || !claims.displayTokenId) throw new ApiError(403, "forbidden", "Сессия не привязана к экрану.");
+    if (!services.events) throw new ApiError(503, "events_unavailable", "Уведомления недоступны.");
+    const state = async () => {
+      // Revalidate JWT expiry and revocation on connect/change, never on a timer.
+      session(request, config);
+      const [venue, token] = await Promise.all([
+        services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId! }).catch(error => { if (error?.code === 404) return null; throw error; }),
+        services.tables.getRow<RowData>({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId! }).catch(() => null),
+      ]);
+      if (!venue || !token || token.active !== true || token.venueId !== claims.venueId || venue.active === false || claims.version !== Number(venue.displayVersion ?? 1)) return { revoked: true };
+      return { version: Number(venue.menuVersion ?? 1), hash: (await menuSnapshot(services, databaseId, claims.venueId!)).etag };
+    };
+    const initial = await state();
+    if ("revoked" in initial) throw new ApiError(401, "session_revoked", "Экран отключён.");
+    menuStream(request, response, services.events, claims.venueId, state);
   }));
 
   router.get("/menu/version", asyncRoute(async (request, response) => {

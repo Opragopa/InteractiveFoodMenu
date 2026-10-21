@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import legacy from "@vitejs/plugin-legacy";
 var emulatorProxy = {
+    "/api": { target: "http://127.0.0.1:8091", changeOrigin: true },
     "/tv": { target: "http://127.0.0.1:8091", changeOrigin: true },
     "/api/venue-assets": { target: "http://127.0.0.1:8091", changeOrigin: true },
     "/interactivefoodmenu": {

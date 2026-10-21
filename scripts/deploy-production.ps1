@@ -23,12 +23,18 @@ if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $ExpectedCommit) {
   throw "Server checked out $actualCommit, expected $ExpectedCommit"
 }
 
+# Migration is a separate maintenance operation; deployment never imports data.
+$composeFiles = @('-f', 'compose.yaml')
+if (Select-String -LiteralPath '.env.backend' -Pattern '^\s*DATABASE_PROVIDER\s*=\s*postgres\s*$' -Quiet) {
+  $composeFiles += @('-f', 'compose.postgres.yaml')
+}
+
 $env:BUILD_VERSION = $actualCommit.Substring(0, 7)
-docker compose -f compose.yaml --env-file .env.deploy build --pull api web
+docker compose @composeFiles --env-file .env.deploy build --pull api web
 if ($LASTEXITCODE -ne 0) { throw 'Docker image build failed' }
-docker compose -f compose.yaml --env-file .env.deploy run --rm api npm run bootstrap
-if ($LASTEXITCODE -ne 0) { throw 'Appwrite bootstrap failed' }
-docker compose -f compose.yaml --env-file .env.deploy up -d --force-recreate api web proxy
+docker compose @composeFiles --env-file .env.deploy run --rm api npm run bootstrap
+if ($LASTEXITCODE -ne 0) { throw 'Database bootstrap failed' }
+docker compose @composeFiles --env-file .env.deploy up -d --force-recreate api web proxy
 if ($LASTEXITCODE -ne 0) { throw 'Container recreation failed' }
 
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/check-production.ps1

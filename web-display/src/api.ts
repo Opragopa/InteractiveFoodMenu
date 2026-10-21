@@ -1,3 +1,4 @@
+import { subscribeMenu } from "./menuEvents";
 import type { MenuItem } from "./types";
 
 const baseUrl = (import.meta.env.VITE_BACKEND_API_URL ?? `${window.location.origin}/api`).replace(/\/$/, "");
@@ -93,13 +94,37 @@ function logoContentBase64(file: File): Promise<string> {
   });
 }
 
+type MenuResponse = { venue: any; categories: any[]; items: any[] };
+const menus = new Map<string, { etag: string; data: MenuResponse }>();
+function loadMenu(token: string): Promise<MenuResponse> {
+  return new Promise((resolve, reject) => {
+    const cached = menus.get(token);
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", `${baseUrl}/menu`, true); xhr.withCredentials = true;
+    if (token !== "cookie") xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    if (cached) xhr.setRequestHeader("If-None-Match", cached.etag);
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== 4) return;
+      if (xhr.status === 304 && cached) { resolve(cached.data); return; }
+      let data: any = {};
+      try { data = JSON.parse(xhr.responseText); } catch { /* generic error below */ }
+      if (xhr.status !== 200) { menus.delete(token); reject(new ApiRequestError(data.message ?? "Меню недоступно.", xhr.status)); return; }
+      const etag = xhr.getResponseHeader("ETag");
+      if (etag) { if (menus.size >= 8) menus.clear(); menus.set(token, { etag, data }); }
+      resolve(data);
+    };
+    xhr.onerror = () => reject(new ApiRequestError("Нет связи с сервером.", 0));
+    xhr.send();
+  });
+}
 export const api = {
   staffPasswordLogin: (venueCode: string, username: string, password: string) => request<{ venueId: string }>("/auth/staff/password", { method: "POST", body: JSON.stringify({ venueCode, username, password }) }),
   staffActivate: (invitation: string, username: string, password: string) => request<{ venueId: string }>("/auth/staff/activate", { method: "POST", body: JSON.stringify({ invitation, username, password }) }),
   authLogout: (role: "hub" | "staff") => request<void>("/auth/logout", { method: "POST", body: JSON.stringify({ role }) }),
   staffLogin: (venueCode: string, pin: string) => request<ApiSession>("/auth/staff", { method: "POST", body: JSON.stringify({ venueCode, pin }) }),
   displayLogin: (tokenId: string, secret: string) => request<ApiSession>("/auth/display", { method: "POST", body: JSON.stringify({ tokenId, secret }) }),
-  menu: (token: string) => request<{ venue: any; categories: any[]; items: any[] }>(`/menu?ts=${Date.now()}`, {}, token),
+  menu: loadMenu,
+  subscribeMenu: (token: string, changed: Parameters<typeof subscribeMenu>[2], connection: Parameters<typeof subscribeMenu>[3]) => subscribeMenu(`${baseUrl}/menu/events`, token, changed, connection),
   menuVersion: (token: string) => request<{ version: number; refreshSeconds: number }>(`/menu/version?ts=${Date.now()}`, {}, token),
   startBreak: (token: string, durationMinutes: number) => request<{ venue: any }>("/venue/break/start", { method: "POST", body: JSON.stringify({ durationMinutes }) }, token),
   stopBreak: (token: string) => request<{ venue: any }>("/venue/break/stop", { method: "POST" }, token),

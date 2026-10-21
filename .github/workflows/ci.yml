@@ -8,6 +8,20 @@ on:
 jobs:
   web-api:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18-bookworm
+        env:
+          POSTGRES_USER: ifm_test
+          POSTGRES_PASSWORD: ifm_test_ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ifm_test -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -21,6 +35,9 @@ jobs:
       - run: npm ci --prefix web-display
       - run: npm test
       - run: npm run integration
+      - run: npm run test:postgres --prefix backend-api
+        env:
+          TEST_POSTGRES_URL: postgresql://ifm_test:ifm_test_ci@127.0.0.1:5432/postgres
       - run: npm run coverage
       - run: npm run mutation
       - run: npm run build

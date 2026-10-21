@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import { fileURLToPath } from "node:url";
-import { createAppwriteServices, type AppwriteServices } from "./appwrite.js";
+import { createServices, type AppwriteServices } from "./appwrite.js";
 import { loadConfig, type BackendConfig } from "./config.js";
 import { ApiError, createApiRouter } from "./routes.js";
 import { consumeRateLimit, pruneRateLimitBuckets } from "./rateLimit.js";
@@ -27,6 +27,7 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
       else callback(new ApiError(403, "origin_not_allowed", "Источник запроса не разрешён."));
     },
     credentials: true,
+    exposedHeaders: ["ETag"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }));
   app.use(express.json({ limit: "8mb" }));
@@ -76,16 +77,17 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
 
   app.get("/ready", async (_request, response) => {
   try {
+    if (services.events && !services.events.available) throw new Error("events_unavailable");
     if (!(await authLimiter.healthy())) throw new Error("auth_limiter_unavailable");
     await Promise.all([
       services.tables.get({ databaseId: config.appwriteDatabaseId }),
       ...TABLES.map(table => services.tables.getTable({ databaseId: config.appwriteDatabaseId, tableId: table.id })),
       services.storage.getBucket({ bucketId: config.appwriteBucketId }),
     ]);
-    response.json({ status: "ready", datastore: "appwrite" });
+    response.json({ status: "ready", datastore: services.datastore ?? "appwrite" });
   } catch (error) {
     console.error(JSON.stringify({ event: "readiness_failed", kind: error instanceof Error ? error.name : "unknown" }));
-    response.status(503).json({ status: "not-ready", datastore: "appwrite" });
+    response.status(503).json({ status: "not-ready", datastore: services.datastore ?? "appwrite" });
   }
   });
 
@@ -112,7 +114,7 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const config = loadConfig();
-  const services = createAppwriteServices(config);
+  const services = await createServices(config);
   createApp(config, services).listen(config.port, "0.0.0.0", () => {
     console.log(`Backend API listening on port ${config.port}`);
   });

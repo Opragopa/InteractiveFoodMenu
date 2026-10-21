@@ -37,7 +37,8 @@ test("old display link becomes a cookie session and revocation stops the menu", 
     assert.equal(menu.status, 200);
     const html = await menu.text();
     assert.match(html, /Блюдо с длинным названием/);
-    assert.match(html, /\/tv\/state/);
+    assert.match(html, /\/tv\/events/);
+    assert.doesNotMatch(html, /setInterval\(poll/);
     assert.doesNotMatch(html, new RegExp(secret));
     assert.doesNotMatch(html, /var\(--column-scale\)/);
     const state = await fetch(`${base}/tv/state`, { headers: { cookie: sessionCookie } });

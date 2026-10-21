@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   staffPasswordLogin: vi.fn(),
   displayLogin: vi.fn(),
   menuVersion: vi.fn(),
+  subscribeMenu: vi.fn(() => vi.fn()),
   menu: vi.fn(),
   updateItem: vi.fn(),
   adjustItemStock: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("./api", async importOriginal => ({
     staffPasswordLogin: mocks.staffPasswordLogin,
     displayLogin: mocks.displayLogin,
     menuVersion: mocks.menuVersion,
+    subscribeMenu: mocks.subscribeMenu,
     menu: mocks.menu,
     updateItem: mocks.updateItem,
     adjustItemStock: mocks.adjustItemStock,
@@ -259,5 +261,28 @@ describe("display links after nginx redirect", () => {
     expect(document.title).toBe("Меню — Зимний сад");
     expect(mocks.displayLogin).toHaveBeenCalledWith("pairingtoken123", "abcdEFGH0123456789abcdEFGH0123456789");
     expect(screen.queryByText("Подключение экрана")).toBeNull();
+  });
+});
+
+
+describe("event driven menu updates", () => {
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
+  it("makes no menu requests while idle and refreshes after a server event", async () => {
+    window.history.replaceState({}, "", "/#pairingtoken123.abcdEFGH0123456789abcdEFGH0123456789");
+    mocks.menu.mockClear(); mocks.menuVersion.mockClear(); mocks.subscribeMenu.mockClear();
+    mocks.displayLogin.mockResolvedValue({ token: "screen-token" });
+    mocks.menu.mockResolvedValue({ venue, categories, items });
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Зимний сад" })).toBeTruthy());
+    const count = mocks.menu.mock.calls.length;
+    vi.useFakeTimers();
+    await act(async () => { vi.advanceTimersByTime(120000); });
+    expect(mocks.menu).toHaveBeenCalledTimes(count);
+    expect(mocks.menuVersion).not.toHaveBeenCalled();
+    const changed = (mocks.subscribeMenu.mock.calls.at(-1) as unknown as [string, (state: object) => void])[1];
+    mocks.menu.mockResolvedValue({ venue: { ...venue, name: "Обновлённое меню" }, categories, items });
+    await act(async () => { changed({ version: 5 }); });
+    expect(screen.getByRole("heading", { name: "Обновлённое меню" })).toBeTruthy();
+    expect(mocks.menu).toHaveBeenCalledTimes(count + 1);
   });
 });

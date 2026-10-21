@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
 import { Router } from "express";
-import { ID, Query, type Models } from "node-appwrite";
+import { ID, type Models } from "node-appwrite";
+import { menuSnapshot } from "./menuSnapshot.js";
+import { menuStream } from "./menuEvents.js";
 import QRCode from "qrcode";
 import type { AppwriteServices } from "./appwrite.js";
 import type { BackendConfig } from "./config.js";
@@ -53,17 +55,6 @@ async function activate(services: AppwriteServices, config: BackendConfig, respo
   return true;
 }
 
-async function rows(services: AppwriteServices, databaseId: string, tableId: string, venueId: string) {
-  const all: Row[] = [];
-  let cursor: string | undefined;
-  for (;;) {
-    const result = await services.tables.listRows<Row>({ databaseId, tableId, queries: [Query.equal("venueId", [venueId]), Query.limit(500), ...(cursor ? [Query.cursorAfter(cursor)] : [])] });
-    all.push(...result.rows);
-    if (result.rows.length < 500) return all;
-    cursor = result.rows[result.rows.length - 1].$id;
-  }
-}
-function publicRow(row: Row) { return Object.fromEntries(Object.entries(row).filter(([key]) => !key.startsWith("$") && key !== "pinHash" && key !== "tokenHash").concat([["id", row.$id]])); }
 function size(value: unknown, fallback: number, min: number, max: number) { const n = Number(value); return Number.isFinite(n) ? Math.round(Math.min(max, Math.max(min, n))) : fallback; }
 
 export function createTvRouter(services: AppwriteServices, config: BackendConfig) {
@@ -108,12 +99,22 @@ export function createTvRouter(services: AppwriteServices, config: BackendConfig
     if (!current) { document(response.status(401), page("Экран отключён", '<h1>Экран отключён</h1><p>Откройте страницу подключения заново.</p>')); return; }
     const venueId = current.claims.venueId!;
     const width = size(request.query.w, 1920, 480, 7680); const height = size(request.query.h, 1080, 360, 4320);
-    const [categories, items] = await Promise.all([rows(services, config.appwriteDatabaseId, "categories", venueId), rows(services, config.appwriteDatabaseId, "items", venueId)]);
+    const { data: menu } = await menuSnapshot(services, config.appwriteDatabaseId, venueId);
     await services.tables.updateRow({ databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: current.token.$id, data: { lastSeenAt: new Date().toISOString() } });
     try { await recordDisplayContact(services, config.appwriteDatabaseId, venueId, current.token.$id); } catch { /* retain display */ }
     noCache(response);
     response.type("html").set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'")
-      .send(renderLegacyDisplay(publicRow(current.venue), categories.map(publicRow) as never, items.map(publicRow) as never, width, height, "", Date.now(), "/tv/state"));
+      .send(renderLegacyDisplay(menu.venue, menu.categories as never, menu.items as never, width, height, "", Date.now(), "/tv/state"));
+  }));
+
+  router.get("/events", wrap(async (request, response) => {
+    const current = await displaySession(request, services, config);
+    if (!current) { response.status(401).end(); return; }
+    if (!services.events) { response.status(503).end(); return; }
+    menuStream(request, response, services.events, current.claims.venueId!, async () => {
+      const latest = await displaySession(request, services, config);
+      return latest ? { version: Number(latest.venue.menuVersion ?? 1), hash: (await menuSnapshot(services, config.appwriteDatabaseId, current.claims.venueId!)).etag, breakActive: latest.venue.breakActive === true, breakEndsAt: latest.venue.breakEndsAt ?? null } : { revoked: true };
+    });
   }));
 
   router.get("/state", wrap(async (request, response) => {
