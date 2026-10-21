@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiRequestError } from "./api";
 import { App, VenueSettings } from "./App";
 
 const mocks = vi.hoisted(() => ({
@@ -10,9 +11,11 @@ const mocks = vi.hoisted(() => ({
   updateItem: vi.fn(),
   adjustItemStock: vi.fn(),
   createItem: vi.fn(),
+  authLogout: vi.fn(),
 }));
 
-vi.mock("./api", () => ({
+vi.mock("./api", async importOriginal => ({
+  ...await importOriginal<typeof import("./api")>(),
   api: {
     staffPasswordLogin: mocks.staffPasswordLogin,
     displayLogin: mocks.displayLogin,
@@ -21,6 +24,7 @@ vi.mock("./api", () => ({
     updateItem: mocks.updateItem,
     adjustItemStock: mocks.adjustItemStock,
     createItem: mocks.createItem,
+    authLogout: mocks.authLogout,
     startBreak: vi.fn(),
     stopBreak: vi.fn(),
   },
@@ -50,6 +54,8 @@ describe("staff application flow", () => {
     updateItem.mockReset().mockResolvedValue({ item: { ...items[1], stockQuantity: 2, isAvailable: true } });
     adjustItemStock.mockReset().mockResolvedValue({ item: { ...items[1], stockQuantity: 1, isAvailable: true } });
     createItem.mockReset();
+    mocks.authLogout.mockReset().mockResolvedValue(undefined);
+    mocks.menuVersion.mockReset().mockResolvedValue({ version: 4, refreshSeconds: 5 });
   });
 
   async function login() {
@@ -85,6 +91,109 @@ describe("staff application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Списать одну штуку Чай" }));
     await waitFor(() => expect(adjustItemStock).toHaveBeenCalledWith("cookie", "tea", -1));
     expect(screen.getByText("1 шт.")).toBeTruthy();
+  });
+
+  it("does not submit a second stock write through Enter while an adjustment is pending", async () => {
+    await login();
+    let finish!: (value: unknown) => void;
+    adjustItemStock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "Списать одну штуку Латте" }));
+    const input = screen.getByRole("spinbutton", { name: "Задать остаток Латте" });
+    fireEvent.change(input, { target: { value: "5" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(updateItem).not.toHaveBeenCalled();
+    await act(async () => finish({ item: { ...items[0], stockQuantity: 0, isAvailable: false } }));
+  });
+
+  it("refreshes another employee's changes on focus using the version endpoint", async () => {
+    await login();
+    mocks.menuVersion.mockResolvedValue({ version: 5, refreshSeconds: 5 });
+    menu.mockResolvedValue({ venue: { ...venue, menuVersion: 5 }, categories, items: [{ ...items[0], stockQuantity: 8 }, items[1]] });
+    fireEvent(window, new Event("focus"));
+    await waitFor(() => expect(screen.getByText("8 шт.")).toBeTruthy());
+  });
+
+  it("reconciles an uncertain stock response without replaying the decrement", async () => {
+    await login();
+    adjustItemStock.mockRejectedValueOnce(new ApiRequestError("Ответ потерян", 0, true));
+    menu.mockResolvedValue({ venue, categories, items: [{ ...items[0], stockQuantity: 0, isAvailable: false }, items[1]] });
+    fireEvent.click(screen.getByRole("button", { name: "Списать одну штуку Латте" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Результат записи неизвестен"));
+    expect(menu).toHaveBeenCalledTimes(2);
+    expect(adjustItemStock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a delayed mutation from the logged-out employee", async () => {
+    await login();
+    let finish!: (value: unknown) => void;
+    adjustItemStock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: "Списать одну штуку Латте" }));
+    fireEvent.click(screen.getByRole("button", { name: "Выйти" }));
+    fireEvent.change(screen.getByLabelText("Пароль"), { target: { value: "personal-password" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Войти в кабинет" }).hasAttribute("disabled")).toBe(false));
+    menu.mockResolvedValue({ venue: { ...venue, name: "Другая точка" }, categories, items: [{ ...items[0], stockQuantity: 8 }, items[1]] });
+    fireEvent.click(screen.getByRole("button", { name: "Войти в кабинет" }));
+    await screen.findByRole("heading", { name: "Другая точка" });
+    await act(async () => finish({ item: { ...items[0], stockQuantity: 99 } }));
+    expect(screen.getByText("8 шт.")).toBeTruthy();
+    expect(screen.queryByText("99 шт.")).toBeNull();
+  });
+
+  it("clears the previous employee's forms, category selection and edit dialog on logout", async () => {
+    await login();
+    fireEvent.click(screen.getByRole("button", { name: "Категории" }));
+    fireEvent.change(screen.getByPlaceholderText("Например, Десерты"), { target: { value: "Черновик категории старой точки" } });
+    fireEvent.click(screen.getByRole("button", { name: "Позиции" }));
+    fireEvent.change(screen.getByPlaceholderText("Например, Капучино"), { target: { value: "Черновик позиции старой точки" } });
+    fireEvent.change(screen.getByLabelText("Категория позиции"), { target: { value: "coffee" } });
+    fireEvent.click(screen.getByRole("button", { name: "Изменить позицию Латте" }));
+    fireEvent.click(screen.getByRole("button", { name: "Выйти" }));
+    fireEvent.change(screen.getByLabelText("Пароль"), { target: { value: "another-password" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Войти в кабинет" }).hasAttribute("disabled")).toBe(false));
+    menu.mockResolvedValue({ venue: { ...venue, name: "Новая точка" }, categories: [{ ...categories[0], id: "other-category", name: "Другой раздел" }], items: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Войти в кабинет" }));
+    await screen.findByRole("heading", { name: "Новая точка" });
+    expect(screen.getByRole("button", { name: "Наличие" }).getAttribute("aria-current")).toBe("page");
+    fireEvent.click(screen.getByRole("button", { name: "Позиции" }));
+    expect((screen.getByPlaceholderText("Например, Капучино") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Категория позиции") as HTMLSelectElement).value).toBe("other-category");
+    fireEvent.click(screen.getByRole("button", { name: "Категории" }));
+    expect((screen.getByPlaceholderText("Например, Десерты") as HTMLInputElement).value).toBe("");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("creates an item in the category already selected by the form", async () => {
+    await login();
+    createItem.mockResolvedValue({ item: { ...items[0], id: "new-item", name: "Эспрессо", stockQuantity: 3 } });
+    fireEvent.click(screen.getByRole("button", { name: "Позиции" }));
+    expect((screen.getByLabelText("Категория позиции") as HTMLSelectElement).value).toBe("coffee");
+    fireEvent.change(screen.getByPlaceholderText("Например, Капучино"), { target: { value: "Эспрессо" } });
+    fireEvent.change(screen.getByLabelText("Цена, ₽"), { target: { value: "150" } });
+    fireEvent.change(screen.getByLabelText("Количество, шт."), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+    await waitFor(() => expect(createItem).toHaveBeenCalledWith("cookie", expect.objectContaining({ categoryId: "coffee", name: "Эспрессо", priceMinor: 15000, stockQuantity: 3 })));
+    expect(await screen.findByText("Эспрессо")).toBeTruthy();
+  });
+
+  it("does not show an old employee's partial-import error after a session change", async () => {
+    await login();
+    let finishRead!: (value: unknown) => void;
+    menu.mockResolvedValueOnce({ venue, categories, items }).mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+    updateItem.mockRejectedValueOnce(new Error("Старая ошибка импорта"));
+    fireEvent.click(screen.getByRole("button", { name: "Позиции" }));
+    const file = new File(["category,name,price,quantity\nКофе,Латте,250,5"], "stock.csv", { type: "text/csv" });
+    Object.defineProperty(file, "text", { value: async () => "category,name,price,quantity\nКофе,Латте,250,5" });
+    fireEvent.change(screen.getByLabelText("Загрузить CSV"), { target: { files: [file] } });
+    fireEvent.click(await screen.findByRole("button", { name: "Импортировать 1 поз." }));
+    await waitFor(() => expect(menu).toHaveBeenCalledTimes(3));
+    fireEvent.click(screen.getByRole("button", { name: "Выйти" }));
+    fireEvent.change(screen.getByLabelText("Пароль"), { target: { value: "new-session-password" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Войти в кабинет" }).hasAttribute("disabled")).toBe(false));
+    menu.mockResolvedValue({ venue: { ...venue, name: "Новая сессия" }, categories, items });
+    fireEvent.click(screen.getByRole("button", { name: "Войти в кабинет" }));
+    await screen.findByRole("heading", { name: "Новая сессия" });
+    await act(async () => finishRead({ venue, categories, items }));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("updates only the stock of a matching CSV item", async () => {

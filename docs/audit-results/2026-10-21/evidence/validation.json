@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-21",
+  "backend": {
+    "passed": 56,
+    "skipped": 0,
+    "coverage": {
+      "linesStatementsPercent": 73.92,
+      "branchesPercent": 71.66,
+      "functionsPercent": 87.28
+    },
+    "mutation": {
+      "scorePercent": 76.79,
+      "thresholdPercent": 75,
+      "killed": 86,
+      "survived": 26,
+      "timeouts": 0,
+      "errors": 0
+    }
+  },
+  "web": {
+    "passed": 83,
+    "buildModernAndLegacy": true
+  },
+  "android": {
+    "passed": 16,
+    "assembleDebug": true,
+    "apkSha256": "f176d27035c3f170722d9f71123ea2dfe7c0d826b099806d8ad623b4e302d73e",
+    "physicalDeviceTested": false,
+    "emulator": {
+      "api": 35,
+      "abi": "arm64-v8a",
+      "emulatorVersion": "37.2.12",
+      "viewportPixels": [
+        1080,
+        2400
+      ],
+      "apiMode": "local fake HTTP, not Appwrite",
+      "runtimeApkSha256": "1b0b58004ff35f1c1718a032632e23c0c9a8f01f1869be3437ef024f4a705023",
+      "sourceDifference": "Private source copy: backendApiUrl=http://10.0.2.2:28093/api and debug network config permitting cleartext only for 10.0.2.2. Main APK/source network security unchanged.",
+      "checks": {
+        "stockOneToZeroToOne": true,
+        "minusDisabledAtZero": true,
+        "absoluteStock7": true,
+        "repeatCsvImports": 2,
+        "itemsAfterRepeat": 3,
+        "newItemsCreated": 1,
+        "existingPricePreservedMinor": 10000,
+        "metadataFields": [
+          "name",
+          "priceMinor",
+          "sortOrder"
+        ],
+        "metadataPreservedStock": 3,
+        "metadataNewPriceMinor": 11000,
+        "lostReplyMutationRequests": 1,
+        "lostReplyStockBefore": 1,
+        "lostReplyStockAfter": 2,
+        "unknownWriteWarningAndReadback": true,
+        "offlineMenuRetainedAndManualRetryRecovered": true
+      }
+    }
+  },
+  "tooling": {
+    "passed": 21,
+    "date": "2026-10-21"
+  },
+  "browser": {
+    "engine": "modern Playwright Chromium",
+    "doubleClickStock": {
+      "before": 100000,
+      "after": 100001,
+      "mutationRequests": 1,
+      "artificialRequestDelayMs": 800
+    },
+    "secondStaffUpdatedWithoutManualRefresh": true,
+    "mobileViewport": {
+      "width": 390,
+      "height": 844,
+      "horizontalOverflow": false
+    },
+    "serverTvOfflineRetainedMenuAndRecovered": true,
+    "modernDisplayRendered": true,
+    "reactLegacyFetchPolyfill": true,
+    "directXhrWithoutPolyfill": "not verified; work stopped on user request",
+    "physicalOldTvTested": false
+  },
+  "limits": [
+    "Unit tests and APK build do not prove physical Android behavior.",
+    "React legacy screenshot in modern Chromium does not prove Chromium 38 compatibility.",
+    "modern-1920 screenshot includes entry animation; not used for pixel-layout acceptance."
+  ],
+  "workStatus": "stopped_on_user_request",
+  "load": {
+    "baselinePartialRequests": 13063,
+    "httpFailures": 0,
+    "baselineComplete": false,
+    "candidateFullRunExecuted": false,
+    "finalLoadReconciliationExecuted": false,
+    "userStopAt": "2026-10-21T10:16:07.146Z",
+    "auditContainersRunningAfterStop": 0,
+    "productionHealthAfterStop": 200
+  }
+}

@@ -1,0 +1,406 @@
+{
+  "format": "ifm-audit-result-v1",
+  "runId": "20261020",
+  "startedAt": "2026-10-20T12:09:24.768Z",
+  "endedAt": "2026-10-20T12:11:28.892Z",
+  "profile": "quick",
+  "harnessOnly": false,
+  "identityVerified": true,
+  "stopped": false,
+  "stopReason": null,
+  "dropped": 0,
+  "summary": {
+    "count": 849,
+    "failures": 0,
+    "bytes": 31512760,
+    "statuses": {
+      "200": 849
+    },
+    "p50Ms": 55.737292000005255,
+    "p95Ms": 160.0380409999998,
+    "p99Ms": 444.825667000001
+  },
+  "routes": {
+    "preflight/initial-stock": {
+      "count": 10,
+      "failures": 0,
+      "bytes": 682923,
+      "statuses": {
+        "200": 10
+      },
+      "p50Ms": 30.536917000000017,
+      "p95Ms": 108.69091700000001,
+      "p99Ms": 108.69091700000001
+    },
+    "warmup/staff-menu": {
+      "count": 4,
+      "failures": 0,
+      "bytes": 96396,
+      "statuses": {
+        "200": 4
+      },
+      "p50Ms": 29.845124999999996,
+      "p95Ms": 30.813082999999097,
+      "p99Ms": 30.813082999999097
+    },
+    "warmup/hub-statistics": {
+      "count": 1,
+      "failures": 0,
+      "bytes": 311,
+      "statuses": {
+        "200": 1
+      },
+      "p50Ms": 56.63429099999996,
+      "p95Ms": 56.63429099999996,
+      "p99Ms": 56.63429099999996
+    },
+    "warmup/tv-menu": {
+      "count": 12,
+      "failures": 0,
+      "bytes": 897114,
+      "statuses": {
+        "200": 12
+      },
+      "p50Ms": 80.39408299999923,
+      "p95Ms": 444.825667000001,
+      "p99Ms": 444.825667000001
+    },
+    "warmup/stock-adjust": {
+      "count": 2,
+      "failures": 0,
+      "bytes": 728,
+      "statuses": {
+        "200": 2
+      },
+      "p50Ms": 65.9745839999996,
+      "p95Ms": 78.2213329999995,
+      "p99Ms": 78.2213329999995
+    },
+    "warmup/write-version-probe": {
+      "count": 2,
+      "failures": 0,
+      "bytes": 66,
+      "statuses": {
+        "200": 2
+      },
+      "p50Ms": 49.1122919999998,
+      "p95Ms": 60.63074999999844,
+      "p99Ms": 60.63074999999844
+    },
+    "warmup/tv-state": {
+      "count": 10,
+      "failures": 0,
+      "bytes": 520,
+      "statuses": {
+        "200": 10
+      },
+      "p50Ms": 45.28120900000067,
+      "p95Ms": 49.36420799999905,
+      "p99Ms": 49.36420799999905
+    },
+    "target50/staff-menu": {
+      "count": 60,
+      "failures": 0,
+      "bytes": 4097538,
+      "statuses": {
+        "200": 60
+      },
+      "p50Ms": 29.324667000000773,
+      "p95Ms": 108.18412499999977,
+      "p99Ms": 355.38491699999577
+    },
+    "target50/hub-statistics": {
+      "count": 6,
+      "failures": 0,
+      "bytes": 1866,
+      "statuses": {
+        "200": 6
+      },
+      "p50Ms": 66.41304099999252,
+      "p95Ms": 138.16395800000464,
+      "p99Ms": 138.16395800000464
+    },
+    "target50/tv-menu": {
+      "count": 118,
+      "failures": 0,
+      "bytes": 9423040,
+      "statuses": {
+        "200": 118
+      },
+      "p50Ms": 76.27224999999817,
+      "p95Ms": 446.01958300000115,
+      "p99Ms": 457.17604199999914
+    },
+    "target50/display-menu": {
+      "count": 218,
+      "failures": 0,
+      "bytes": 14534175,
+      "statuses": {
+        "200": 218
+      },
+      "p50Ms": 59.96362500000396,
+      "p95Ms": 138.50325000000885,
+      "p99Ms": 171.8213340000002
+    },
+    "target50/display-version": {
+      "count": 170,
+      "failures": 0,
+      "bytes": 5610,
+      "statuses": {
+        "200": 170
+      },
+      "p50Ms": 51.27749999999651,
+      "p95Ms": 150.58020900000702,
+      "p99Ms": 344.596458
+    },
+    "target50/stock-adjust": {
+      "count": 30,
+      "failures": 0,
+      "bytes": 10920,
+      "statuses": {
+        "200": 30
+      },
+      "p50Ms": 70.93066699999326,
+      "p95Ms": 91.91316599999845,
+      "p99Ms": 104.9586249999993
+    },
+    "target50/write-version-probe": {
+      "count": 30,
+      "failures": 0,
+      "bytes": 990,
+      "statuses": {
+        "200": 30
+      },
+      "p50Ms": 48.529374999998254,
+      "p95Ms": 84.80270899999596,
+      "p99Ms": 93.393167000002
+    },
+    "target50/tv-state": {
+      "count": 150,
+      "failures": 0,
+      "bytes": 7800,
+      "statuses": {
+        "200": 150
+      },
+      "p50Ms": 44.91329200000473,
+      "p95Ms": 70.73116700000537,
+      "p99Ms": 173.76858300000458
+    },
+    "delivery_grace/display-menu": {
+      "count": 2,
+      "failures": 0,
+      "bytes": 490131,
+      "statuses": {
+        "200": 2
+      },
+      "p50Ms": 76.95350000000326,
+      "p95Ms": 129.74737499999173,
+      "p99Ms": 129.74737499999173
+    },
+    "delivery_grace/tv-state": {
+      "count": 11,
+      "failures": 0,
+      "bytes": 572,
+      "statuses": {
+        "200": 11
+      },
+      "p50Ms": 43.89712500000314,
+      "p95Ms": 182.4394170000014,
+      "p99Ms": 182.4394170000014
+    },
+    "delivery_grace/tv-menu": {
+      "count": 2,
+      "failures": 0,
+      "bytes": 579104,
+      "statuses": {
+        "200": 2
+      },
+      "p50Ms": 166.2965419999964,
+      "p95Ms": 452.85699999998906,
+      "p99Ms": 452.85699999998906
+    },
+    "delivery_grace/display-version": {
+      "count": 1,
+      "failures": 0,
+      "bytes": 33,
+      "statuses": {
+        "200": 1
+      },
+      "p50Ms": 61.76195800000278,
+      "p95Ms": 61.76195800000278,
+      "p99Ms": 61.76195800000278
+    },
+    "verification/final-stock": {
+      "count": 10,
+      "failures": 0,
+      "bytes": 682923,
+      "statuses": {
+        "200": 10
+      },
+      "p50Ms": 26.53204099999857,
+      "p95Ms": 104.99162500000966,
+      "p99Ms": 104.99162500000966
+    }
+  },
+  "acceptance": {
+    "integrityPassed": true,
+    "sloPassed": true,
+    "routeChecks": [
+      {
+        "stage": "target50",
+        "route": "staff-menu",
+        "count": 60,
+        "limitMs": 500,
+        "p95Ms": 108.18412499999977,
+        "errorRate": 0,
+        "passed": true
+      },
+      {
+        "stage": "target50",
+        "route": "hub-statistics",
+        "count": 6,
+        "limitMs": 2000,
+        "p95Ms": 138.16395800000464,
+        "errorRate": 0,
+        "passed": true
+      },
+      {
+        "stage": "target50",
+        "route": "tv-menu",
+        "count": 118,
+        "limitMs": 2000,
+        "p95Ms": 446.01958300000115,
+        "errorRate": 0,
+        "passed": true
+      },
+      {
+        "stage": "target50",
+        "route": "display-menu",
+        "count": 218,
+        "limitMs": 500,
+        "p95Ms": 138.50325000000885,
+        "errorRate": 0,
+        "passed": true
+      },
+      {
+        "stage": "target50",
+        "route": "display-version",
+        "count": 170,
+        "limitMs": 500,
+        "p95Ms": 150.58020900000702,
+        "errorRate": 0,
+        "passed": true
+      },
+      {
+        "stage": "target50",
+        "route": "stock-adjust",
+        "count": 30,
+        "limitMs": 1000,
+        "p95Ms": 91.91316599999845,
+        "errorRate": 0,
+        "passed": true
+      },
+      {
+        "stage": "target50",
+        "route": "tv-state",
+        "count": 150,
+        "limitMs": 500,
+        "p95Ms": 70.73116700000537,
+        "errorRate": 0,
+        "passed": true
+      }
+    ],
+    "deliveryPassed": true
+  },
+  "delivery": {
+    "successfulWrites": 32,
+    "expectedReceipts": 152,
+    "missingReceipts": 0,
+    "count": 152,
+    "p95Ms": 11190.604500000001,
+    "violations": 0
+  },
+  "stockChecks": [
+    {
+      "itemId": "a20261020i00-00002",
+      "initial": 100000,
+      "successfulDelta": 2,
+      "expected": 100002,
+      "actual": 100002,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i01-00002",
+      "initial": 100000,
+      "successfulDelta": 2,
+      "expected": 100002,
+      "actual": 100002,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i02-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i03-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i04-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i05-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i06-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i07-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i08-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    },
+    {
+      "itemId": "a20261020i09-00002",
+      "initial": 100000,
+      "successfulDelta": 1,
+      "expected": 100001,
+      "actual": 100001,
+      "ok": true
+    }
+  ],
+  "passed": true
+}

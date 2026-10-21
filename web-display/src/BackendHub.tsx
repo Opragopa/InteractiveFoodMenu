@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiRequestError } from "./api";
 import { clampInteger, logoPositions, normalizeVenueAppearance, polytechAppearance, type LogoPosition, type VenueAppearance } from "./venueSettings";
 import { HubStatistics } from "./HubStatistics";
@@ -66,13 +66,16 @@ function HubStaff({ token, venue, onClose }: { token: string; venue: HubVenue; o
   const [link, setLink] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const actionLock = useRef(false);
   const refresh = useCallback(async () => setMembers((await api.hubStaff(token, venue.id)).staff), [token, venue.id]);
   useEffect(() => { void refresh().catch(cause => setError(errorMessage(cause))); }, [refresh]);
   const action = async (operation: () => Promise<{ url?: string } | { disabled: boolean }>) => {
+    if (actionLock.current) return;
+    actionLock.current = true;
     setBusy(true); setError(""); setLink("");
     try { const result = await operation(); setLink("url" in result ? result.url ?? "" : ""); await refresh(); }
     catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
+    finally { actionLock.current = false; setBusy(false); }
   };
   return <section className="hub-card hub-staff"><div className="hub-card-title"><h3>Сотрудники: {venue.name}</h3><button type="button" onClick={onClose}>Закрыть</button></div>
     <p>Учётные записи создаёт оператор. Сотрудник сам задаёт логин и пароль по одноразовой ссылке.</p>
@@ -164,11 +167,14 @@ function HubDisplays({ token, venue, busy: parentBusy }: { token: string; venue:
   const [error, setError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const busy = parentBusy || actionBusy;
+  const actionLock = useRef(false);
   const load = async () => {
+    if (actionLock.current) return;
+    actionLock.current = true;
     setActionBusy(true); setError("");
     try { const result = await api.hubDisplays(token, venue.id); setDisplays(result.displays); setHasLoaded(true); }
     catch (cause) { setError(errorMessage(cause)); }
-    finally { setActionBusy(false); }
+    finally { actionLock.current = false; setActionBusy(false); }
   };
   const toggleOpen = () => {
     const nextOpen = !open;
@@ -177,31 +183,37 @@ function HubDisplays({ token, venue, busy: parentBusy }: { token: string; venue:
   };
   const revoke = async (id: string) => {
     if (!window.confirm("Отключить этот экран? На телевизоре потребуется подключение заново.")) return;
+    if (actionLock.current) return;
+    actionLock.current = true;
     setActionBusy(true); setError("");
     try {
       await api.hubRevokeDisplay(token, venue.id, id);
       setDisplays(current => current.filter(display => display.id !== id));
       if (editing === id) setEditing(null);
     } catch (cause) { setError(errorMessage(cause)); }
-    finally { setActionBusy(false); }
+    finally { actionLock.current = false; setActionBusy(false); }
   };
   const saveLabel = async (id: string) => {
     const nextLabel = label.trim();
     if (!nextLabel) { setError("Введите понятное название, например «Основной зал»."); return; }
+    if (actionLock.current) return;
+    actionLock.current = true;
     setActionBusy(true); setError("");
     try {
       const result = await api.hubUpdateDisplay(token, venue.id, id, nextLabel);
       setDisplays(current => current.map(display => display.id === id ? { ...display, ...result.display } : display));
       setEditing(null);
     } catch (cause) { setError(errorMessage(cause)); }
-    finally { setActionBusy(false); }
+    finally { actionLock.current = false; setActionBusy(false); }
   };
   const revokeAll = async () => {
     if (!window.confirm("Отключить все активные экраны этой точки? На телевизорах потребуется подключение заново.")) return;
+    if (actionLock.current) return;
+    actionLock.current = true;
     setActionBusy(true); setError("");
     try { await api.hubRevokeAllDisplays(token, venue.id); setDisplays([]); setEditing(null); }
     catch (cause) { setError(errorMessage(cause)); }
-    finally { setActionBusy(false); }
+    finally { actionLock.current = false; setActionBusy(false); }
   };
   return <section className="hub-displays" aria-busy={busy}>
     <div className="hub-displays-head">
@@ -244,125 +256,119 @@ export function BackendHub() {
   const [staffVenueId, setStaffVenueId] = useState("");
   const [venueSearch, setVenueSearch] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
+  const loginLock = useRef(false);
+  const mutationLock = useRef(false);
+  const sessionEpoch = useRef(0);
+  useEffect(() => () => { sessionEpoch.current++; }, []);
 
   const loadOverview = useCallback(async () => {
+    const epoch = sessionEpoch.current;
     setBusy(true); setError("");
     try {
-      setOverview(await api.hubOverview(hubToken) as HubOverview);
+      const result = await api.hubOverview(hubToken) as HubOverview;
+      if (epoch === sessionEpoch.current) setOverview(result);
     } catch (cause) {
+      if (epoch !== sessionEpoch.current) return;
       if (cause instanceof ApiRequestError && cause.status === 401) { localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); setError("Сессия завершилась. Войдите в хаб снова."); }
       else setError(errorMessage(cause));
     }
-    finally { setBusy(false); }
+    finally { if (epoch === sessionEpoch.current) setBusy(false); }
   }, [hubToken]);
 
   useEffect(() => { if (hubToken) void loadOverview(); }, [hubToken, loadOverview]);
 
   const login = async () => {
+    if (loginLock.current) return;
+    loginLock.current = true;
+    const epoch = ++sessionEpoch.current;
     setBusy(true); setError("");
     try {
       if (useEmergencyKey) {
         await api.hubLogin(accessKey);
+        if (epoch !== sessionEpoch.current) return;
         localStorage.setItem("ifm-hub-session", "cookie");
         setHubToken("cookie");
       } else {
         await api.hubPasswordLogin(username, password);
+        if (epoch !== sessionEpoch.current) return;
         localStorage.setItem("ifm-hub-session", "cookie");
         setHubToken("cookie");
       }
       setAccessKey("");
       setPassword("");
-    } catch (cause) { setError(errorMessage(cause)); }
-    finally { setBusy(false); }
+    } catch (cause) { if (epoch === sessionEpoch.current) setError(errorMessage(cause)); }
+    finally { if (epoch === sessionEpoch.current) { loginLock.current = false; setBusy(false); } }
   };
 
-  const createVenue = async () => {
-    setBusy(true); setError(""); setNotice(""); setCreatedDisplayUrl("");
+  const performAction = async <T,>(operation: () => Promise<T>, success: (result: T) => void | Promise<void>) => {
+    if (mutationLock.current) return false;
+    mutationLock.current = true;
+    const epoch = sessionEpoch.current;
+    setBusy(true); setError(""); setNotice("");
     try {
-      const response = await api.hubCreateVenue(hubToken, newVenue);
-      setCreatedDisplayUrl(response.displayUrl);
-      setNotice(`Точка «${newVenue.name}» создана.`);
-      setNewVenue({ venueCode: "", name: "", pin: "" });
-      await loadOverview();
-    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
+      const result = await operation();
+      if (epoch !== sessionEpoch.current) return false;
+      await success(result);
+      return true;
+    } catch (cause) {
+      if (epoch !== sessionEpoch.current) return false;
+      if (cause instanceof ApiRequestError && cause.outcomeUnknown) {
+        await loadOverview();
+        if (epoch === sessionEpoch.current) setError("Результат записи неизвестен. Данные перечитаны по возможности; проверьте их перед повтором.");
+      } else setError(errorMessage(cause));
+      return false;
+    } finally { if (epoch === sessionEpoch.current) { mutationLock.current = false; setBusy(false); } }
   };
-
+  const logout = async () => {
+    const epoch = ++sessionEpoch.current;
+    loginLock.current = true; mutationLock.current = true;
+    setBusy(true); localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null);
+    setCreatedDisplayUrl(""); setEditingVenueId(""); setStaffVenueId(""); setError("");
+    try { if (hubToken === "cookie") await api.authLogout("hub"); }
+    catch (cause) { if (epoch === sessionEpoch.current) setError(errorMessage(cause)); }
+    finally { if (epoch === sessionEpoch.current) { loginLock.current = false; mutationLock.current = false; setBusy(false); } }
+  };
+  const createVenue = async () => {
+    await performAction(() => api.hubCreateVenue(hubToken, newVenue), async response => {
+      setCreatedDisplayUrl(response.displayUrl); setNotice(`Точка «${newVenue.name}» создана.`);
+      setNewVenue({ venueCode: "", name: "", pin: "" }); await loadOverview();
+    });
+  };
   const rotatePin = async (venueId: string, currentCode: string) => {
+    if (mutationLock.current) return;
     const venueCode = window.prompt("Код точки", currentCode)?.trim().toLowerCase();
     if (!venueCode) return;
     const pin = window.prompt("Новый шестизначный PIN") ?? "";
     if (!/^\d{6}$/.test(pin)) { setError("PIN должен состоять из шести цифр."); return; }
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await api.hubRotatePin(hubToken, venueId, venueCode, pin);
-      setNotice("Код и PIN обновлены. Предыдущие сессии сотрудников отозваны.");
-      await loadOverview();
-    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
+    await performAction(() => api.hubRotatePin(hubToken, venueId, venueCode, pin), async () => { setNotice("Код и PIN обновлены. Предыдущие сессии сотрудников отозваны."); await loadOverview(); });
   };
-
   const revokeSessions = async (venueId: string) => {
-    if (!window.confirm("Отозвать все сессии сотрудников и экранов этой точки? Экраны потребуется подключить заново.")) return;
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await api.hubRevoke(hubToken, venueId);
-      setNotice("Все сессии точки отозваны.");
-      await loadOverview();
-    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
+    if (mutationLock.current || !window.confirm("Отозвать все сессии сотрудников и экранов этой точки? Экраны потребуется подключить заново.")) return;
+    await performAction(() => api.hubRevoke(hubToken, venueId), async () => { setNotice("Все сессии точки отозваны."); await loadOverview(); });
   };
-
   const openDisplay = async (venueId: string) => {
+    if (mutationLock.current) return;
     const displayWindow = window.open("about:blank", "_blank");
     if (!displayWindow) { setError("Браузер заблокировал новое окно. Разрешите всплывающие окна для хаба."); return; }
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const response = await api.hubCreateDisplayLink(hubToken, venueId);
-      displayWindow.location.href = response.displayUrl;
-    } catch (cause) {
-      displayWindow.close();
-      setError(errorMessage(cause));
-    } finally { setBusy(false); }
+    if (!await performAction(() => api.hubCreateDisplayLink(hubToken, venueId), response => { displayWindow.location.href = response.displayUrl; })) displayWindow.close();
   };
-
   const deleteVenue = async (venueId: string, name: string) => {
-    if (!window.confirm(`Удалить точку «${name}» вместе с меню, ссылками экранов и журналами? Это действие необратимо.`)) return;
+    if (mutationLock.current || !window.confirm(`Удалить точку «${name}» вместе с меню, ссылками экранов и журналами? Это действие необратимо.`)) return;
     const typedName = window.prompt(`Для подтверждения введите название точки точно:\n${name}`);
     if (typedName !== name) { setError("Удаление отменено: название точки введено не полностью."); return; }
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await api.hubDeleteVenue(hubToken, venueId);
-      setNotice(`Точка «${name}» полностью удалена.`);
-      await loadOverview();
-    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
+    await performAction(() => api.hubDeleteVenue(hubToken, venueId), async () => { setNotice(`Точка «${name}» полностью удалена.`); await loadOverview(); });
   };
-
   const saveVenueSettings = async (venueId: string, settings: VenueAppearance) => {
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await api.hubUpdateVenue(hubToken, venueId, settings);
-      setNotice("Настройки точки сохранены. Экран применит их при следующем обновлении.");
-      await loadOverview();
-    } catch (cause) { setError(errorMessage(cause)); setBusy(false); }
+    await performAction(() => api.hubUpdateVenue(hubToken, venueId, settings), async () => { setNotice("Настройки точки сохранены. Экран применит их при следующем обновлении."); await loadOverview(); });
   };
-
   const uploadVenueLogo = async (venueId: string, file: File) => {
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Выберите PNG, JPEG или WebP.");
     if (file.size > 5 * 1024 * 1024) throw new Error("Размер логотипа должен быть не больше 5 МБ.");
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await api.hubUploadVenueLogo(hubToken, venueId, file);
-      setNotice("Логотип загружен.");
-      await loadOverview();
-    } catch (cause) { setError(errorMessage(cause)); setBusy(false); throw cause; }
+    await performAction(() => api.hubUploadVenueLogo(hubToken, venueId, file), async () => { setNotice("Логотип загружен."); await loadOverview(); });
   };
-
   const useDefaultLogo = async (venueId: string) => {
-    if (!window.confirm("Заменить загруженный логотип стандартным? Загруженный файл будет удалён.")) return;
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await api.hubUpdateVenue(hubToken, venueId, { logoFileId: null });
-      setNotice("Восстановлен стандартный логотип Политеха.");
-      await loadOverview();
-    } catch (cause) { setError(errorMessage(cause)); setBusy(false); throw cause; }
+    if (mutationLock.current || !window.confirm("Заменить загруженный логотип стандартным? Загруженный файл будет удалён.")) return;
+    await performAction(() => api.hubUpdateVenue(hubToken, venueId, { logoFileId: null }), async () => { setNotice("Восстановлен стандартный логотип Политеха."); await loadOverview(); });
   };
 
   const groupedFunctions = useMemo(() => {
@@ -383,7 +389,7 @@ export function BackendHub() {
   </main>;
 
   return <main className="backend-hub">
-    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1></div><nav aria-label="Разделы Меню еды. Хаб">{([ ["venues", "Точки"], ["statistics", "Статистика"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button type="button" className="hub-signout" onClick={() => { if (hubToken === "cookie") void api.authLogout("hub"); localStorage.removeItem("ifm-hub-session"); setHubToken(""); setOverview(null); }}>Выйти</button></aside>
+    <aside className="hub-sidebar"><div><span className="hub-kicker">InteractiveFoodMenu</span><h1>Меню еды. Хаб</h1></div><nav aria-label="Разделы Меню еды. Хаб">{([ ["venues", "Точки"], ["statistics", "Статистика"], ["functions", "Функции"], ["logs", "Ошибки клиентов"], ["audit", "Действия"] ] as const).map(([id, label]) => <button type="button" key={id} aria-current={tab === id ? "page" : undefined} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}</nav><button type="button" className="hub-signout" onClick={() => void logout()}>Выйти</button></aside>
     <section className="hub-content">
       <header className="hub-header"><div><span className="hub-kicker">Управление платформой</span><h2>{tab === "venues" ? "Точки и доступ" : tab === "statistics" ? "Статистика" : tab === "functions" ? "Серверные функции" : tab === "logs" ? "Ошибки клиентов" : "Журнал действий"}</h2></div><button type="button" className="hub-refresh" disabled={busy} onClick={() => void loadOverview()}>{busy ? "Обновляем…" : "Обновить"}</button></header>
       {error && <p className="hub-banner hub-error" role="alert">{error}</p>}{notice && <p className="hub-banner hub-success" role="status">{notice}</p>}

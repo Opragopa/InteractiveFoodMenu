@@ -1,6 +1,7 @@
+import { createHash, createHmac } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { Router } from "express";
-import { ID, Query, type Models } from "node-appwrite";
+import { AppwriteException, ID, Query, type Models } from "node-appwrite";
 import { InputFile } from "node-appwrite/file";
 import QRCode from "qrcode";
 import type { AppwriteServices } from "./appwrite.js";
@@ -130,7 +131,10 @@ async function listAllRows(services: AppwriteServices, databaseId: string, table
 }
 
 async function ownedRow(services: AppwriteServices, config: BackendConfig, tableId: string, rowId: string, venueId: string): Promise<RowData> {
-  const row = await services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId, rowId });
+  const row = await services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId, rowId }).catch(error => {
+    if (error instanceof AppwriteException && error.code === 404) throw new ApiError(404, "not_found", "Запись не найдена.");
+    throw error;
+  });
   if (row.venueId !== venueId) throw new ApiError(404, "not_found", "Запись не найдена.");
   return row;
 }
@@ -147,6 +151,38 @@ async function createDisplayToken(services: AppwriteServices, config: BackendCon
     data: { venueId, tokenHash: await hashSecret(secret), active: true, label: `Экран ${tokenId.slice(-4)}`, createdAt: new Date().toISOString() },
   });
   return { tokenId, secret, url: displayUrl(config, tokenId, secret) };
+}
+
+async function claimPairingDisplay(services: AppwriteServices, config: BackendConfig, pairingId: string, pairingSecret: string, venueId: string) {
+  // The unique row ID is the cross-process claim. Stable credentials also let a
+  // retry finish a pairing after the token write succeeded but the reply failed.
+  const tokenId = createHash("sha256").update(`pairing:${pairingId}`).digest("hex").slice(0, 32);
+  const secret = createHmac("sha256", config.sessionSecret).update(`pairing-display:${pairingId}:${pairingSecret}`).digest("base64url");
+  try {
+    await services.tables.createRow({ databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: tokenId,
+      data: { venueId, tokenHash: await hashSecret(secret), active: true, label: `Экран ${tokenId.slice(-4)}`, createdAt: new Date().toISOString() } });
+  } catch (error) {
+    if (!(error instanceof AppwriteException && error.code === 409)) throw error;
+    const existing = await services.tables.getRow<RowData>({ databaseId: config.appwriteDatabaseId, tableId: "display_tokens", rowId: tokenId });
+    if (existing.venueId !== venueId || existing.active !== true || !(await verifySecret(secret, String(existing.tokenHash ?? "")))) {
+      throw new ApiError(409, "pairing_used", "Этот QR-код уже использован или экран отозван.");
+    }
+  }
+  return { tokenId, secret, url: displayUrl(config, tokenId, secret) };
+}
+
+async function revokeDisplayTokens(services: AppwriteServices, databaseId: string, venueId: string, revokedAt: string) {
+  let revoked = 0;
+  for (;;) {
+    const page = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens",
+      queries: [Query.equal("venueId", [venueId]), Query.equal("active", [true]), Query.limit(100)] });
+    if (!page.rows.length) return revoked;
+    // Mutating the filter shrinks the set, so always read its first page.
+    for (let start = 0; start < page.rows.length; start += 10) {
+      await Promise.all(page.rows.slice(start, start + 10).map(row => services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: row.$id, data: { active: false, revokedAt } })));
+    }
+    revoked += page.rows.length;
+  }
 }
 
 function hubActor(request: Request, config: BackendConfig): string {
@@ -202,6 +238,24 @@ async function deleteVenueRows(services: AppwriteServices, databaseId: string, t
 
 export function createApiRouter(services: AppwriteServices, config: BackendConfig): Router {
   const router = Router();
+  // This queue coordinates all writes to an existing item in this API process.
+  // Appwrite atomic increments still enforce bounds independently of the queue.
+  const itemQueues = new Map<string, Promise<void>>();
+  const withItems = async (ids: string[], operation: () => Promise<void>) => {
+    const releaseLocks: Array<() => void> = [];
+    try {
+      for (const id of [...new Set(ids)].sort()) {
+        const previous = itemQueues.get(id) ?? Promise.resolve();
+        let release!: () => void;
+        const gate = new Promise<void>(resolve => { release = resolve; });
+        const tail = previous.then(() => gate);
+        itemQueues.set(id, tail);
+        await previous;
+        releaseLocks.push(() => { release(); if (itemQueues.get(id) === tail) itemQueues.delete(id); });
+      }
+      await operation();
+    } finally { for (const release of releaseLocks.reverse()) release(); }
+  };
   const track = async (venueId: string, eventType: StatisticsType, actor: string, resourceId?: string) => {
     try { await recordStatisticsEvent(services, config.appwriteDatabaseId, venueId, eventType, actor, resourceId); }
     catch { console.error(JSON.stringify({ event: "statistics_write_failed", venueId, eventType })); }
@@ -447,8 +501,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
     if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
     const now = new Date().toISOString();
-    const existing = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [venueId]), Query.equal("active", [true]), Query.limit(100)] });
-    await Promise.all(existing.rows.map(row => services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: row.$id, data: { active: false, revokedAt: now } })));
+    await revokeDisplayTokens(services, databaseId, venueId, now);
     await services.tables.updateRow({ databaseId, tableId: "venues", rowId: venueId, data: { staffVersion: Number(venue.staffVersion ?? 0) + 1, displayVersion: Number(venue.displayVersion ?? 0) + 1, updatedAt: now, updatedBy: "backend-hub" } });
     await audit(services, config, "venue_sessions_revoked", venueId, { scope: "all" }, hubActor(request, config));
     response.json({ revoked: true });
@@ -479,10 +532,9 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     requireRole(request, config, ["hub"]);
     const venueId = routeId(request.params.id); const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId });
     const now = new Date().toISOString();
-    const active = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [venueId]), Query.equal("active", [true]), Query.limit(200)] });
-    await Promise.all(active.rows.map(row => services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: row.$id, data: { active: false, revokedAt: now } })));
+    const revoked = await revokeDisplayTokens(services, databaseId, venueId, now);
     await services.tables.updateRow({ databaseId, tableId: "venues", rowId: venueId, data: { displayVersion: Number(venue.displayVersion ?? 0) + 1, updatedAt: now, updatedBy: "backend-hub" } });
-    response.json({ revoked: active.rows.length });
+    response.json({ revoked });
   }));
 
   router.delete("/hub/venues/:id", asyncRoute(async (request, response) => {
@@ -551,16 +603,16 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
   }));
 
   router.get("/menu/version", asyncRoute(async (request, response) => {
-    const claims = requireRole(request, config, ["display"]);
+    const claims = requireRole(request, config, ["staff", "display"]);
     if (!claims.venueId) throw new ApiError(403, "forbidden", "Сессия не привязана к точке.");
     const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId });
-    if (claims.displayTokenId) {
+    if (claims.role === "display" && claims.displayTokenId) {
       const token = await services.tables.getRow<RowData>({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId }).catch(() => null);
       if (!token || token.active !== true) throw new ApiError(401, "session_revoked", "Сессия экрана отозвана.");
       await services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: claims.displayTokenId, data: { lastSeenAt: new Date().toISOString() } });
       await contact(claims.venueId, claims.displayTokenId);
     }
-    if (claims.version !== Number(venue.displayVersion ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните подключение заново.");
+    if (venue.active === false || claims.version !== Number((claims.role === "staff" ? venue.staffVersion : venue.displayVersion) ?? 1)) throw new ApiError(401, "session_revoked", "Сессия отозвана. Выполните подключение заново.");
     response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     response.json({ version: Number(venue.menuVersion ?? 1), refreshSeconds: integer(venue.menuRefreshSeconds ?? 15, 5, 300) });
   }));
@@ -693,84 +745,91 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       throw new ApiError(400, "invalid_argument", "Поле isAvailable должно быть логическим.");
     }
     const isAvailable = request.body.isAvailable;
-    const existing = await Promise.all(itemIds.map((itemId) => ownedRow(services, config, "items", itemId, claims.venueId!)));
-    if (existing.some(trackedStock)) throw new ApiError(409, "stock_managed", "Для позиции с остатком измените количество штук.");
-    const now = new Date().toISOString();
-    const updated = await Promise.all(existing.map((item) => services.tables.updateRow<RowData>({
-      databaseId, tableId: "items", rowId: item.$id,
-      data: { isAvailable, updatedAt: now, updatedBy: staffUpdatedBy(claims) },
-    })));
-    await bumpMenuVersion(services, databaseId, claims.venueId!);
-    if (existing.some(item => item.isAvailable !== isAvailable)) await track(claims.venueId!, "availability_changed", staffActor(claims));
-    const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId! });
-    response.json({ updatedCount: updated.length, items: updated.map(publicRow), menuVersion: Number(venue.menuVersion ?? 1) });
+    await withItems(itemIds, async () => {
+      const existing = await Promise.all(itemIds.map((itemId) => ownedRow(services, config, "items", itemId, claims.venueId!)));
+      if (existing.some(trackedStock)) throw new ApiError(409, "stock_managed", "Для позиции с остатком измените количество штук.");
+      const now = new Date().toISOString();
+      const updated = await Promise.all(existing.map((item) => services.tables.updateRow<RowData>({
+        databaseId, tableId: "items", rowId: item.$id,
+        data: { isAvailable, updatedAt: now, updatedBy: staffUpdatedBy(claims) },
+      })));
+      await bumpMenuVersion(services, databaseId, claims.venueId!);
+      if (existing.some(item => item.isAvailable !== isAvailable)) await track(claims.venueId!, "availability_changed", staffActor(claims));
+      const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: claims.venueId! });
+      response.json({ updatedCount: updated.length, items: updated.map(publicRow), menuVersion: Number(venue.menuVersion ?? 1) });
+    });
   }));
 
   router.post("/items/:id/stock/adjust", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff"]);
     const rowId = routeId(request.params.id);
-    const current = await ownedRow(services, config, "items", rowId, claims.venueId!);
-    if (!trackedStock(current)) throw new ApiError(409, "stock_unset", "Сначала задайте количество штук.");
-    const delta = Number(request.body?.delta);
-    if (delta !== 1 && delta !== -1) throw new ApiError(400, "invalid_argument", "Изменение количества должно быть +1 или −1.");
-    if (delta < 0 && Number(current.stockQuantity) === 0) throw new ApiError(409, "stock_empty", "Остаток уже равен нулю.");
-    const args = { databaseId, tableId: "items", rowId, column: "stockQuantity", value: 1 };
-    let row: RowData;
-    try {
-      row = delta < 0
-        ? await services.tables.decrementRowColumn<RowData>({ ...args, min: 0 })
-        : await services.tables.incrementRowColumn<RowData>({ ...args, max: 2_000_000_000 });
-    } catch (cause) {
-      const latest = await services.tables.getRow<RowData>({ databaseId, tableId: "items", rowId }).catch(() => null);
-      if (latest && ((delta < 0 && Number(latest.stockQuantity) === 0) || (delta > 0 && Number(latest.stockQuantity) >= 2_000_000_000))) {
-        throw new ApiError(409, "stock_limit", delta < 0 ? "Остаток уже равен нулю." : "Достигнут предел количества штук.");
+    await withItems([rowId], async () => {
+      const current = await ownedRow(services, config, "items", rowId, claims.venueId!);
+      if (!trackedStock(current)) throw new ApiError(409, "stock_unset", "Сначала задайте количество штук.");
+      const delta = Number(request.body?.delta);
+      if (delta !== 1 && delta !== -1) throw new ApiError(400, "invalid_argument", "Изменение количества должно быть +1 или −1.");
+      if (delta < 0 && Number(current.stockQuantity) === 0) throw new ApiError(409, "stock_empty", "Остаток уже равен нулю.");
+      const args = { databaseId, tableId: "items", rowId, column: "stockQuantity", value: 1 };
+      let row: RowData;
+      try {
+        row = delta < 0
+          ? await services.tables.decrementRowColumn<RowData>({ ...args, min: 0 })
+          : await services.tables.incrementRowColumn<RowData>({ ...args, max: 2_000_000_000 });
+      } catch (cause) {
+        const latest = await services.tables.getRow<RowData>({ databaseId, tableId: "items", rowId }).catch(() => null);
+        if (latest && ((delta < 0 && Number(latest.stockQuantity) === 0) || (delta > 0 && Number(latest.stockQuantity) >= 2_000_000_000))) {
+          throw new ApiError(409, "stock_limit", delta < 0 ? "Остаток уже равен нулю." : "Достигнут предел количества штук.");
+        }
+        throw cause;
       }
-      throw cause;
-    }
-    await bumpMenuVersion(services, databaseId, claims.venueId!);
-    await track(claims.venueId!, "stock_adjusted", staffActor(claims), rowId);
-    if (available(current) !== available(row)) await track(claims.venueId!, "availability_changed", staffActor(claims), rowId);
-    response.json({ item: publicRow(row) });
+      await bumpMenuVersion(services, databaseId, claims.venueId!);
+      await track(claims.venueId!, "stock_adjusted", staffActor(claims), rowId);
+      if ((delta === 1 && Number(row.stockQuantity) === 1) || (delta === -1 && Number(row.stockQuantity) === 0)) await track(claims.venueId!, "availability_changed", staffActor(claims), rowId);
+      response.json({ item: publicRow(row) });
+    });
   }));
 
   router.patch("/items/:id", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff"]);
     const rowId = routeId(request.params.id);
-    const current = await ownedRow(services, config, "items", rowId, claims.venueId!);
-    const data: Record<string, unknown> = { updatedAt: new Date().toISOString(), updatedBy: staffUpdatedBy(claims) };
-    if (request.body?.isAvailable !== undefined) {
-      if (trackedStock(current) || request.body?.stockQuantity !== undefined) throw new ApiError(409, "stock_managed", "Для позиции с остатком измените количество штук.");
-      if (typeof request.body.isAvailable !== "boolean") throw new ApiError(400, "invalid_argument", "Поле isAvailable должно быть логическим.");
-      data.isAvailable = request.body.isAvailable;
-    }
-    if (request.body?.stockQuantity !== undefined) data.stockQuantity = stockQuantity(request.body.stockQuantity);
-    if (request.body?.name !== undefined) data.name = text(request.body.name, 200);
-    if (request.body?.priceMinor !== undefined) data.priceMinor = integer(request.body.priceMinor, 0, 2_000_000_000);
-    if (request.body?.servingSize !== undefined) data.servingSize = request.body.servingSize === null || request.body.servingSize === "" ? null : text(request.body.servingSize, 40);
-    if (request.body?.caloriesKcal !== undefined) data.caloriesKcal = request.body.caloriesKcal === null || request.body.caloriesKcal === "" ? null : integer(request.body.caloriesKcal, 0, 100000);
-    if (request.body?.sortOrder !== undefined) data.sortOrder = integer(request.body.sortOrder, 0, 100000);
-    const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "items", rowId, data });
-    await bumpMenuVersion(services, databaseId, claims.venueId!);
-    await track(claims.venueId!, "item_updated", staffActor(claims), rowId);
-    if (data.stockQuantity !== undefined && data.stockQuantity !== current.stockQuantity) await track(claims.venueId!, "stock_adjusted", staffActor(claims), rowId);
-    if (available(current) !== available(row)) await track(claims.venueId!, "availability_changed", staffActor(claims), rowId);
-    response.json({ item: publicRow(row) });
+    await withItems([rowId], async () => {
+      const current = await ownedRow(services, config, "items", rowId, claims.venueId!);
+      const data: Record<string, unknown> = { updatedAt: new Date().toISOString(), updatedBy: staffUpdatedBy(claims) };
+      if (request.body?.isAvailable !== undefined) {
+        if (trackedStock(current) || request.body?.stockQuantity !== undefined) throw new ApiError(409, "stock_managed", "Для позиции с остатком измените количество штук.");
+        if (typeof request.body.isAvailable !== "boolean") throw new ApiError(400, "invalid_argument", "Поле isAvailable должно быть логическим.");
+        data.isAvailable = request.body.isAvailable;
+      }
+      if (request.body?.stockQuantity !== undefined) data.stockQuantity = stockQuantity(request.body.stockQuantity);
+      if (request.body?.name !== undefined) data.name = text(request.body.name, 200);
+      if (request.body?.priceMinor !== undefined) data.priceMinor = integer(request.body.priceMinor, 0, 2_000_000_000);
+      if (request.body?.servingSize !== undefined) data.servingSize = request.body.servingSize === null || request.body.servingSize === "" ? null : text(request.body.servingSize, 40);
+      if (request.body?.caloriesKcal !== undefined) data.caloriesKcal = request.body.caloriesKcal === null || request.body.caloriesKcal === "" ? null : integer(request.body.caloriesKcal, 0, 100000);
+      if (request.body?.sortOrder !== undefined) data.sortOrder = integer(request.body.sortOrder, 0, 100000);
+      const row = await services.tables.updateRow<RowData>({ databaseId, tableId: "items", rowId, data });
+      await bumpMenuVersion(services, databaseId, claims.venueId!);
+      await track(claims.venueId!, "item_updated", staffActor(claims), rowId);
+      if (data.stockQuantity !== undefined && data.stockQuantity !== current.stockQuantity) await track(claims.venueId!, "stock_adjusted", staffActor(claims), rowId);
+      if (available(current) !== available(row)) await track(claims.venueId!, "availability_changed", staffActor(claims), rowId);
+      response.json({ item: publicRow(row) });
+    });
   }));
 
   router.delete("/items/:id", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff"]);
     const rowId = routeId(request.params.id);
-    await ownedRow(services, config, "items", rowId, claims.venueId!);
-    await services.tables.deleteRow({ databaseId, tableId: "items", rowId });
-    await bumpMenuVersion(services, databaseId, claims.venueId!);
-    await track(claims.venueId!, "item_deleted", staffActor(claims), rowId);
-    response.status(204).end();
+    await withItems([rowId], async () => {
+      await ownedRow(services, config, "items", rowId, claims.venueId!);
+      await services.tables.deleteRow({ databaseId, tableId: "items", rowId });
+      await bumpMenuVersion(services, databaseId, claims.venueId!);
+      await track(claims.venueId!, "item_deleted", staffActor(claims), rowId);
+      response.status(204).end();
+    });
   }));
 
   router.post("/display/rotate", asyncRoute(async (request, response) => {
     const claims = requireRole(request, config, ["staff"]);
-    const existing = await services.tables.listRows<RowData>({ databaseId, tableId: "display_tokens", queries: [Query.equal("venueId", [claims.venueId!]), Query.equal("active", [true]), Query.limit(100)] });
-    await Promise.all(existing.rows.map(row => services.tables.updateRow({ databaseId, tableId: "display_tokens", rowId: row.$id, data: { active: false, revokedAt: new Date().toISOString() } })));
+    await revokeDisplayTokens(services, databaseId, claims.venueId!, new Date().toISOString());
     const next = await createDisplayToken(services, config, claims.venueId!);
     await track(claims.venueId!, "display_link_created", staffActor(claims), next.tokenId);
     response.status(201).json({ displayUrl: next.url });
@@ -793,10 +852,17 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const pin = String(request.body?.pin ?? "");
     if (!match || !VENUE_CODE.test(code) || !PIN.test(pin)) throw new ApiError(400, "invalid_argument", "Некорректные данные подключения.");
     const pairing = await services.tables.getRow<RowData>({ databaseId, tableId: "display_pairings", rowId: match[1] }).catch(() => null);
-    if (!pairing || pairing.status !== "pending" || new Date(String(pairing.expiresAt)).getTime() < Date.now() || !(await verifySecret(match[2], String(pairing.tokenHash ?? "")))) throw new ApiError(401, "unauthenticated", "QR-код подключения недействителен или истёк.");
+    if (!pairing || !["pending", "complete"].includes(String(pairing.status)) || new Date(String(pairing.expiresAt)).getTime() < Date.now() || !(await verifySecret(match[2], String(pairing.tokenHash ?? "")))) throw new ApiError(401, "unauthenticated", "QR-код подключения недействителен или истёк.");
     const venue = await venueByCode(services, config, code);
-    if (!venue || !(await verifySecret(pin, String(venue.pinHash ?? "")))) throw new ApiError(401, "unauthenticated", "Неверный код заведения или PIN.");
-    const screen = await createDisplayToken(services, config, venue.$id);
+    if (!venue || venue.active === false || !(await verifySecret(pin, String(venue.pinHash ?? "")))) throw new ApiError(401, "unauthenticated", "Неверный код заведения или PIN.");
+    if (pairing.status === "complete") {
+      const credentials = /^([A-Za-z0-9_-]{12,40})\.([A-Za-z0-9_-]{32,80})$/.exec(String(pairing.displayUrl ?? "").split("#")[1] ?? "");
+      const token = credentials ? await services.tables.getRow<RowData>({ databaseId, tableId: "display_tokens", rowId: credentials[1] }).catch(() => null) : null;
+      if (!credentials || pairing.venueId !== venue.$id || !token || token.venueId !== venue.$id || token.active !== true || !(await verifySecret(credentials[2], String(token.tokenHash ?? "")))) throw new ApiError(409, "pairing_used", "Этот QR-код уже использован или экран отозван.");
+      response.json({ displayUrl: pairing.displayUrl, venueId: venue.$id });
+      return;
+    }
+    const screen = await claimPairingDisplay(services, config, pairing.$id, match[2], venue.$id);
     await services.tables.updateRow({ databaseId, tableId: "display_pairings", rowId: pairing.$id, data: { status: "complete", venueId: venue.$id, displayUrl: screen.url } });
     response.json({ displayUrl: screen.url, venueId: venue.$id });
   }));

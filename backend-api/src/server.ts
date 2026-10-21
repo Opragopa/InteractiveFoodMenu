@@ -48,7 +48,13 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
   });
   const limitAuthAttempts = (scope: string) => (request: express.Request, response: express.Response, next: express.NextFunction) => {
     const ip = request.ip || request.socket.remoteAddress || "unknown";
-    const identity = scope === "staff" ? `${String(request.body?.venueCode ?? "")}:${String(request.body?.username ?? "")}` : scope === "hub" ? String(request.body?.username ?? "") : undefined;
+    const canonical = (value: unknown) => String(value ?? "").trim().toLowerCase();
+    // Match the normalization used by the login handlers. PIN login has no
+    // username; an arbitrary extra field must not create a new limit bucket.
+    const personalStaffLogin = request.route?.path === "/api/auth/staff/password";
+    const identity = scope === "staff"
+      ? `${canonical(request.body?.venueCode)}:${personalStaffLogin ? canonical(request.body?.username) : ""}`
+      : scope === "hub" ? canonical(request.body?.username) : undefined;
     void authLimiter.check(scope, ip, identity).then(result => {
       if (!result.allowed) { response.setHeader("Retry-After", String(result.retryAfterSeconds)); next(new ApiError(429, "rate_limited", "Слишком много попыток. Повторите позже.")); }
       else next();

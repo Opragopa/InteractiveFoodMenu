@@ -1,0 +1,152 @@
+{
+  "format": "ifm-appwrite-regressions-v1",
+  "phase": "fixed",
+  "runId": "20261020",
+  "startedAt": "2026-10-21T08:32:27.885Z",
+  "datastore": "appwrite",
+  "results": [
+    {
+      "name": "staff_version_route_and_cross_venue_isolation",
+      "passed": true,
+      "durationMs": 80,
+      "observed": {
+        "staffVersion": "authorized",
+        "crossVenue": "denied"
+      }
+    },
+    {
+      "name": "staff_revocation_and_disabled_venue",
+      "passed": true,
+      "durationMs": 97,
+      "observed": {
+        "staleMutations": "denied",
+        "disabledMutation": "denied"
+      }
+    },
+    {
+      "name": "display_login_ignores_unrelated_revoked_staff_cookie",
+      "passed": true,
+      "durationMs": 116,
+      "observed": {
+        "displayLoginStatus": 200,
+        "protectedStaffWriteStatus": 401
+      }
+    },
+    {
+      "name": "mass_rotate_101_tokens_and_old_link_reauthentication",
+      "passed": true,
+      "durationMs": 2669,
+      "observed": {
+        "requested": 101,
+        "remainingOld": 0,
+        "remainingActive": 1,
+        "oldLinkStatus": 401
+      }
+    },
+    {
+      "name": "mass_revoke-all_201_tokens_and_old_link_reauthentication",
+      "passed": true,
+      "durationMs": 5141,
+      "observed": {
+        "requested": 201,
+        "remainingOld": 0,
+        "remainingActive": 0,
+        "oldLinkStatus": 401
+      }
+    },
+    {
+      "name": "mass_venue-revoke_501_tokens_and_old_link_reauthentication",
+      "passed": true,
+      "durationMs": 12698,
+      "observed": {
+        "requested": 501,
+        "remainingOld": 0,
+        "remainingActive": 0,
+        "oldLinkStatus": 401
+      }
+    },
+    {
+      "name": "parallel_pairing_and_idempotent_retry",
+      "passed": true,
+      "durationMs": 309,
+      "observed": {
+        "parallelStatuses": [
+          200,
+          200
+        ],
+        "tokensCreated": 1,
+        "retryStatus": 200
+      }
+    },
+    {
+      "name": "competing_venues_cannot_reuse_pairing",
+      "passed": true,
+      "durationMs": 124,
+      "observed": {
+        "statuses": [
+          200,
+          409
+        ]
+      }
+    },
+    {
+      "name": "preseeded_interrupted_pairing_claim_recovers_without_duplicate",
+      "passed": true,
+      "durationMs": 347,
+      "observed": {
+        "setup": "preseeded_intermediate_state",
+        "completionStatus": 200,
+        "tokenCountChange": 0,
+        "revokedRetryStatus": 409
+      }
+    },
+    {
+      "name": "atomic_stock_bounds_and_transition_statistics",
+      "passed": true,
+      "durationMs": 371,
+      "observed": {
+        "atomicIncrements": [
+          200,
+          200
+        ],
+        "transitionCount": 1,
+        "lowerBoundStatuses": [
+          200,
+          409
+        ],
+        "upperBoundStatus": 409
+      }
+    },
+    {
+      "name": "absolute_stock_and_adjust_share_transition_order",
+      "passed": true,
+      "durationMs": 207,
+      "observed": {
+        "statuses": [
+          200,
+          200
+        ],
+        "transitionCount": 1,
+        "finalQuantity": 2
+      }
+    },
+    {
+      "name": "moscow_day_epoch_and_cross_venue_statistics",
+      "passed": true,
+      "durationMs": 264,
+      "observed": {
+        "moscowDayCount": 2,
+        "currentEpochCount": 1,
+        "archivedEpochCount": 1,
+        "crossVenue": "excluded"
+      }
+    }
+  ],
+  "cleanup": {
+    "passed": true,
+    "rowsRemoved": 31,
+    "seededFixtureRetained": true
+  },
+  "finishedAt": "2026-10-21T08:33:01.522Z",
+  "passed": true
+}

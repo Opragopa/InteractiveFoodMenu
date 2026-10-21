@@ -9,6 +9,10 @@ import kotlinx.coroutines.tasks.await
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import java.io.IOException
+import ru.interactivefoodmenu.staff.model.CsvMenuRow
+import ru.interactivefoodmenu.staff.model.ApiRequestFailure
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +47,7 @@ data class UiState(
     val displayUrl: String = "",
     val ocrBusy: Boolean = false,
     val ocrPreview: String? = null,
+    val csvRetryRows: List<CsvMenuRow> = emptyList(),
 )
 
 class MenuViewModel(application: Application) : AndroidViewModel(application) {
@@ -51,7 +56,8 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(UiState(configMissing = repository == null))
     val state: StateFlow<UiState> = _state.asStateFlow()
     private var menuJob: Job? = null
-    private val pendingAvailability = mutableMapOf<String, Boolean>()
+    private var mutating = false
+    private var sessionEpoch = 0
 
     init {
         viewModelScope.launch {
@@ -88,39 +94,64 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun importCsv(uri: Uri) {
+        if (mutating) return
+        mutating = true
+        val epoch = sessionEpoch
+        _state.update { it.copy(busy = true, error = null, csvRetryRows = emptyList()) }
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, error = null) }
-            runCatching {
+            try {
                 val content = getApplication<Application>().contentResolver.openInputStream(uri)
-                    ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                    ?: error("Не удалось прочитать CSV-файл.")
-                val rows = CsvMenuParser.parse(content)
-                repository?.importItems(_state.value.venueId ?: error("Сначала войдите в заведение."), _state.value.menu.categories, _state.value.menu.items, rows)
-                rows.size
-            }.onSuccess { count -> _state.update { it.copy(busy = false, message = "Импортировано позиций: $count") } }
-                .onFailure { error ->
-                    app.clientLogger?.error("csv_import_failed", error)
-                    _state.update { it.copy(busy = false, error = "Не удалось импортировать CSV: ${error.message ?: "проверьте файл"}") }
-                }
+                    ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: error("Не удалось прочитать CSV-файл.")
+                executeCsvImport(CsvMenuParser.parse(content), epoch)
+            } catch (cause: CancellationException) { throw cause }
+            catch (cause: Exception) { if (epoch == sessionEpoch) handleFailure(cause) }
+            finally { if (epoch == sessionEpoch) { mutating = false; _state.update { it.copy(busy = false) } } }
         }
+    }
+    fun retryCsvImport() {
+        val rows = _state.value.csvRetryRows
+        if (mutating || rows.isEmpty()) return
+        mutating = true
+        val epoch = sessionEpoch
+        _state.update { it.copy(busy = true, error = null) }
+        viewModelScope.launch {
+            try { executeCsvImport(rows, epoch) }
+            catch (cause: CancellationException) { throw cause }
+            catch (cause: Exception) { if (epoch == sessionEpoch) handleFailure(cause) }
+            finally { if (epoch == sessionEpoch) { mutating = false; _state.update { it.copy(busy = false) } } }
+        }
+    }
+    private suspend fun executeCsvImport(rows: List<CsvMenuRow>, epoch: Int) {
+        val result = (repository ?: error("Backend API не настроен.")).importItems(rows)
+        if (epoch != sessionEpoch) return
+        _state.update { it.copy(csvRetryRows = result.failures.map { failure -> failure.row }, message = "Импортировано позиций: ${result.imported}", error = result.failures.takeIf { failures -> failures.isNotEmpty() }?.let { failures -> "Импорт завершён частично: ошибок ${failures.size}. " + failures.take(10).joinToString("; ") { failure -> "Строка ${failure.line}: ${failure.message}" } }) }
+        val fresh = repository.menu()
+        if (epoch == sessionEpoch) _state.update { it.copy(menu = fresh) }
     }
 
     fun login() {
+        if (mutating) return
         val current = _state.value
         if (current.venueCode.length !in 3..32 || current.pin.length != 6 || repository == null) {
             _state.update { it.copy(error = "Введите код заведения и шестизначный PIN.") }
             return
         }
+        mutating = true
+        val epoch = ++sessionEpoch
+        _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, error = null) }
             runCatching {
                 val installationId = app.preferences.installationId()
                 repository.login(current.venueCode, current.pin, installationId)
             }.onSuccess { venueId ->
+                if (epoch != sessionEpoch) return@onSuccess
+                mutating = false
                 app.preferences.saveVenueCode(current.venueCode)
                 _state.update { it.copy(pin = "", busy = false) }
                 attach(venueId)
             }.onFailure { error ->
+                if (epoch != sessionEpoch) return@onFailure
+                mutating = false
                 app.clientLogger?.error("staff_login_failed", error)
                 _state.update { it.copy(busy = false, error = readable(error)) }
             }
@@ -130,17 +161,17 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
     private fun attach(venueId: String) {
         menuJob?.cancel()
         _state.update { it.copy(venueId = venueId, screen = AppScreen.MENU, initializing = false, menuError = null, error = null) }
+        val epoch = sessionEpoch
         menuJob = viewModelScope.launch {
             repository?.observeMenu(venueId)
                 ?.catch { error ->
+                    if (epoch != sessionEpoch) return@catch
+                    if (error is ApiRequestFailure && error.status == 401) { handleFailure(error); return@catch }
                     app.clientLogger?.error("menu_subscription_failed", error, mapOf("venueId" to venueId))
                     _state.update { it.copy(menuError = readable(error)) }
                 }
                 ?.collect { menu ->
-                    val visibleMenu = menu.copy(items = menu.items.map { item ->
-                        pendingAvailability[item.id]?.let { item.copy(isAvailable = it) } ?: item
-                    })
-                    _state.update { it.copy(menu = visibleMenu, menuError = null) }
+                    if (epoch == sessionEpoch && !mutating) _state.update { it.copy(menu = menu, menuError = null) }
                 }
         }
     }
@@ -150,35 +181,17 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggle(item: MenuItem, unavailable: Boolean) {
-        val currentItem = _state.value.menu.items.firstOrNull { it.id == item.id } ?: item
-        val nextAvailability = !unavailable
-        pendingAvailability[item.id] = nextAvailability
-        _state.update { state ->
-            state.copy(
-                menu = state.menu.copy(items = state.menu.items.map { current ->
-                    if (current.id == item.id) current.copy(isAvailable = nextAvailability) else current
-                }),
-                availabilityErrors = state.availabilityErrors - item.id,
-            )
-        }
-        viewModelScope.launch {
-            runCatching {
-                (repository ?: error("Backend API не настроен.")).setAvailability(currentItem, nextAvailability)
-            }.onSuccess {
-                if (pendingAvailability[item.id] == nextAvailability) pendingAvailability.remove(item.id)
-            }.onFailure { error ->
-                if (pendingAvailability[item.id] == nextAvailability) pendingAvailability.remove(item.id)
-                app.clientLogger?.error("availability_update_failed", error, mapOf("itemId" to item.id))
-                _state.update { state ->
-                    state.copy(
-                        menu = state.menu.copy(items = state.menu.items.map { current ->
-                            if (current.id == item.id && current.isAvailable == nextAvailability) currentItem else current
-                        }),
-                        availabilityErrors = state.availabilityErrors + (item.id to readable(error)),
-                    )
-                }
-            }
-        }
+        if (item.stockQuantity != null) return fail("Для этой позиции измените количество штук.")
+        mutate(null) { (repository ?: error("Backend API не настроен.")).setAvailability(item, !unavailable) }
+    }
+    fun adjustStock(item: MenuItem, delta: Int) {
+        if (item.stockQuantity == null || delta !in listOf(-1, 1)) return
+        mutate("Остаток изменён") { repository?.adjustStock(item, delta) }
+    }
+    fun saveStock(item: MenuItem, value: String) {
+        val quantity = value.takeIf { it.matches(Regex("[0-9]+")) }?.toLongOrNull()
+        if (quantity == null || quantity !in 0..2_000_000_000L) return fail("Количество — целое число от 0 до 2000000000.")
+        mutate("Остаток сохранён") { repository?.setStock(item, quantity.toInt()) }
     }
 
     fun saveCategory(existing: MenuCategory?, name: String) {
@@ -191,14 +204,17 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteCategory(category: MenuCategory) = mutate("Категория удалена") { repository?.deleteCategory(_state.value.venueId!!, category.id) }
 
-    fun saveItem(existing: MenuItem?, categoryId: String, name: String, price: String) {
+    fun saveItem(existing: MenuItem?, categoryId: String, name: String, price: String, quantityText: String) {
         val validName = Validation.itemName(name) ?: return fail("Название позиции должно содержать от 1 до 80 символов.")
         val priceMinor = Validation.priceToMinor(price) ?: return fail("Введите цену от 0 до 999 999,99 ₽, не более двух знаков после запятой.")
         if (categoryId.isBlank()) return fail("Выберите категорию.")
+        val quantity = quantityText.takeIf { it.matches(Regex("[0-9]+")) }?.toLongOrNull()
+        if ((existing == null || quantityText.isNotBlank() || existing.stockQuantity != null) && (quantity == null || quantity !in 0..2_000_000_000L)) return fail("Количество — целое число от 0 до 2000000000.")
+        val changedQuantity = quantity?.toInt()?.takeIf { existing?.stockQuantity != it }
         mutate("Позиция сохранена") {
             val current = _state.value
             val sameCategory = current.menu.items.filter { it.categoryId == categoryId }
-            repository?.saveItem(current.venueId!!, existing?.id, categoryId, validName, priceMinor, existing?.sortOrder ?: sameCategory.size, existing?.isAvailable ?: true)
+            repository?.saveItem(current.venueId!!, existing?.id, categoryId, validName, priceMinor, existing?.sortOrder ?: sameCategory.size, existing?.available ?: true, changedQuantity)
         }
     }
 
@@ -241,29 +257,49 @@ class MenuViewModel(application: Application) : AndroidViewModel(application) {
         mutate("Логотип загружен") { repository?.uploadLogo(_state.value.venueId!!, uri) }
     }
 
-    fun rotateDisplayLink() = mutate("Новая ссылка готова") {
-        val url = repository?.rotateDisplayLink().orEmpty()
-        _state.update { it.copy(displayUrl = url) }
+    fun rotateDisplayLink() {
+        val epoch = sessionEpoch
+        mutate("Новая ссылка готова") {
+            val url = repository?.rotateDisplayLink().orEmpty()
+            if (epoch == sessionEpoch) _state.update { it.copy(displayUrl = url) }
+        }
     }
 
     fun logout() {
-        viewModelScope.launch {
-            repository?.logout()
-            menuJob?.cancel()
-            _state.update { it.copy(screen = AppScreen.LOGIN, venueId = null, menu = MenuSnapshot(), menuError = null, error = null, pin = "", displayUrl = "") }
-        }
+        sessionEpoch++
+        mutating = false
+        menuJob?.cancel()
+        viewModelScope.launch { repository?.logout() }
+        _state.update { UiState(initializing = false, configMissing = repository == null, venueCode = it.venueCode) }
     }
 
     private fun mutate(success: String?, block: suspend () -> Unit) {
+        if (mutating) return
+        mutating = true
+        val epoch = sessionEpoch
+        _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
-            _state.update { it.copy(error = null) }
-            runCatching { block() }
-                .onSuccess { if (success != null) _state.update { it.copy(message = success) } }
-                .onFailure {
-                    app.clientLogger?.error("menu_mutation_failed", it, mapOf("screen" to _state.value.screen.name))
-                    _state.update { state -> state.copy(error = readable(it)) }
+            try {
+                block()
+                val fresh = repository?.menu()
+                if (epoch == sessionEpoch) _state.update { it.copy(menu = fresh ?: it.menu, message = success ?: it.message) }
+            } catch (cause: CancellationException) { throw cause }
+            catch (cause: Exception) {
+                if (cause is IOException) {
+                    val fresh = runCatching { repository?.menu() }.getOrNull()
+                    if (epoch == sessionEpoch && fresh != null) _state.update { it.copy(menu = fresh) }
                 }
+                if (epoch == sessionEpoch) {
+                    app.clientLogger?.error("menu_mutation_failed", cause)
+                    handleFailure(cause)
+                }
+            } finally { if (epoch == sessionEpoch) { mutating = false; _state.update { it.copy(busy = false) } } }
         }
+    }
+
+    private fun handleFailure(cause: Throwable) {
+        if (cause is ApiRequestFailure && cause.status == 401) { logout(); _state.update { it.copy(error = "Сессия завершилась. Войдите снова.") } }
+        else _state.update { it.copy(error = readable(cause)) }
     }
 
     private fun fail(message: String) { _state.update { it.copy(error = message) } }

@@ -83,7 +83,7 @@ async function createInvitation(services: AppwriteServices, config: BackendConfi
 export function accountGuard(services: AppwriteServices, config: BackendConfig) {
   return (request: Request, response: Response, next: NextFunction) => {
     void (async () => {
-    if (["/auth/staff/password", "/auth/staff/activate", "/hub/login/password", "/hub/login", "/auth/logout"].includes(request.originalUrl.split("?")[0].replace(/^\/api/, ""))) return;
+    if (["/auth/staff", "/auth/display", "/auth/staff/password", "/auth/staff/activate", "/hub/login/password", "/hub/login", "/auth/logout"].includes(request.originalUrl.split("?")[0].replace(/^\/api/, ""))) return;
     const method = request.method;
     if (isCookieRequest(request) && !["GET", "HEAD", "OPTIONS"].includes(method)) {
       const origin = request.header("origin") || (() => { try { return new URL(request.header("referer") ?? "").origin; } catch { return ""; } })();
@@ -93,10 +93,20 @@ export function accountGuard(services: AppwriteServices, config: BackendConfig) 
     if (raw) {
       let claims: SessionClaims | null = null;
       try { claims = verifySession(raw, config.sessionSecret); } catch { /* the route returns its normal 401 */ }
+      if (claims?.role === "staff") {
+        const place = claims.venueId ? await services.tables.getRow<Row>({ databaseId: config.appwriteDatabaseId, tableId: "venues", rowId: claims.venueId }).catch(error => {
+          if (error instanceof AppwriteException && error.code === 404) return null;
+          throw error;
+        }) : null;
+        if (!place || place.active === false || claims.version !== Number(place.staffVersion ?? 1)) throw new AccountError(401, "Сессия отозвана. Выполните вход заново.");
+      }
       if (claims?.accountId) {
         const tableId = claims.role === "hub" ? "operators" : claims.role === "staff" ? "staff_accounts" : "";
         if (!tableId) throw new AccountError(401, "Сессия недействительна.");
-        const account = await services.tables.getRow<Row>({ databaseId: config.appwriteDatabaseId, tableId, rowId: claims.accountId }).catch(() => null);
+        const account = await services.tables.getRow<Row>({ databaseId: config.appwriteDatabaseId, tableId, rowId: claims.accountId }).catch(error => {
+          if (error instanceof AppwriteException && error.code === 404) return null;
+          throw error;
+        });
         if (!account || account.active !== true || Number(account.sessionVersion) !== claims.accountVersion ||
           (claims.role === "staff" && account.venueId !== claims.venueId)) throw new AccountError(401, "Сессия завершилась. Войдите снова.");
         response.locals.accountId = claims.accountId;

@@ -1,0 +1,16 @@
+{
+  "runId": "example01",
+  "baseUrl": "http://192.168.1.20:18091",
+  "origin": "http://192.168.1.20:18088",
+  "sessionSecret": "REPLACE_WITH_INDEPENDENT_TEST_SECRET_AT_LEAST_32_CHARACTERS",
+  "fixturePath": "/private/tmp/ifm-audit/fixture.json",
+  "statisticsPerVenue": 10000,
+  "appwrite": {
+    "endpoint": "http://127.0.0.1:18080/v1",
+    "projectId": "ifm-audit-example01",
+    "databaseId": "ifm-audit-example01",
+    "bucketId": "ifm-audit-example01",
+    "apiKey": "REPLACE_WITH_TEST_PROJECT_ONLY_KEY",
+    "selfSigned": false
+  }
+}

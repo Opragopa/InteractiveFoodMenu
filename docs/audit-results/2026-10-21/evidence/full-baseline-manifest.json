@@ -1,0 +1,65 @@
+{
+  "format": "ifm-audit-result-v1",
+  "runId": "20261020",
+  "startedAt": "2026-10-21T09:32:50.101Z",
+  "mutationEvidenceVersion": 1,
+  "harnessSha256": "f2708bb29ba36561c310123cd3416aa32b8e61a46a2ce46d0e83bc71b40f4dc3",
+  "fixtureFingerprint": "61f30667dce3cb38f66d1310df200d9a75bbf050baddc651667b58c91d099c9e",
+  "softwareVersion": "d542fe8",
+  "profile": "full",
+  "harnessOnly": false,
+  "target": "http://127.0.0.1:28091",
+  "transport": "ssh-en0",
+  "writesEnabled": true,
+  "resourceMonitorAttached": true,
+  "stages": [
+    {
+      "name": "warmup",
+      "screens": 10,
+      "seconds": 180
+    },
+    {
+      "name": "step10",
+      "screens": 10,
+      "seconds": 600
+    },
+    {
+      "name": "step25",
+      "screens": 25,
+      "seconds": 600
+    },
+    {
+      "name": "target50",
+      "screens": 50,
+      "seconds": 600
+    },
+    {
+      "name": "reload50",
+      "screens": 50,
+      "seconds": 60,
+      "reload": true
+    },
+    {
+      "name": "soak50",
+      "screens": 50,
+      "seconds": 3600
+    },
+    {
+      "name": "stress100",
+      "screens": 100,
+      "seconds": 300
+    },
+    {
+      "name": "stress200",
+      "screens": 200,
+      "seconds": 300
+    }
+  ],
+  "maxInflight": 64,
+  "timeoutMs": 10000,
+  "notes": [
+    "HTTP sessions simulate screens; this is not physical TV evidence.",
+    "Initial authentication is excluded; fixtures contain pre-provisioned test sessions.",
+    "Appwrite duration is summed SDK time, not database wall time."
+  ]
+}

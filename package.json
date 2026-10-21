@@ -13,6 +13,11 @@
     "api:dev": "npm --prefix backend-api run dev",
     "api:bootstrap": "npm --prefix backend-api run build && npm --prefix backend-api run bootstrap",
     "web:dev": "npm --prefix web-display run dev",
-    "web:dev:lan": "npm --prefix web-display run dev -- --host 0.0.0.0"
+    "web:dev:lan": "npm --prefix web-display run dev -- --host 0.0.0.0",
+    "load:test": "node --test tests/load/*.test.mjs",
+    "load:stand": "node tests/load/stand.mjs",
+    "load:report": "node tests/load/report.mjs",
+    "load:reconcile": "node tests/load/reconcile.mjs",
+    "load:staff-sync": "node tests/load/staff-sync-probe.mjs"
   }
 }

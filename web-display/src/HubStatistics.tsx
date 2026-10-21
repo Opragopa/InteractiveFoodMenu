@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 
 type Epoch = { id: string; startedAt: string | null; endedAt: string | null };
@@ -30,6 +30,7 @@ export function HubStatistics({ token, venues }: { token: string; venues: Venue[
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const resetLock = useRef(false);
   const selectedVenue = venues.find(venue => venue.id === venueId);
 
   useEffect(() => {
@@ -62,10 +63,12 @@ export function HubStatistics({ token, venues }: { token: string; venues: Venue[
     }
   };
   const reset = async () => {
-    if (!selectedVenue || !window.confirm(`Начать новый период статистики точки «${selectedVenue.name}»? Прошлые периоды останутся доступны.`)) return;
+    if (resetLock.current || !selectedVenue || !window.confirm(`Начать новый период статистики точки «${selectedVenue.name}»? Прошлые периоды останутся доступны.`)) return;
+    resetLock.current = true;
     setBusy(true); setError("");
     try { await api.hubResetStatistics(token, venueId); setEpochId(""); setRevision(value => value + 1); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сбросить статистику."); setBusy(false); }
+    finally { resetLock.current = false; }
   };
   const cards: Array<[string, string]> = [
     ["menuChanges", "Изменений меню"], ["availabilityChanges", "Изменений наличия"], ["stockChanges", "Изменений остатка"],

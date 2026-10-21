@@ -7,7 +7,7 @@ android/google-services.json
 android/keystore.properties
 *.jks
 *.keystore
-node_modules/
+node_modules
 web-display/dist/
 web-display/public/legacy-connect.js
 *.tsbuildinfo
@@ -35,3 +35,6 @@ storage-debug.log
 # Local browser verification artifacts.
 .playwright-cli/
 output/playwright/
+
+# Sanitized large audit measurements, generated locally.
+output/audit/

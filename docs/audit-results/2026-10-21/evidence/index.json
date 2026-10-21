@@ -1,0 +1,16 @@
+{
+  "algorithm": "SHA-256",
+  "files": {
+    "android-mock-actions.jsonl": "d2b34c16a363544e3fc198566418fbe0b4eba90230e68c82118286af904f19ff",
+    "full-baseline-api.json": "7b8648f27fc79f5c690bc1c3353929c20fddc3600ca4747f16595728e6b76cc9",
+    "full-baseline-manifest.json": "0c63711b130e3d5e6920d3fdc02573c768491f0399bd046e860f857fd6bc2d9f",
+    "full-baseline-resources.json": "dd3f29faf9e222594f71456dd18262f8e1827f36bef27107f121eb41d1de821a",
+    "full-baseline-summary.json": "6aa04f1b17e5cbc18e395e443ec518532151c60a3720112f854113b423bf8c1e",
+    "quick-baseline-20261020-manifest.json": "c15d80f988f6fe8efafabed741d48103b71475bd5d9c717fd34c74179a5dc175",
+    "quick-baseline-20261020-summary.json": "ab43a71de1093eb3c3677048b1096dc3600aa7f3a484fd23426b6dfeb4ee28b5",
+    "regressions-baseline-20261021.json": "cb5a70c6767070b72e6cad049b84cab9ee98d57e690dfc99067ea40624c61926",
+    "regressions-fixed-20261021.json": "61a6e40011adb6d5eb67d4b9965019dd5089d7e22572128c972b29f7c3b2855c",
+    "user-stop.json": "1498171b66a92dfb0f8eaebe789ad2d0d6d6ff1cbe363912684e29611004c139",
+    "validation.json": "804cf8419f7d084db7e32e2cd3af86c3a94ac5ee0599b53ea5c9d7e83741c6c0"
+  }
+}

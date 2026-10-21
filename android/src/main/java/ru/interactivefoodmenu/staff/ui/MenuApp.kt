@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -218,7 +219,7 @@ private fun MenuScreen(state: UiState, viewModel: MenuViewModel, snackbar: Snack
                     Text(group.category.name, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
                 }
                 items(group.items, key = { it.id }) { item ->
-                    MenuAvailabilityRow(item, state.availabilityErrors[item.id], modifier = Modifier.animateItem(placementSpec = spring())) { checked ->
+                    MenuAvailabilityRow(item, state.availabilityErrors[item.id], busy = state.busy, onAdjust = { viewModel.adjustStock(item, it) }, onStock = { viewModel.saveStock(item, it) }, modifier = Modifier.animateItem(placementSpec = spring())) { checked ->
                         viewModel.toggle(item, checked)
                         scope.launch {
                             val result = snackbar.showSnackbar(
@@ -237,8 +238,9 @@ private fun MenuScreen(state: UiState, viewModel: MenuViewModel, snackbar: Snack
 }
 
 @Composable
-private fun MenuAvailabilityRow(item: MenuItem, availabilityError: String?, modifier: Modifier = Modifier, onUnavailableChange: (Boolean) -> Unit) {
-    val unavailable = !item.isAvailable
+private fun MenuAvailabilityRow(item: MenuItem, availabilityError: String?, busy: Boolean, onAdjust: (Int) -> Unit, onStock: (String) -> Unit, modifier: Modifier = Modifier, onUnavailableChange: (Boolean) -> Unit) {
+    val unavailable = !item.available
+    var quantity by remember(item.id, item.stockQuantity) { mutableStateOf(item.stockQuantity?.toString().orEmpty()) }
     val textColor by animateColorAsState(
         if (unavailable) MaterialTheme.colorScheme.onSurface.copy(alpha = .64f) else MaterialTheme.colorScheme.onSurface,
         animationSpec = spring(), label = "itemTextColor",
@@ -259,6 +261,19 @@ private fun MenuAvailabilityRow(item: MenuItem, availabilityError: String?, modi
                 )
             }
         }
+        if (item.stockQuantity != null) {
+            Column(horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton({ onAdjust(-1) }, enabled = !busy && item.stockQuantity > 0) { Text("−1") }
+                    Text("${item.stockQuantity} шт.")
+                    TextButton({ onAdjust(1) }, enabled = !busy && item.stockQuantity < 2_000_000_000) { Text("+1") }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(quantity, { quantity = it }, label = { Text("Остаток") }, enabled = !busy, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.width(100.dp))
+                    TextButton({ onStock(quantity) }, enabled = !busy && quantity.isNotBlank()) { Text("Задать") }
+                }
+            }
+        } else {
         Text(
             "Нет в наличии",
             style = MaterialTheme.typography.labelMedium,
@@ -266,7 +281,8 @@ private fun MenuAvailabilityRow(item: MenuItem, availabilityError: String?, modi
             color = if (unavailable) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 8.dp),
         )
-        OutOfStockCheckbox(unavailable, onUnavailableChange, item.name)
+        OutOfStockCheckbox(unavailable, { if (!busy) onUnavailableChange(it) }, item.name)
+        }
     }
 }
 
@@ -386,7 +402,8 @@ private fun ItemsEditor(state: UiState, viewModel: MenuViewModel) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button({ adding = true }, enabled = state.menu.categories.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, null); Text("Добавить позицию") }
                 OutlinedButton({ csvPicker.launch(arrayOf("text/csv", "text/comma-separated-values", "application/csv", "text/plain")) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(if (state.busy) "Импорт…" else "Импортировать CSV") }
-                Text("Столбцы: Категория, Название, Цена, В наличии (Да/Нет). Импорт добавляет позиции.", style = MaterialTheme.typography.bodySmall)
+                if (state.csvRetryRows.isNotEmpty()) OutlinedButton(viewModel::retryCsvImport, enabled = !state.busy) { Text("Повторить неуспешные строки: ${state.csvRetryRows.size}") }
+                Text("Столбцы: Категория, Название, Цена, Количество. Совпавшие позиции обновляют только остаток; новые добавляются.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton({ ocrPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (state.ocrBusy) "Распознавание…" else "Импортировать меню по фото") }
             }
         }
@@ -404,8 +421,8 @@ private fun ItemsEditor(state: UiState, viewModel: MenuViewModel) {
             }
         }
     }
-    if (adding || editing != null) ItemDialog(editing, state.menu.categories, { adding = false; editing = null }) { category, name, price ->
-        viewModel.saveItem(editing, category, name, price); adding = false; editing = null
+    if (adding || editing != null) ItemDialog(editing, state.menu.categories, { adding = false; editing = null }) { category, name, price, quantity ->
+        viewModel.saveItem(editing, category, name, price, quantity); adding = false; editing = null
     }
     deleting?.let { target -> ConfirmDelete("Удалить позицию «${target.name}»?") { confirmed -> if (confirmed) viewModel.deleteItem(target); deleting = null } }
     state.ocrPreview?.let { preview ->
@@ -419,9 +436,10 @@ private fun ItemsEditor(state: UiState, viewModel: MenuViewModel) {
 }
 
 @Composable
-private fun ItemDialog(existing: MenuItem?, categories: List<MenuCategory>, dismiss: () -> Unit, save: (String, String, String) -> Unit) {
+private fun ItemDialog(existing: MenuItem?, categories: List<MenuCategory>, dismiss: () -> Unit, save: (String, String, String, String) -> Unit) {
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var price by remember(existing?.id) { mutableStateOf(existing?.let { Validation.minorToInput(it.priceMinor) }.orEmpty()) }
+    var quantity by remember(existing?.id) { mutableStateOf(existing?.stockQuantity?.toString() ?: if (existing == null) "0" else "") }
     var categoryId by remember(existing?.id) { mutableStateOf(existing?.categoryId ?: categories.minByOrNull { it.sortOrder }?.id.orEmpty()) }
     AlertDialog(
         onDismissRequest = dismiss,
@@ -430,16 +448,17 @@ private fun ItemDialog(existing: MenuItem?, categories: List<MenuCategory>, dism
             Column {
                 OutlinedTextField(name, { name = it }, label = { Text("Название") }, singleLine = true)
                 OutlinedTextField(price, { price = it }, label = { Text("Цена, ₽") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true)
+                OutlinedTextField(quantity, { quantity = it }, label = { Text("Количество, шт.") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
                 Text("Категория", Modifier.padding(top = 12.dp), fontWeight = FontWeight.Bold)
                 categories.sortedBy { it.sortOrder }.forEach { category ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(categoryId == category.id, { categoryId = category.id })
+                        RadioButton(categoryId == category.id, { categoryId = category.id }, enabled = existing == null)
                         Text(category.name)
                     }
                 }
             }
         },
-        confirmButton = { TextButton({ save(categoryId, name, price) }) { Text("Сохранить") } },
+        confirmButton = { TextButton({ save(categoryId, name, price, quantity) }) { Text("Сохранить") } },
         dismissButton = { TextButton(dismiss) { Text("Отмена") } },
     )
 }

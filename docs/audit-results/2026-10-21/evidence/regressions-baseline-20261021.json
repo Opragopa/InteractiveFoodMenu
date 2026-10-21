@@ -1,0 +1,93 @@
+{
+  "format": "ifm-appwrite-regressions-v1",
+  "phase": "baseline",
+  "runId": "20261020",
+  "startedAt": "2026-10-21T08:28:12.412Z",
+  "datastore": "appwrite",
+  "results": [
+    {
+      "name": "staff_version_route_and_cross_venue_isolation",
+      "passed": false,
+      "durationMs": 29,
+      "failure": "expected HTTP 200, got 403"
+    },
+    {
+      "name": "staff_revocation_and_disabled_venue",
+      "passed": false,
+      "durationMs": 201,
+      "failure": "expected HTTP 401, got 200"
+    },
+    {
+      "name": "display_login_ignores_unrelated_revoked_staff_cookie",
+      "passed": false,
+      "durationMs": 237,
+      "failure": "expected HTTP 401, got 200"
+    },
+    {
+      "name": "mass_rotate_101_tokens_and_old_link_reauthentication",
+      "passed": false,
+      "durationMs": 8233,
+      "failure": "every old display link must be revoked"
+    },
+    {
+      "name": "mass_revoke-all_201_tokens_and_old_link_reauthentication",
+      "passed": false,
+      "durationMs": 16161,
+      "failure": "every old display link must be revoked"
+    },
+    {
+      "name": "mass_venue-revoke_501_tokens_and_old_link_reauthentication",
+      "passed": false,
+      "durationMs": 35782,
+      "failure": "every old display link must be revoked"
+    },
+    {
+      "name": "parallel_pairing_and_idempotent_retry",
+      "passed": false,
+      "durationMs": 284,
+      "failure": "parallel retries must share one URL"
+    },
+    {
+      "name": "competing_venues_cannot_reuse_pairing",
+      "passed": false,
+      "durationMs": 210,
+      "failure": "one venue must win the QR claim"
+    },
+    {
+      "name": "preseeded_interrupted_pairing_claim_recovers_without_duplicate",
+      "passed": false,
+      "durationMs": 295,
+      "failure": "recovery must return the existing deterministic display claim"
+    },
+    {
+      "name": "atomic_stock_bounds_and_transition_statistics",
+      "passed": false,
+      "durationMs": 266,
+      "failure": "one actual availability transition must produce one event"
+    },
+    {
+      "name": "absolute_stock_and_adjust_share_transition_order",
+      "passed": false,
+      "durationMs": 244,
+      "failure": "Expected values to be strictly equal:"
+    },
+    {
+      "name": "moscow_day_epoch_and_cross_venue_statistics",
+      "passed": true,
+      "durationMs": 460,
+      "observed": {
+        "moscowDayCount": 2,
+        "currentEpochCount": 1,
+        "archivedEpochCount": 1,
+        "crossVenue": "excluded"
+      }
+    }
+  ],
+  "cleanup": {
+    "passed": true,
+    "rowsRemoved": 37,
+    "seededFixtureRetained": true
+  },
+  "finishedAt": "2026-10-21T08:29:43.290Z",
+  "passed": false
+}

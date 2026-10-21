@@ -86,7 +86,7 @@ test("only hub can read or reset a venue period", async () => {
   const address = server.address(); assert.ok(address && typeof address === "object");
   const base = `http://127.0.0.1:${address.port}`;
   const hub = { authorization: `Bearer ${signSession({ role: "hub" }, config.sessionSecret)}` };
-  const staff = { authorization: `Bearer ${signSession({ role: "staff", venueId: "v1" }, config.sessionSecret)}` };
+  const staff = { authorization: `Bearer ${signSession({ role: "staff", venueId: "v1", version: 1 }, config.sessionSecret)}` };
   try {
     assert.equal((await fetch(`${base}/api/hub/venues/v1/statistics?from=2026-10-01&to=2026-10-12`, { headers: staff })).status, 403);
     assert.equal((await fetch(`${base}/api/hub/venues/v1/statistics/reset`, { method: "POST", headers: staff })).status, 403);

@@ -28,7 +28,10 @@ data class MenuItem(
     val priceMinor: Long = 0,
     val sortOrder: Int = 0,
     var isAvailable: Boolean = true,
-)
+    val stockQuantity: Int? = null,
+) {
+    val available: Boolean get() = stockQuantity?.let { it > 0 } ?: isAvailable
+}
 
 data class MenuSnapshot(
     val venue: Venue? = null,

@@ -28,7 +28,7 @@ fun groupedMenu(categories: List<MenuCategory>, items: List<MenuItem>, query: St
                 .filter { it.categoryId == category.id }
                 .filter { needle.isEmpty() || it.name.lowercase().contains(needle) }
                 // Available dishes stay at the top; sold-out dishes remain visible below them.
-                .sortedWith(compareBy<MenuItem> { !it.isAvailable }.thenBy { it.sortOrder }.thenBy { it.name })
+                .sortedWith(compareBy<MenuItem> { !it.available }.thenBy { it.sortOrder }.thenBy { it.name })
                 .toList()
             matches.takeIf { it.isNotEmpty() }?.let { GroupedMenu(category, it) }
         }

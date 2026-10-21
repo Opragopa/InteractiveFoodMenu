@@ -6,7 +6,13 @@ export type ApiSession = { token: string; venueId: string };
 export type BulkAvailabilityResponse = { updatedCount: number; items: MenuItem[]; menuVersion: number };
 
 export class ApiRequestError extends Error {
-  constructor(message: string, public status: number) { super(message); }
+  constructor(message: string, public status: number, public outcomeUnknown = false) { super(message); }
+}
+
+const REQUEST_TIMEOUT_MS = 15_000;
+function networkError(options: RequestInit) {
+  const unknown = !["GET", "HEAD"].includes((options.method ?? "GET").toUpperCase());
+  return new ApiRequestError(unknown ? "Нет ответа сервера. Результат записи неизвестен; проверьте актуальные данные перед повтором." : "Сервер не ответил. Проверьте подключение.", 0, unknown);
 }
 
 function requestWithXhr<T>(url: string, options: RequestInit): Promise<T> {
@@ -14,23 +20,27 @@ function requestWithXhr<T>(url: string, options: RequestInit): Promise<T> {
     const xhr = new XMLHttpRequest();
     xhr.open(options.method ?? "GET", url, true);
     xhr.withCredentials = true;
+    xhr.timeout = REQUEST_TIMEOUT_MS;
     const headers = options.headers as Record<string, string> | undefined;
     Object.keys(headers ?? {}).forEach((name) => xhr.setRequestHeader(name, headers?.[name] ?? ""));
     xhr.onreadystatechange = () => {
-      if (xhr.readyState !== 4) return;
+      if (xhr.readyState !== 4 || xhr.status === 0) return;
       if (xhr.status === 204) {
         resolve(undefined as T);
         return;
       }
       let data: { message?: string } & T = {} as { message?: string } & T;
-      try { data = xhr.responseText ? JSON.parse(xhr.responseText) : data; } catch { /* keep the generic error */ }
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : data;
+        if (xhr.status >= 200 && xhr.status < 300 && (!xhr.responseText || !data || typeof data !== "object")) { reject(networkError(options)); return; }
+      } catch { if (xhr.status >= 200 && xhr.status < 300) { reject(networkError(options)); return; } }
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new ApiRequestError(data.message ?? "Сервер не выполнил запрос.", xhr.status));
+        reject(new ApiRequestError(data?.message ?? "Сервер не выполнил запрос.", xhr.status));
         return;
       }
       resolve(data);
     };
-    xhr.onerror = () => reject(new ApiRequestError("Не удалось подключиться к серверу.", 0));
+    xhr.onerror = xhr.ontimeout = xhr.onabort = () => reject(networkError(options));
     xhr.send(typeof options.body === "string" ? options.body : null);
   });
 }
@@ -50,11 +60,24 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   // Keeping the fallback here makes every route (including the display hash)
   // usable instead of relying only on the connect-page redirect.
   if (typeof fetch !== "function") return requestWithXhr<T>(url, requestOptions);
-  const response = await fetch(url, requestOptions);
-  if (response.status === 204) return undefined as T;
-  const data = await response.json().catch(() => ({})) as { message?: string } & T;
-  if (!response.ok) throw new ApiRequestError(data.message ?? "Сервер не выполнил запрос.", response.status);
-  return data;
+  // Some legacy browsers have fetch but no AbortController; XHR still enforces a deadline.
+  if (typeof AbortController !== "function") return requestWithXhr<T>(url, requestOptions);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...requestOptions, signal: controller.signal });
+    if (response.status === 204) return undefined as T;
+    const data = await response.json().catch(cause => {
+      if (response.ok) throw cause;
+      return {};
+    }) as { message?: string } & T;
+    if (!response.ok) throw new ApiRequestError(data?.message ?? "Сервер не выполнил запрос.", response.status);
+    if (!data || typeof data !== "object") throw networkError(requestOptions);
+    return data;
+  } catch (cause) {
+    if (cause instanceof ApiRequestError) throw cause;
+    throw networkError(requestOptions);
+  } finally { window.clearTimeout(timeout); }
 }
 
 function logoContentBase64(file: File): Promise<string> {

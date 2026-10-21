@@ -1,0 +1,9 @@
+{
+  "matchedApiRecords": 13063,
+  "workloadRequestsWithId": 13063,
+  "unmatchedRequestIds": 0,
+  "unparsedPrivateApiLogLines": 0,
+  "totalAppwriteCalls": 64470,
+  "summedAppwriteDurationMs": 1006318,
+  "meaning": "Summed SDK time includes parallel calls; not database wall time."
+}

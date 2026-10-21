@@ -174,29 +174,57 @@ function StaffScreen() {
   const [confirmDelete, setConfirmDelete] = useState<{ kind: "category" | "item"; id: string; name: string } | null>(null);
   const availabilityListRef = useRef<HTMLDivElement | null>(null);
   const previousRowsRef = useRef<Map<string, number> | null>(null);
+  const mutationRef = useRef(false);
+  const sessionEpoch = useRef(0);
+  const menuReadId = useRef(0);
+  const menuVersionRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => { sessionEpoch.current++; }, []);
   const login = async () => {
+    if (mutationRef.current) return;
+    mutationRef.current = true;
+    const epoch = ++sessionEpoch.current;
     setBusy(true); setError("");
     try {
       await (invitation ? api.staffActivate(invitation, username, password) : api.staffPasswordLogin(code.trim().toLowerCase(), username, password));
+      if (epoch !== sessionEpoch.current) return;
       saveVenueCredentials(code, "");
       localStorage.setItem("ifm-staff-session", "cookie");
       if (invitation) window.history.replaceState(null, "", window.location.pathname + window.location.search);
-      setSessionToken("cookie");
-      setPassword("");
+      setSessionToken("cookie"); setPassword("");
     } catch (cause) {
+      if (epoch !== sessionEpoch.current) return;
       reportClientError("staff_login_failed", cause);
       setError(cause instanceof Error ? cause.message : "Не удалось войти");
-    }
-    finally { setBusy(false); }
+    } finally { if (epoch === sessionEpoch.current) { mutationRef.current = false; setBusy(false); } }
+  };
+  const logout = async () => {
+    const epoch = ++sessionEpoch.current;
+    menuReadId.current++; menuVersionRef.current = undefined;
+    mutationRef.current = true;
+    setBusy(true); setStockBusyId(null); setSessionToken("");
+    setVenue(null); setCategories([]); setItems([]); setStockDrafts({}); setNutritionDrafts({});
+    setCsvRows([]); setCsvProgress(null); setLastUpdatedAt(null); setError("");
+    setNewCategory(""); setNewItem({ name: "", price: "", stockQuantity: "", categoryId: "", servingSize: "", caloriesKcal: "" });
+    setEditingName(null); setConfirmDelete(null); setTab("availability");
+    setSearch(""); setCategoryFilter(""); setAvailabilityFilter("all");
+    setToast(""); setShowStaffQr(false); setStaffQr(""); setShowOnboarding(false);
+    localStorage.removeItem("ifm-staff-session");
+    try { await api.authLogout("staff"); }
+    catch (cause) { if (epoch === sessionEpoch.current) setError(cause instanceof Error ? cause.message : "Не удалось завершить сессию."); }
+    finally { if (epoch === sessionEpoch.current) { mutationRef.current = false; setBusy(false); } }
   };
   const loadMenu = useCallback(async () => {
     if (!sessionToken) return;
+    const epoch = sessionEpoch.current;
+    const readId = ++menuReadId.current;
     setMenuLoading(true);
     try {
       const menu = await api.menu(sessionToken);
+      if (epoch !== sessionEpoch.current || readId !== menuReadId.current) return;
       if (!menu?.venue || !Array.isArray(menu.categories) || !Array.isArray(menu.items)) {
         throw new Error("Не удалось загрузить меню. Проверьте подключение к серверу.");
       }
+      menuVersionRef.current = Number(menu.venue.menuVersion ?? 1);
       setVenue(menu.venue as Venue);
       setCategories(menu.categories as Category[]);
       setItems(menu.items as MenuItem[]);
@@ -204,15 +232,44 @@ function StaffScreen() {
       setLastUpdatedAt(Date.now());
       setShowOnboarding(localStorage.getItem(`ifm-staff-onboarding-${code}`) !== "dismissed");
     } finally {
-      setMenuLoading(false);
+      if (epoch === sessionEpoch.current && readId === menuReadId.current) setMenuLoading(false);
     }
   }, [sessionToken, code]);
   useEffect(() => {
     if (!sessionToken) return;
+    const epoch = sessionEpoch.current;
     void loadMenu().catch(cause => {
+      if (epoch !== sessionEpoch.current) return;
       if (cause instanceof ApiRequestError && cause.status === 401) { localStorage.removeItem("ifm-staff-session"); setSessionToken(""); setError("Сессия завершилась. Войдите в кабинет снова."); return; }
       setError(cause instanceof Error ? cause.message : "Не удалось загрузить меню.");
     });
+  }, [sessionToken, loadMenu]);
+  useEffect(() => {
+    if (!sessionToken) return;
+    const epoch = sessionEpoch.current;
+    let stopped = false, running = false, delay = 5000;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => { if (!stopped) timer = setTimeout(() => void poll(), delay); };
+    const poll = async () => {
+      clearTimeout(timer);
+      if (stopped || running) return;
+      if (document.hidden || mutationRef.current) { schedule(); return; }
+      running = true;
+      try {
+        const state = await api.menuVersion(sessionToken);
+        if (stopped || epoch !== sessionEpoch.current) return;
+        if (Number(state.version) !== menuVersionRef.current && !mutationRef.current) await loadMenu();
+        delay = 5000;
+      } catch (cause) {
+        if (stopped || epoch !== sessionEpoch.current) return;
+        delay = Math.min(delay * 2, 60000);
+        if (cause instanceof ApiRequestError && cause.status === 401) void logout();
+      } finally { running = false; schedule(); }
+    };
+    const refresh = () => { if (!document.hidden) void poll(); };
+    schedule();
+    window.addEventListener("focus", refresh); window.addEventListener("online", refresh); document.addEventListener("visibilitychange", refresh);
+    return () => { stopped = true; clearTimeout(timer); window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", refresh); };
   }, [sessionToken, loadMenu]);
   useLayoutEffect(() => {
     const previous = previousRowsRef.current;
@@ -249,186 +306,141 @@ function StaffScreen() {
   const filteredItems = filterMenuItems(items, search, categoryFilter, availabilityFilter);
   const grouped = [...categories].sort((a, b) => a.sortOrder - b.sortOrder).map(category => ({ category, items: filteredItems.filter(item => item.categoryId === category.id).sort((a, b) => Number(!itemIsAvailable(a)) - Number(!itemIsAvailable(b)) || a.sortOrder - b.sortOrder) })).filter(group => group.items.length);
   const pageEstimate = estimateMenuPages(categories, items, 1366, 768, venue?.menuItemFontSizePx ?? 34, venue?.menuItemGapPx ?? 12);
+  const newItemCategoryId = categories.some(category => category.id === newItem.categoryId) ? newItem.categoryId : categories[0]?.id ?? "";
   const setToastMessage = (message: string) => { setToast(message); window.setTimeout(() => setToast(current => current === message ? "" : current), 3500); };
+  const mutate = async <T,>(operation: () => Promise<T>, success: (result: T) => void | Promise<void>, stockId: string | null = null) => {
+    if (mutationRef.current) return;
+    mutationRef.current = true;
+    const epoch = sessionEpoch.current;
+    menuReadId.current++;
+    setBusy(true); setStockBusyId(stockId); setError("");
+    try {
+      const result = await operation();
+      if (epoch === sessionEpoch.current) await success(result);
+    } catch (cause) {
+      if (epoch !== sessionEpoch.current) return;
+      if (cause instanceof ApiRequestError && cause.status === 401) { await logout(); setError("Сессия завершилась. Войдите в кабинет снова."); }
+      else if (cause instanceof ApiRequestError && cause.outcomeUnknown) {
+        await loadMenu().catch(() => undefined);
+        if (epoch === sessionEpoch.current) setError("Результат записи неизвестен. Данные перечитаны по возможности. Проверьте остаток перед повтором; запрос автоматически не повторялся.");
+      } else setError(cause instanceof Error ? cause.message : "Не удалось сохранить изменения.");
+    } finally {
+      if (epoch === sessionEpoch.current) { mutationRef.current = false; setBusy(false); setStockBusyId(null); }
+    }
+  };
   const saveStock = async (item: MenuItem) => {
     const value = (stockDrafts[item.id] ?? "").trim();
     if (!/^\d+$/.test(value) || Number(value) > 2_000_000_000) { setError("Укажите целое количество от 0 до 2000000000."); return; }
-    setStockBusyId(item.id); setError("");
-    try {
-      const result = await api.updateItem(sessionToken, item.id, { stockQuantity: Number(value) });
+    await mutate(() => api.updateItem(sessionToken, item.id, { stockQuantity: Number(value) }), result => {
       setItems(current => current.map(entry => entry.id === item.id ? result.item as MenuItem : entry));
       setStockDrafts(current => { const next = { ...current }; delete next[item.id]; return next; });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить остаток."); }
-    finally { setStockBusyId(null); }
+    }, item.id);
   };
   const adjustStock = async (item: MenuItem, delta: 1 | -1) => {
-    setStockBusyId(item.id); setError("");
-    try {
-      const result = await api.adjustItemStock(sessionToken, item.id, delta);
+    await mutate(() => api.adjustItemStock(sessionToken, item.id, delta), result => {
       setItems(current => current.map(entry => entry.id === item.id ? result.item : entry));
       setStockDrafts(current => { const next = { ...current }; delete next[item.id]; return next; });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось изменить остаток."); }
-    finally { setStockBusyId(null); }
+    }, item.id);
   };
   const saveCategory = async () => {
     const name = newCategory.trim();
     if (!name) { setError("Введите название категории."); return; }
-    setBusy(true); setError("");
-    try {
-      const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length });
-      setCategories(current => [...current, result.category as Category]);
-      setNewCategory("");
-    } catch (cause) {
-      reportClientError("category_create_failed", cause);
-      setError(cause instanceof Error ? cause.message : "Не удалось добавить категорию.");
-    } finally { setBusy(false); }
+    await mutate(() => api.createCategory(sessionToken, { name, sortOrder: categories.length }), result => { setCategories(current => [...current, result.category as Category]); setNewCategory(""); });
   };
   const saveEditedName = async () => {
     if (!editingName) return;
-    const name = editingName.name.trim();
+    const target = editingName;
+    const name = target.name.trim();
     if (!name) { setError("Название не может быть пустым."); return; }
-    setBusy(true); setError("");
-    try {
-      if (editingName.kind === "category") {
-        const result = await api.updateCategory(sessionToken, editingName.id, { name });
-        setCategories(current => current.map(value => value.id === editingName.id ? result.category as Category : value));
-      } else {
-        const result = await api.updateItem(sessionToken, editingName.id, { name });
-        setItems(current => current.map(value => value.id === editingName.id ? result.item as MenuItem : value));
-      }
+    await mutate(async () => target.kind === "category" ? api.updateCategory(sessionToken, target.id, { name }) : api.updateItem(sessionToken, target.id, { name }), result => {
+      if ("category" in result) setCategories(current => current.map(value => value.id === target.id ? result.category as Category : value));
+      else setItems(current => current.map(value => value.id === target.id ? result.item as MenuItem : value));
       setToastMessage("Название сохранено."); setEditingName(null);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось изменить название."); }
-    finally { setBusy(false); }
+    });
   };
   const saveItem = async () => {
     const priceMinor = Math.round(Number(newItem.price.replace(",", ".")) * 100);
-    if (!newItem.name.trim() || !newItem.categoryId || !Number.isFinite(priceMinor) || priceMinor < 0) { setError("Заполните название, категорию и корректную цену."); return; }
+    if (!newItem.name.trim() || !newItemCategoryId || !newItem.price.trim() || !Number.isFinite(priceMinor) || priceMinor < 0) { setError("Заполните название, категорию и корректную цену."); return; }
     if (!/^\d+$/.test(newItem.stockQuantity.trim()) || Number(newItem.stockQuantity) > 2_000_000_000) { setError("Укажите целое количество от 0 до 2000000000."); return; }
     if (newItem.servingSize.trim().length > 40 || (newItem.caloriesKcal !== "" && (!/^\d+$/.test(newItem.caloriesKcal) || Number(newItem.caloriesKcal) > 100000))) { setError("Проверьте выход (до 40 символов) и калорийность (целое число до 100000)."); return; }
-    setBusy(true); setError("");
-    try {
-      const result = await api.createItem(sessionToken, { categoryId: newItem.categoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItem.categoryId).length, stockQuantity: Number(newItem.stockQuantity), servingSize: newItem.servingSize.trim() || undefined, caloriesKcal: newItem.caloriesKcal === "" ? undefined : Number(newItem.caloriesKcal) });
+    await mutate(() => api.createItem(sessionToken, { categoryId: newItemCategoryId, name: newItem.name.trim(), priceMinor, sortOrder: items.filter(i => i.categoryId === newItemCategoryId).length, stockQuantity: Number(newItem.stockQuantity), servingSize: newItem.servingSize.trim() || undefined, caloriesKcal: newItem.caloriesKcal === "" ? undefined : Number(newItem.caloriesKcal) }), result => {
       setItems(current => [...current, result.item as MenuItem]);
-      setNewItem({ name: "", price: "", stockQuantity: "", categoryId: newItem.categoryId, servingSize: "", caloriesKcal: "" });
-    } catch (cause) {
-      reportClientError("item_create_failed", cause);
-      setError(cause instanceof Error ? cause.message : "Не удалось добавить позицию.");
-    } finally { setBusy(false); }
+      setNewItem({ name: "", price: "", stockQuantity: "", categoryId: newItemCategoryId, servingSize: "", caloriesKcal: "" });
+    });
   };
-  const deleteCategory = async (category: Category) => {
-    setConfirmDelete({ kind: "category", id: category.id, name: category.name });
-  };
-  const deleteItem = async (item: MenuItem) => {
-    setConfirmDelete({ kind: "item", id: item.id, name: item.name });
-  };
+  const deleteCategory = async (category: Category) => { setConfirmDelete({ kind: "category", id: category.id, name: category.name }); };
+  const deleteItem = async (item: MenuItem) => { setConfirmDelete({ kind: "item", id: item.id, name: item.name }); };
   const performDelete = async () => {
     if (!confirmDelete) return;
-    setBusy(true); setError("");
-    try {
-      if (confirmDelete.kind === "category") {
-        await api.deleteCategory(sessionToken, confirmDelete.id);
-        setCategories(current => current.filter(value => value.id !== confirmDelete.id));
-      } else {
-        await api.deleteItem(sessionToken, confirmDelete.id);
-        setItems(current => current.filter(value => value.id !== confirmDelete.id));
-      }
-      setConfirmDelete(null);
-      setToastMessage("Удалено. Если это было ошибкой, обновите данные и восстановите позицию вручную.");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось удалить объект.");
-    } finally { setBusy(false); }
+    const target = confirmDelete;
+    await mutate(() => target.kind === "category" ? api.deleteCategory(sessionToken, target.id) : api.deleteItem(sessionToken, target.id), () => {
+      if (target.kind === "category") setCategories(current => current.filter(value => value.id !== target.id));
+      else setItems(current => current.filter(value => value.id !== target.id));
+      setConfirmDelete(null); setToastMessage("Удалено.");
+    });
   };
   const saveNutrition = async (item: MenuItem) => {
     const draft = nutritionDrafts[item.id] ?? { servingSize: item.servingSize == null ? "" : String(item.servingSize), caloriesKcal: item.caloriesKcal == null ? "" : String(item.caloriesKcal) };
-    const servingSize = draft.servingSize.trim() || null; const caloriesKcal = draft.caloriesKcal.trim() === "" ? null : /^\d+$/.test(draft.caloriesKcal.trim()) ? Number(draft.caloriesKcal.trim()) : NaN;
+    const servingSize = draft.servingSize.trim() || null;
+    const caloriesKcal = draft.caloriesKcal.trim() === "" ? null : /^\d+$/.test(draft.caloriesKcal.trim()) ? Number(draft.caloriesKcal.trim()) : NaN;
     if (servingSize && servingSize.length > 40) { setError("Значение выхода должно быть не длиннее 40 символов."); return; }
     if (typeof caloriesKcal === "number" && (!Number.isSafeInteger(caloriesKcal) || caloriesKcal < 0 || caloriesKcal > 100000)) { setError("Калорийность должна быть целым числом от 0 до 100000."); return; }
-    setBusy(true); setError("");
-    try { const result = await api.updateItem(sessionToken, item.id, { servingSize, caloriesKcal }); setItems(current => current.map(value => value.id === item.id ? result.item as MenuItem : value)); setToastMessage(`Параметры «${item.name}» сохранены.`); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось сохранить параметры позиции."); }
-    finally { setBusy(false); }
+    await mutate(() => api.updateItem(sessionToken, item.id, { servingSize, caloriesKcal }), result => { setItems(current => current.map(value => value.id === item.id ? result.item as MenuItem : value)); setToastMessage(`Параметры «${item.name}» сохранены.`); });
   };
-  const saveVenueSettings = async (settings: Partial<Venue>) => {
-    setBusy(true);
-    try {
-      const result = await api.updateVenue(sessionToken, settings);
-      setVenue(result.venue as Venue);
-    } finally { setBusy(false); }
-  };
+  const saveVenueSettings = async (settings: Partial<Venue>) => { await mutate(() => api.updateVenue(sessionToken, settings), result => { setVenue(result.venue as Venue); }); };
   const importCsv = async () => {
-    if (!csvRows.length) return;
-    setBusy(true); setError("");
-    setCsvProgress({ current: 0, total: csvRows.length, failed: [] });
-    const failed: string[] = [];
-    const failedRows = new Set<number>();
-    try {
-      const categoryIds = new Map(categories.map(category => [normalizeCsvKey(category.name), category.id]));
-      const ambiguousCategories = new Set(categories.map(category => normalizeCsvKey(category.name)).filter((key, index, keys) => keys.indexOf(key) !== index));
-      const categoryOrders = new Map(categories.map(category => [category.id, items.filter(item => item.categoryId === category.id).length]));
-      const knownItems = [...items];
-      for (const [index, name] of csvRows.map(row => row.category).filter((name, index, names) => names.findIndex(other => normalizeCsvKey(other) === normalizeCsvKey(name)) === index).entries()) {
-        const key = normalizeCsvKey(name);
-        if (!categoryIds.has(key)) {
-          try {
-            const result = await api.createCategory(sessionToken, { name, sortOrder: categories.length + index });
-            categoryIds.set(key, result.category.id); categoryOrders.set(result.category.id, 0);
-          } catch {
-            failed.push(`Категория: ${name}`);
-          }
-        }
-      }
-      for (const [index, row] of csvRows.entries()) {
-        const categoryKey = normalizeCsvKey(row.category);
-        if (ambiguousCategories.has(categoryKey)) {
-          failed.push(`Строка ${index + 2}: найдено несколько категорий «${row.category}»`);
-          failedRows.add(index);
-          setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
-          continue;
-        }
-        const categoryId = categoryIds.get(categoryKey);
-        if (!categoryId) {
-          failed.push(`Строка ${index + 2}: категория «${row.category}» не создана`);
-          failedRows.add(index);
-          setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
-          continue;
-        }
-        const matches = matchingCsvItems(knownItems, categoryId, row.name);
+    if (!csvRows.length || mutationRef.current) return;
+    const epoch = sessionEpoch.current;
+    const selectedRows = [...csvRows];
+    await mutate(async () => {
+      // Reconcile successful rows from an earlier partial attempt before matching names.
+      const fresh = await api.menu(sessionToken);
+      if (epoch !== sessionEpoch.current) throw new Error("Сессия завершилась.");
+      const categoryIds = new Map((fresh.categories as Category[]).map(category => [normalizeCsvKey(category.name), category.id]));
+      const keys = (fresh.categories as Category[]).map(category => normalizeCsvKey(category.name));
+      const ambiguousCategories = new Set(keys.filter((key, index) => keys.indexOf(key) !== index));
+      const knownItems = [...fresh.items] as MenuItem[];
+      const categoryOrders = new Map((fresh.categories as Category[]).map(category => [category.id, knownItems.filter(item => item.categoryId === category.id).length]));
+      const failed: string[] = [], remaining: CsvMenuRow[] = [];
+      setCsvProgress({ current: 0, total: selectedRows.length, failed: [] });
+      for (const [index, row] of selectedRows.entries()) {
+        if (epoch !== sessionEpoch.current) throw new Error("Сессия завершилась.");
         try {
+          const key = normalizeCsvKey(row.category);
+          if (ambiguousCategories.has(key)) throw new Error(`найдено несколько категорий «${row.category}»`);
+          let categoryId = categoryIds.get(key);
+          if (!categoryId) {
+            const result = await api.createCategory(sessionToken, { name: row.category, sortOrder: categoryIds.size });
+            if (epoch !== sessionEpoch.current) throw new Error("Сессия завершилась.");
+            categoryId = result.category.id;
+            categoryIds.set(key, categoryId!); categoryOrders.set(categoryId!, 0);
+          }
+          const matches = matchingCsvItems(knownItems, categoryId!, row.name);
           if (matches.length > 1) throw new Error(`найдено несколько позиций «${row.name}» в категории «${row.category}»`);
           if (matches.length === 1) {
             const result = await api.updateItem(sessionToken, matches[0].id, { stockQuantity: row.stockQuantity });
             knownItems.splice(knownItems.findIndex(item => item.id === matches[0].id), 1, result.item as MenuItem);
           } else {
-            const sortOrder = categoryOrders.get(categoryId) ?? 0;
+            const sortOrder = categoryOrders.get(categoryId!) ?? 0;
             const result = await api.createItem(sessionToken, { categoryId, name: row.name, priceMinor: row.priceMinor, sortOrder, stockQuantity: row.stockQuantity });
-            knownItems.push(result.item as MenuItem);
-            categoryOrders.set(categoryId, sortOrder + 1);
+            knownItems.push(result.item as MenuItem); categoryOrders.set(categoryId!, sortOrder + 1);
           }
         } catch (cause) {
-          failed.push(`Строка ${index + 2}: ${cause instanceof Error ? cause.message : `не удалось сохранить «${row.name}»`}`);
-          failedRows.add(index);
+          if (epoch !== sessionEpoch.current) throw cause;
+          if (cause instanceof ApiRequestError && cause.status === 401) throw cause;
+          if (cause instanceof ApiRequestError && cause.outcomeUnknown) { setCsvRows([...remaining, ...selectedRows.slice(index)]); throw cause; }
+          failed.push(`Строка ${index + 2}: ${cause instanceof Error ? cause.message : "не удалось сохранить"}`); remaining.push(row);
         }
-        setCsvProgress({ current: index + 1, total: csvRows.length, failed: [...failed] });
+        if (epoch === sessionEpoch.current) setCsvProgress({ current: index + 1, total: selectedRows.length, failed: [...failed] });
       }
-      setCsvRows(csvRows.filter((_, index) => failedRows.has(index)));
-      await loadMenu();
-      if (failed.length) setError(`Импорт завершён частично: ошибок ${failed.length}. ${failed.join("; ")}. Исправьте строки и повторите импорт.`);
-      else setCsvRows([]);
-    } catch (cause) { setError(cause instanceof Error ? `Не удалось импортировать CSV: ${cause.message}` : "Не удалось импортировать CSV."); }
-    finally { setBusy(false); }
+      return { failed, remaining };
+    }, async ({ failed, remaining }) => {
+      setCsvRows(remaining); await loadMenu();
+      if (epoch === sessionEpoch.current && failed.length) setError(`Импорт завершён частично: ошибок ${failed.length}. ${failed.join("; ")}. Исправьте строки и повторите импорт.`);
+    });
   };
-  const startBreak = async () => {
-    setBusy(true); setError("");
-    try { const result = await api.startBreak(sessionToken, Math.min(60, Math.max(1, Number(breakDuration) || 10))); setVenue(result.venue as Venue); }
-    catch (cause) { reportClientError("break_start_failed", cause); setError(cause instanceof Error ? cause.message : "Не удалось начать перерыв."); }
-    finally { setBusy(false); }
-  };
-  const stopBreak = async () => {
-    setBusy(true); setError("");
-    try { const result = await api.stopBreak(sessionToken); setVenue(result.venue as Venue); }
-    catch (cause) { reportClientError("break_stop_failed", cause); setError(cause instanceof Error ? cause.message : "Не удалось завершить перерыв."); }
-    finally { setBusy(false); }
-  };
+  const startBreak = async () => { await mutate(() => api.startBreak(sessionToken, Math.min(60, Math.max(1, Number(breakDuration) || 10))), result => { setVenue(result.venue as Venue); }); };
+  const stopBreak = async () => { await mutate(() => api.stopBreak(sessionToken), result => { setVenue(result.venue as Venue); }); };
   const dismissOnboarding = () => {
     localStorage.setItem(`ifm-staff-onboarding-${code}`, "dismissed");
     setShowOnboarding(false);
@@ -447,7 +459,7 @@ function StaffScreen() {
           {venue?.breakActive ? <button type="button" className="primary-action" onClick={() => void stopBreak()} disabled={busy}>Завершить перерыв</button> : <span className="break-control"><input aria-label="Длительность перерыва" type="number" min={1} max={60} value={breakDuration} onChange={e => setBreakDuration(Number(e.target.value))} /><button type="button" className="primary-action" onClick={() => void startBreak()} disabled={busy}>Начать перерыв</button></span>}
           <button type="button" onClick={() => void loadMenu().then(() => setError("")).catch(cause => setError(cause instanceof Error ? cause.message : "Не удалось обновить меню."))} disabled={busy}>Обновить</button>
           <button type="button" className="staff-qr-action" aria-expanded={showStaffQr} onClick={() => setShowStaffQr(value => !value)}>{showStaffQr ? "Скрыть QR" : "Вход сотрудника на новом устройстве"}</button>
-          <button type="button" className="subtle-action" onClick={() => { void api.authLogout("staff"); localStorage.removeItem("ifm-staff-session"); setSessionToken(""); }}>Выйти</button>
+          <button type="button" className="subtle-action" onClick={() => void logout()}>Выйти</button>
         </div>
       </header>
       {showStaffQr && <section className="staff-pairing" aria-label="Подключение сотрудника">
@@ -477,11 +489,11 @@ function StaffScreen() {
               <span className="item-copy"><b>{item.name}</b><small>{(item.priceMinor / 100).toLocaleString("ru-RU", { style: "currency", currency: "RUB" })}</small></span>
               <em>{itemIsAvailable(item) ? "В наличии" : "Нет в наличии"}</em>
               <div className="stock-controls" aria-label={`Остаток ${item.name}`}>
-                <button type="button" aria-label={`Списать одну штуку ${item.name}`} disabled={stockBusyId !== null || item.stockQuantity == null || item.stockQuantity === 0} onClick={() => void adjustStock(item, -1)}>−1</button>
+                <button type="button" aria-label={`Списать одну штуку ${item.name}`} disabled={busy || stockBusyId !== null || item.stockQuantity == null || item.stockQuantity === 0} onClick={() => void adjustStock(item, -1)}>−1</button>
                 <strong>{item.stockQuantity == null ? "Не задан" : `${item.stockQuantity} шт.`}</strong>
-                <button type="button" aria-label={`Добавить одну штуку ${item.name}`} disabled={stockBusyId !== null || item.stockQuantity == null || item.stockQuantity >= 2_000_000_000} onClick={() => void adjustStock(item, 1)}>+1</button>
-                <label><span className="sr-only">Задать остаток ${item.name}</span><input aria-label={`Задать остаток ${item.name}`} type="number" min="0" max="2000000000" step="1" inputMode="numeric" placeholder="Шт." value={stockDrafts[item.id] ?? ""} onChange={event => setStockDrafts(current => ({ ...current, [item.id]: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") void saveStock(item); }} /></label>
-                <button type="button" disabled={stockBusyId !== null || stockDrafts[item.id] === undefined || stockDrafts[item.id] === ""} onClick={() => void saveStock(item)}>Сохранить</button>
+                <button type="button" aria-label={`Добавить одну штуку ${item.name}`} disabled={busy || stockBusyId !== null || item.stockQuantity == null || item.stockQuantity >= 2_000_000_000} onClick={() => void adjustStock(item, 1)}>+1</button>
+                <label><span className="sr-only">Задать остаток ${item.name}</span><input aria-label={`Задать остаток ${item.name}`} disabled={busy} type="number" min="0" max="2000000000" step="1" inputMode="numeric" placeholder="Шт." value={stockDrafts[item.id] ?? ""} onChange={event => setStockDrafts(current => ({ ...current, [item.id]: event.target.value }))} onKeyDown={event => { if (event.key === "Enter") void saveStock(item); }} /></label>
+                <button type="button" disabled={busy || stockBusyId !== null || stockDrafts[item.id] === undefined || stockDrafts[item.id] === ""} onClick={() => void saveStock(item)}>Сохранить</button>
               </div>
             </div>
           ))}
@@ -503,11 +515,11 @@ function StaffScreen() {
             <label><span>Количество, шт.</span><input type="number" min="0" max="2000000000" step="1" inputMode="numeric" placeholder="0" value={newItem.stockQuantity} onChange={event => setNewItem({ ...newItem, stockQuantity: event.target.value })} /></label>
             <label><span>Выход</span><input placeholder="Например, 1/150/030" value={newItem.servingSize} onChange={event => setNewItem({ ...newItem, servingSize: event.target.value })} /></label>
             <label><span>Ккал</span><input placeholder="Необязательно" inputMode="numeric" value={newItem.caloriesKcal} onChange={event => setNewItem({ ...newItem, caloriesKcal: event.target.value })} /></label>
-            <label><span>Категория</span><select aria-label="Категория позиции" value={newItem.categoryId || categories[0]?.id || ""} onChange={event => setNewItem({ ...newItem, categoryId: event.target.value })}>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+            <label><span>Категория</span><select aria-label="Категория позиции" value={newItemCategoryId} onChange={event => setNewItem({ ...newItem, categoryId: event.target.value })}>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
             <button type="button" disabled={busy} onClick={() => void saveItem()}>Добавить</button>
           </div>
           <div className="csv-import">
-            <label>Загрузить CSV<input type="file" accept=".csv,text/csv" onChange={event => { void selectCsv(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
+            <label>Загрузить CSV<input type="file" accept=".csv,text/csv" disabled={busy} onChange={event => { void selectCsv(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
             <small>Обязательные столбцы: Категория, Название, Цена, Количество. Совпадающей позиции импорт обновляет только остаток; новую добавляет.</small>
             {csvRows.length > 0 && <button type="button" onClick={() => void importCsv()} disabled={busy}>{busy ? "Импорт…" : `Импортировать ${csvRows.length} поз.`}</button>}
           </div>

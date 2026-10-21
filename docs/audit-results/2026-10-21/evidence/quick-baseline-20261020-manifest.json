@@ -1,0 +1,33 @@
+{
+  "format": "ifm-audit-result-v1",
+  "runId": "20261020",
+  "startedAt": "2026-10-20T12:09:24.768Z",
+  "harnessSha256": "9af6d26ddddb553933655e0ee4e30964b876983eb853c359bd19af1f8884ad7d",
+  "fixtureFingerprint": "61f30667dce3cb38f66d1310df200d9a75bbf050baddc651667b58c91d099c9e",
+  "softwareVersion": "d542fe8",
+  "profile": "quick",
+  "harnessOnly": false,
+  "target": "http://127.0.0.1:28091",
+  "transport": "ssh-tunnel",
+  "writesEnabled": true,
+  "resourceMonitorAttached": true,
+  "stages": [
+    {
+      "name": "warmup",
+      "screens": 10,
+      "seconds": 30
+    },
+    {
+      "name": "target50",
+      "screens": 50,
+      "seconds": 90
+    }
+  ],
+  "maxInflight": 64,
+  "timeoutMs": 10000,
+  "notes": [
+    "HTTP sessions simulate screens; this is not physical TV evidence.",
+    "Initial authentication is excluded; fixtures contain pre-provisioned test sessions.",
+    "Appwrite duration is summed SDK time, not database wall time."
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "samples": 310,
+  "cpuPeakPercent": 90,
+  "cpuP95Percent": 45,
+  "ramPeakPercent": 45.94,
+  "diskQueuePeak": 4,
+  "resourceAlarms": 0,
+  "restartOrOom": false,
+  "productionHealthFailuresPeak": 0,
+  "containers": {
+    "ifm-audit-menu-web-1": {
+      "peakCpuPercent": 0.14,
+      "peakRamMiB": 13.78
+    },
+    "ifm-audit-menu-api-1": {
+      "peakCpuPercent": 92.35,
+      "peakRamMiB": 91.5
+    },
+    "ifm-audit-menu-menu-redis-1": {
+      "peakCpuPercent": 0.3,
+      "peakRamMiB": 4.582
+    },
+    "ifm-audit-appwrite-appwrite-worker-1": {
+      "peakCpuPercent": 0.29,
+      "peakRamMiB": 98.83
+    },
+    "ifm-audit-appwrite-appwrite-1": {
+      "peakCpuPercent": 244.16,
+      "peakRamMiB": 628.0
+    },
+    "ifm-audit-appwrite-appwrite-task-scheduler-1": {
+      "peakCpuPercent": 0.26,
+      "peakRamMiB": 117.9
+    },
+    "ifm-audit-appwrite-clickhouse-1": {
+      "peakCpuPercent": 49.35,
+      "peakRamMiB": 810.6
+    },
+    "ifm-audit-appwrite-traefik-1": {
+      "peakCpuPercent": 0.56,
+      "peakRamMiB": 26.18
+    },
+    "ifm-audit-appwrite-appwrite-task-interval-1": {
+      "peakCpuPercent": 0.35,
+      "peakRamMiB": 116.2
+    },
+    "ifm-audit-appwrite-appwrite-realtime-1": {
+      "peakCpuPercent": 0.12,
+      "peakRamMiB": 56.0
+    },
+    "ifm-audit-appwrite-appwrite-task-maintenance-1": {
+      "peakCpuPercent": 0,
+      "peakRamMiB": 115.1
+    },
+    "ifm-audit-appwrite-appwrite-geo-1": {
+      "peakCpuPercent": 6.45,
+      "peakRamMiB": 39.71
+    },
+    "ifm-audit-appwrite-appwrite-console-1": {
+      "peakCpuPercent": 3.08,
+      "peakRamMiB": 123.8
+    },
+    "ifm-audit-appwrite-postgresql-1": {
+      "peakCpuPercent": 119.72,
+      "peakRamMiB": 202.1
+    },
+    "ifm-audit-appwrite-redis-1": {
+      "peakCpuPercent": 18.32,
+      "peakRamMiB": 11.71
+    },
+    "ifm-audit-appwrite-appwrite-browser-1": {
+      "peakCpuPercent": 0.61,
+      "peakRamMiB": 172.7
+    },
+    "ifm-audit-appwrite-appwrite-autogravity-1": {
+      "peakCpuPercent": 2.52,
+      "peakRamMiB": 96.59
+    }
+  }
+}

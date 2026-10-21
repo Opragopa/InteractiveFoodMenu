@@ -4,15 +4,15 @@ data class CsvMenuRow(
     val category: String,
     val name: String,
     val priceMinor: Long,
-    val isAvailable: Boolean,
-)
+    val stockQuantity: Int,
+) { val isAvailable: Boolean get() = stockQuantity > 0 }
 
 /** Parses a spreadsheet-exported menu without requiring a third-party CSV library. */
 object CsvMenuParser {
     private val categoryHeaders = setOf("категория", "category", "раздел")
     private val nameHeaders = setOf("название", "позиция", "блюдо", "name", "item")
     private val priceHeaders = setOf("цена", "price", "стоимость")
-    private val availabilityHeaders = setOf("в наличии", "наличие", "available", "availability")
+    private val quantityHeaders = setOf("количество", "quantity")
 
     fun parse(content: String): List<CsvMenuRow> {
         val lines = records(content.removePrefix("\uFEFF")).filter { line -> line.any { !it.isWhitespace() } }
@@ -22,9 +22,9 @@ object CsvMenuParser {
         val categoryIndex = header.indexOfFirst { it in categoryHeaders }
         val nameIndex = header.indexOfFirst { it in nameHeaders }
         val priceIndex = header.indexOfFirst { it in priceHeaders }
-        val availabilityIndex = header.indexOfFirst { it in availabilityHeaders }
-        require(categoryIndex >= 0 && nameIndex >= 0 && priceIndex >= 0) {
-            "Нужны столбцы: Категория, Название, Цена."
+        val quantityIndex = header.indexOfFirst { it in quantityHeaders }
+        require(categoryIndex >= 0 && nameIndex >= 0 && priceIndex >= 0 && quantityIndex >= 0) {
+            "Нужны столбцы: Категория, Название, Цена, Количество."
         }
 
         return lines.drop(1).mapIndexed { index, line ->
@@ -36,17 +36,13 @@ object CsvMenuParser {
                 ?: throw IllegalArgumentException("Строка ${index + 2}: укажите название позиции.")
             val price = Validation.priceToMinor(field(priceIndex))
                 ?: throw IllegalArgumentException("Строка ${index + 2}: некорректная цена.")
-            CsvMenuRow(category, name, price, availabilityIndex < 0 || available(field(availabilityIndex), index + 2))
+            val quantity = field(quantityIndex).takeIf { it.matches(Regex("[0-9]+")) }?.toLongOrNull()
+            require(quantity != null && quantity in 0..2_000_000_000L) { "Строка ${index + 2}: количество должно быть целым числом от 0 до 2000000000." }
+            CsvMenuRow(category, name, price, quantity.toInt())
         }
     }
 
     private fun normalizeHeader(value: String) = value.trim().lowercase().replace(Regex("\\s+"), " ")
-
-    private fun available(value: String, line: Int): Boolean = when (normalizeHeader(value)) {
-        "", "да", "yes", "true", "1", "в наличии" -> true
-        "нет", "no", "false", "0", "нет в наличии" -> false
-        else -> throw IllegalArgumentException("Строка $line: значение наличия должно быть Да или Нет.")
-    }
 
     private fun detectDelimiter(header: String): Char = if (header.count { it == ';' } > header.count { it == ',' }) ';' else ','
 
