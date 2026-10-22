@@ -9,16 +9,33 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# A Windows runner service can have a different PATH from the desktop session.
+# Resolve Git explicitly before touching the production checkout.
+$gitCommand = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+$gitExecutable = if ($gitCommand) { $gitCommand.Source } else { $null }
+if (-not $gitExecutable) {
+  $gitCandidates = @(
+    "$env:ProgramFiles\Git\cmd\git.exe",
+    "${env:ProgramFiles(x86)}\Git\cmd\git.exe",
+    "$env:LOCALAPPDATA\Programs\Git\cmd\git.exe"
+  )
+  $gitExecutable = $gitCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+}
+if (-not $gitExecutable) {
+  throw 'Git for Windows was not found. Install Git for the runner account or add its cmd directory to the runner service PATH.'
+}
+
 Set-Location -LiteralPath $RepoPath
 
-git fetch origin main
+& $gitExecutable fetch origin main
 if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
-git checkout main
+& $gitExecutable checkout main
 if ($LASTEXITCODE -ne 0) { throw 'git checkout main failed' }
-git pull --ff-only origin main
+& $gitExecutable pull --ff-only origin main
 if ($LASTEXITCODE -ne 0) { throw 'git pull failed' }
 
-$actualCommit = (git rev-parse HEAD).Trim()
+$actualCommit = (& $gitExecutable rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $actualCommit -ne $ExpectedCommit) {
   throw "Server checked out $actualCommit, expected $ExpectedCommit"
 }
