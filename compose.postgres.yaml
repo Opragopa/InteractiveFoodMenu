@@ -1,0 +1,33 @@
+# Add to compose.yaml with: -f compose.yaml -f compose.postgres.yaml
+# Credentials are read by Compose from .env.deploy, not committed here.
+services:
+  api:
+    environment:
+      DATABASE_PROVIDER: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-foodmenu}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.deploy}@postgres:5432/${POSTGRES_DB:-foodmenu}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:18-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-foodmenu}
+      POSTGRES_USER: ${POSTGRES_USER:-foodmenu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.deploy}
+    volumes:
+      - menu_postgres:/var/lib/postgresql
+    networks:
+      - menu_internal
+    restart: unless-stopped
+    mem_limit: 1g
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  menu_postgres:
