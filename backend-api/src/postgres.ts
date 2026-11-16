@@ -42,6 +42,21 @@ export async function ensurePostgresSchema(pool: Pool) {
         await client.query(`CREATE ${index.type === "unique" ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${ident(index.key)} ON ${tableName(table.id)} (${index.attributes.map(ident).join(",")})`);
       }
     }
+    await client.query('ALTER TABLE ifm.operators ADD COLUMN IF NOT EXISTS "platformAdmin" boolean');
+    await client.query('ALTER TABLE ifm.venues ADD COLUMN IF NOT EXISTS "organizationId" varchar(36)');
+    for (const [table, key, parent] of [
+      ["venues", "organizationId", "organizations"],
+      ["role_assignments", "operatorId", "operators"],
+      ["role_assignments", "organizationId", "organizations"],
+      ["role_assignments", "venueId", "venues"],
+      ["reviews", "venueId", "venues"],
+      ["review_actions", "reviewId", "reviews"],
+      ["review_actions", "venueId", "venues"],
+    ]) {
+      const constraint = `${table}_${key}_fk`;
+      const existing = await client.query("SELECT 1 FROM pg_constraint WHERE conname=$1 AND conrelid=$2::regclass", [constraint, `ifm.${table}`]);
+      if (!existing.rowCount) await client.query(`ALTER TABLE ifm.${ident(table)} ADD CONSTRAINT ${ident(constraint)} FOREIGN KEY (${ident(key)}) REFERENCES ifm.${ident(parent)} ("$id") DEFERRABLE INITIALLY DEFERRED NOT VALID`);
+    }
     await client.query(`CREATE TABLE IF NOT EXISTS ifm.assets (id varchar(40) PRIMARY KEY, name text NOT NULL, mime_type text NOT NULL, content bytea NOT NULL CHECK (octet_length(content) <= 10485760))`);
     // Notifications commit atomically with writes, including writes made outside this API.
     await client.query(`CREATE OR REPLACE FUNCTION ifm.menu_changed() RETURNS trigger LANGUAGE plpgsql AS $$

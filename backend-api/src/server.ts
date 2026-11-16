@@ -12,6 +12,8 @@ import { createTvRouter } from "./tvRoutes.js";
 import { accountError, accountGuard, createAccountRouter } from "./accountRoutes.js";
 import { createAuthLimiter } from "./sharedRateLimit.js";
 import { instrumentAppwrite, requestMetrics } from "./requestMetrics.js";
+import { scopeHub, createVkrAccessRouter, vkrErrors } from "./vkrAccess.js";
+import { createFeedbackRouter } from "./vkrFeedback.js";
 
 export function createApp(config: BackendConfig, services: AppwriteServices) {
   const app = express();
@@ -69,6 +71,7 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
   app.post("/api/display/pairings", limitAuthAttempts("display-pairing-create"));
   app.post("/api/display/pairings/complete", limitAuthAttempts("display-pairing"));
   app.post("/tv/session", limitAuthAttempts("tv-session"));
+  app.post("/api/public/venues/:code/reviews", limitAuthAttempts("feedback"));
   app.get("/tv/connect", limitAuthAttempts("tv-pairing-create"));
 
   app.get("/health", (_request, response) => {
@@ -93,9 +96,14 @@ export function createApp(config: BackendConfig, services: AppwriteServices) {
 
   app.use("/api", accountGuard(services, config));
   app.use("/api", accountError);
+  app.use("/api", scopeHub(services, config));
+  app.use("/api", createVkrAccessRouter(services, config));
+  app.use("/api", createFeedbackRouter(services, config));
   app.use("/api", createAccountRouter(services, config));
   app.use("/api", createApiRouter(services, config));
   app.use("/tv", createTvRouter(services, config));
+  app.use(accountError);
+  app.use(vkrErrors);
 
   app.use((_request, response) => {
     response.status(404).json({ error: "not_found" });

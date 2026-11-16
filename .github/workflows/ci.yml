@@ -34,6 +34,8 @@ jobs:
       - run: npm ci --prefix backend-api
       - run: npm ci --prefix web-display
       - run: npm test
+        env:
+          TEST_POSTGRES_URL: postgresql://ifm_test:ifm_test_ci@127.0.0.1:5432/postgres
       - run: npm run integration
       - run: npm run test:postgres --prefix backend-api
         env:

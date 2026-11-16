@@ -15,7 +15,8 @@
     "integration": "npm run build && node --test dist/integration.test.js",
     "mutation": "stryker run",
     "migrate:appwrite": "node dist/migrateAppwrite.js",
-    "test:postgres": "npm run build && node --test dist/postgres.test.js"
+    "test:postgres": "npm run build && node --test dist/postgres.test.js",
+    "migration:preflight": "node dist/migrationPreflight.js"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

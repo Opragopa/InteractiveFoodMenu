@@ -46,7 +46,7 @@ function requestWithXhr<T>(url: string, options: RequestInit): Promise<T> {
   });
 }
 
-async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const requestOptions: RequestInit = {
     ...options,
     credentials: "include",
@@ -153,7 +153,7 @@ export const api = {
   hubOverview: (token: string) => request<any>("/hub/overview", {}, token),
   hubStatistics: (token: string, id: string, from: string, to: string, epochId?: string) => request<any>(`/hub/venues/${encodeURIComponent(id)}/statistics?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${epochId ? `&epochId=${encodeURIComponent(epochId)}` : ""}`, {}, token),
   hubResetStatistics: (token: string, id: string) => request<{ epochId: string; startedAt: string }>(`/hub/venues/${encodeURIComponent(id)}/statistics/reset`, { method: "POST" }, token),
-  hubCreateVenue: (token: string, data: { name: string; venueCode: string; pin: string }) => request<any>("/hub/venues", { method: "POST", body: JSON.stringify({ name: data.name, code: data.venueCode, pin: data.pin }) }, token),
+  hubCreateVenue: (token: string, data: { name: string; venueCode: string; pin: string; organizationId?: string }) => request<any>("/hub/venues", { method: "POST", body: JSON.stringify({ name: data.name, code: data.venueCode, pin: data.pin, ...(data.organizationId ? { organizationId: data.organizationId } : {}) }) }, token),
   hubUpdateVenue: (token: string, id: string, data: unknown) => request<{ venue: any }>(`/hub/venues/${id}`, { method: "PATCH", body: JSON.stringify(data) }, token),
   hubUploadVenueLogo: async (token: string, id: string, file: File) => request<{ venue: any }>(`/hub/venues/${id}/logo`, { method: "POST", body: JSON.stringify({ name: file.name, mimeType: file.type, contentBase64: await logoContentBase64(file) }) }, token),
   venueAssetUrl: (fileId: string) => `${baseUrl}/venue-assets/${encodeURIComponent(fileId)}`,
@@ -166,3 +166,14 @@ export const api = {
   hubRevokeAllDisplays: (token: string, id: string) => request<any>(`/hub/venues/${id}/displays/revoke-all`, { method: "POST" }, token),
   hubDeleteVenue: (token: string, id: string) => request<void>(`/hub/venues/${id}`, { method: "DELETE" }, token),
 };
+
+export async function downloadFeedbackReport(query: string, token: string) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${baseUrl}/hub/reports/feedback.csv${query}`, { credentials: "include", headers: token && token !== "cookie" ? { authorization: `Bearer ${token}` } : {}, signal: controller.signal });
+    if (!response.ok) throw new Error("Не удалось выгрузить отчёт. Проверьте период и доступ.");
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a"); link.href = url; link.download = "feedback-report.csv"; document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } finally { window.clearTimeout(timeout); }
+}

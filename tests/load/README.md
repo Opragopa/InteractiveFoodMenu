@@ -46,6 +46,9 @@ successful attempts, and five/account. Test activation, negative authentication,
 
 ## Run
 
+For an unattended configurable device-count sweep with detached execution and
+automatic reports, see [Автономный прогон](MATRIX.md) (`npm run load:matrix`).
+
 Use a separate generator computer and record transport. LAN is preferred. An
 SSH tunnel includes tunnel latency/CPU and must be labelled `ssh-tunnel`;
 localhost on the Windows server shares host resources with the generator.

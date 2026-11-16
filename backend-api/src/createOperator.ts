@@ -33,7 +33,7 @@ if (existing.rows.length) throw new Error("An operator already exists; the first
 const password = await hiddenPassword();
 if (password.length < 12 || password.length > 128 || Buffer.byteLength(password) > 256) throw new Error("Password must contain 12–128 characters.");
 await services.tables.createRow({ databaseId: config.appwriteDatabaseId, tableId: "operators", rowId: ID.unique(),
-  data: { username, passwordHash: await hash(password), active: true, sessionVersion: 1, createdAt: new Date().toISOString() } });
+  data: { username, passwordHash: await hash(password), active: true, platformAdmin: true, sessionVersion: 1, createdAt: new Date().toISOString() } });
 process.stdout.write(`Оператор ${username} создан.\n`);
 
 await services.close?.();

@@ -1,3 +1,4 @@
+import { FeedbackForm } from "./VkrPanel";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEffect as useEffectQr } from "react";
 import { DisplayScreen } from "./DisplayScreen";
@@ -34,6 +35,7 @@ function parseDisplayHash() {
 }
 
 export function App() {
+  if (window.location.pathname === "/feedback") return <FeedbackForm />;
   if (window.location.pathname === "/hub") return <BackendHub />;
   if (/^\/connect\/?$/.test(window.location.pathname) && !parseDisplayHash()) return <ConnectScreen />;
   if (window.location.pathname === "/staff") return <StaffScreen />;

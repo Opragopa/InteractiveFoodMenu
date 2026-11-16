@@ -12,6 +12,7 @@ import { hashSecret, opaqueToken, signSession, verifySecret, verifySession, type
 import { renderLegacyDisplay } from "./legacyDisplay.js";
 import { authToken, setAccountCookie } from "./accountRoutes.js";
 import { recordDisplayContact, recordStatisticsEvent, safeDiagnosticDetails, sanitizeDiagnostic, venueStatistics, type StatisticsType } from "./statistics.js";
+import { get as vkrGet, log as vkrLog } from "./vkrAccess.js";
 
 const VENUE_CODE = /^[a-z0-9][a-z0-9-]{2,31}$/;
 const PIN = /^\d{6}$/;
@@ -183,7 +184,7 @@ function hubActor(request: Request, config: BackendConfig): string {
   catch { return "unknown"; }
 }
 
-function staffActor(claims: SessionClaims): string { return claims.accountId ? "personal-staff" : "legacy-android"; }
+function staffActor(claims: SessionClaims): string { return claims.accountId ? `staff:${claims.accountId}` : "legacy-android"; }
 function staffUpdatedBy(claims: SessionClaims): string { return claims.accountId ? `staff:${claims.accountId}` : "legacy-android"; }
 
 async function audit(services: AppwriteServices, config: BackendConfig, action: string, venueId: string | undefined, details: Record<string, unknown> = {}, actor = "backend-hub") {
@@ -254,6 +255,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     } finally { for (const release of releaseLocks.reverse()) release(); }
   };
   const track = async (venueId: string, eventType: StatisticsType, actor: string, resourceId?: string) => {
+    await vkrLog(services, config, eventType, actor, venueId, { resourceId: resourceId ?? null });
     try { await recordStatisticsEvent(services, config.appwriteDatabaseId, venueId, eventType, actor, resourceId); }
     catch { console.error(JSON.stringify({ event: "statistics_write_failed", venueId, eventType })); }
   };
@@ -319,6 +321,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       generatedAt: new Date().toISOString(),
       totals: { venues: venues.length, categories: categories.total, items: items.total, activeDisplays: displays.total },
       venues: venues.map(publicRow),
+      organizations: (await listAllRows(services, databaseId, "organizations", [Query.orderAsc("name")])).map(publicRow),
       functions: [
         { name: "auth/staff", area: "Доступ", access: "Публичная", purpose: "Вход сотрудника по коду точки и PIN" },
         { name: "display/pairings", area: "Экраны", access: "Публичная", purpose: "Одноразовое подключение ТВ через QR-код" },
@@ -357,6 +360,8 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
 
   router.post("/hub/venues", asyncRoute(async (request, response) => {
     requireRole(request, config, ["hub"]);
+    const organizationId = request.body?.organizationId ? text(request.body.organizationId, 36) : "legacy-organization";
+    if (request.body?.organizationId) await vkrGet(services, config, "organizations", organizationId);
     const name = text(request.body?.name, 160);
     const code = String(request.body?.code ?? "").trim().toLowerCase();
     const pin = String(request.body?.pin ?? "");
@@ -368,7 +373,7 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
       tableId: "venues",
       rowId: ID.unique(),
       data: {
-        name, code, pinHash: await hashSecret(pin), currency: "RUB",
+        name, code, organizationId, pinHash: await hashSecret(pin), currency: "RUB",
         backgroundColor: "#56965B", accentColor: "#FFFFFF", pageDurationSeconds: 10, logoPosition: "top-right", logoInsetPercent: 3, logoScalePercent: 100, logoVisible: true,
         displayScalePercent: 100, displayScaleMode: "auto", columnScale1Percent: 100, columnScale2Percent: 100, columnScale3Percent: 100, breakActive: false, breakDurationMinutes: 10, breakFontSizePercent: 100,
         breakPanelWidthPercent: 36, breakMenuDimPercent: 45, menuItemFontSizePx: 34, menuItemGapPx: 12,
@@ -549,16 +554,22 @@ export function createApiRouter(services: AppwriteServices, config: BackendConfi
     const venue = await services.tables.getRow<RowData>({ databaseId, tableId: "venues", rowId: venueId }).catch(() => null);
     if (!venue) throw new ApiError(404, "not_found", "Точка не найдена.");
     const assetIds = new Set<string>();
+    for (const tableId of ["reviews", "role_assignments"]) {
+      const linked = await services.tables.listRows({ databaseId, tableId, queries: [Query.equal("venueId", [venueId]), Query.limit(1)] });
+      if (linked.rows.length) throw new ApiError(409, "venue_has_history", "У точки есть обращения или назначения ролей. Удаление заблокировано для сохранения истории.");
+    }
     if (typeof venue.logoFileId === "string" && venue.logoFileId) assetIds.add(venue.logoFileId);
 
     // Child data must be removed before its parent so a deleted venue cannot
     // leave usable display links, menu rows, or diagnostic data behind.
-    for (const tableId of ["items", "categories", "display_tokens", "display_pairings", "client_logs", "admin_audit_logs", "statistics_events", "staff_invites", "staff_accounts"]) {
+    await audit(services, config, "venue_delete_requested", venueId, {}, hubActor(request, config));
+    for (const tableId of ["items", "categories", "display_tokens", "display_pairings", "client_logs", "statistics_events", "staff_invites", "staff_accounts"]) {
       await deleteVenueRows(services, databaseId, tableId, venueId, row => {
         if (tableId === "items" && typeof row.imageFileId === "string" && row.imageFileId) assetIds.add(row.imageFileId);
       });
     }
     await services.tables.deleteRow({ databaseId, tableId: "venues", rowId: venueId });
+    await audit(services, config, "venue_deleted", venueId, {}, hubActor(request, config));
     await Promise.all([...assetIds].map(fileId => services.storage.deleteFile({ bucketId: config.appwriteBucketId, fileId }).catch(() => undefined)));
     response.status(204).end();
   }));
