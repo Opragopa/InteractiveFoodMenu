@@ -1,6 +1,7 @@
 import { AppwriteException, Query, TablesDBIndexType, type Models, type Storage, type TablesDB } from "node-appwrite";
 import type { BackendConfig } from "./config.js";
 import type { AppwriteServices } from "./appwrite.js";
+import { VKR_TABLES } from "./vkrSchema.js";
 
 type TableDefinition = {
   id: string;
@@ -15,10 +16,12 @@ const commonAuditColumns = [
 ];
 
 export const TABLES: TableDefinition[] = [
+  ...VKR_TABLES,
   {
     id: "operators",
     name: "Hub operators",
     columns: [
+      { key: "platformAdmin", type: "boolean", required: false },
       { key: "username", type: "varchar", size: 40, required: true },
       { key: "passwordHash", type: "text", required: true },
       { key: "active", type: "boolean", required: true },
@@ -62,6 +65,7 @@ export const TABLES: TableDefinition[] = [
     id: "venues",
     name: "Venues",
     columns: [
+      { key: "organizationId", type: "varchar", size: 36, required: false },
       { key: "name", type: "varchar", size: 160, required: true },
       { key: "code", type: "varchar", size: 32, required: true },
       { key: "pinHash", type: "text", required: true },
@@ -363,6 +367,13 @@ export async function ensureSchema(services: AppwriteServices, config: BackendCo
     tables[definition.id] = await ensureTable(services.tables, config.appwriteDatabaseId, definition);
   }
   await ensureAdditiveColumns(services.tables, config.appwriteDatabaseId);
+  for (const [tableId, key] of [["operators", "platformAdmin"], ["venues", "organizationId"]]) {
+    const columns = await services.tables.listColumns({ databaseId: config.appwriteDatabaseId, tableId });
+    if (!columns.columns.some(column => column.key === key)) {
+      if (key === "platformAdmin") await services.tables.createBooleanColumn({ databaseId: config.appwriteDatabaseId, tableId, key, required: false });
+      else await services.tables.createVarcharColumn({ databaseId: config.appwriteDatabaseId, tableId, key, size: 36, required: false });
+    }
+  }
   const bucket = await ensureBucket(services.storage, config);
   return { database, tables, bucket };
 }

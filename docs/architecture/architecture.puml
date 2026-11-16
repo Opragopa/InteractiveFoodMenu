@@ -1,0 +1,45 @@
+@startuml
+!pragma layout smetana
+top to bottom direction
+skinparam componentStyle uml2
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 18
+component "Кабинет сотрудника\nWeb / Android" as staff
+component "Хаб управляющего" as hub
+component "Публичная форма отзыва" as public
+component "Экран React / legacy" as screen
+package "backend-api — модульный монолит" {
+ component "HTTP API и политика доступа" as access
+ component "Сеть и роли" as network
+ component "Меню и SSE" as menu
+ component "Обращения и история" as feedback
+ component "Отчёты и CSV" as reports
+ component "Аудит" as audit
+ component "Tables / Storage\nТранзакции и адаптеры" as data
+ access --> network
+ access --> menu
+ access --> feedback
+ access --> reports
+ access --> audit
+ network --> data
+ menu --> data
+ feedback --> data
+ reports --> data
+ audit --> data
+}
+database "Redis\nОграничение запросов" as redis
+database "Appwrite\nTablesDB и Storage" as appwrite
+database "PostgreSQL\nТаблицы и assets" as postgres
+staff --> access
+hub --> access
+public --> access
+screen --> access
+access --> redis
+data --> appwrite
+data --> postgres
+note bottom of data
+Один активный провайдер хранения.
+SSE передаётся экрану через HTTP API.
+end note
+@enduml

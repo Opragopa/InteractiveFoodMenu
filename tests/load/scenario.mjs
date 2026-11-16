@@ -1,3 +1,4 @@
+import { matrixStages } from './matrix-plan.mjs';
 import { inspectResourceSample } from './resource-guard.mjs';
 import { itemState, mutationEvidence } from './mutation-state.mjs';
 import { createHash } from 'node:crypto';
@@ -7,16 +8,17 @@ import path from 'node:path';
 import { args, assertTestUrl, externalPath, fixtureGuard, loadJsonExternal, percentile, positiveNumber, requestFull, summarize, verifyApiIdentity } from './lib.mjs';
 
 const cli=args();
-if(!cli.fixture || !cli.output || !cli['allow-load']) throw new Error('Usage: node tests/load/scenario.mjs --fixture /external/fixture.json --output /external/new-run --allow-load --allow-writes --confirm-run RUN_ID [--profile full|quick|harness]');
+if(!cli.fixture || !cli.output || !cli['allow-load']) throw new Error('Usage: node tests/load/scenario.mjs --fixture /external/fixture.json --output /external/new-run --allow-load --allow-writes --confirm-run RUN_ID [--profile full|quick|harness|matrix]');
 const fixture=fixtureGuard(await loadJsonExternal(cli.fixture));
 if(cli['confirm-run']!==fixture.runId) throw new Error('Explicit --confirm-run must match fixture runId.');
 const profile=cli.profile??'full';
-if(!['full','quick','harness'].includes(profile)) throw new Error('Unknown profile.');
+if(!['full','quick','harness','matrix'].includes(profile)) throw new Error('Unknown profile.');
 if(profile==='harness' && (!cli['harness-only'] || !['127.0.0.1','localhost','[::1]'].includes(new URL(fixture.baseUrl).hostname))) throw new Error('Harness profile is loopback-only and needs --harness-only.');
 const scale=profile==='harness'?positiveNumber(cli['time-scale']??.002,'time-scale',.0001,.1):1;
 const resourceUrl=cli['resource-status-url']?new URL(assertTestUrl(cli['resource-status-url'])):null;
 const maxInflight=positiveNumber(cli['max-inflight']??64,'max-inflight',1,256);
 const timeoutMs=positiveNumber(cli['timeout-ms']??10000,'timeout-ms',50,30000);
+const plannedMatrix=profile==='matrix'?matrixStages(cli,fixture.screens.length):null;
 const output=await externalPath(cli.output,{existing:false});
 await mkdir(output,{recursive:false,mode:0o700});
 const stopFile=cli['stop-file']?await externalPath(cli['stop-file'],{existing:false}):path.join(output,'STOP');
@@ -28,11 +30,11 @@ const samples=[], delivery=[], writes={}, pending=new Map(), versions=new Map(),
 let lastResourceSample=null, resourceReadFailures=0;
 let activeScreens=[], successfulWrites=0;const initialItemStates={},mutationSequences=new Map();
 const startedAt=new Date().toISOString();
-const harnessSha256=createHash('sha256').update(await readFile(new URL(import.meta.url))).update(await readFile(new URL('./lib.mjs',import.meta.url))).update(await readFile(new URL('./mutation-state.mjs',import.meta.url))).update(await readFile(new URL('./resource-guard.mjs',import.meta.url))).digest('hex');
+const harnessSha256=createHash('sha256').update(await readFile(new URL(import.meta.url))).update(await readFile(new URL('./matrix-plan.mjs',import.meta.url))).update(await readFile(new URL('./lib.mjs',import.meta.url))).update(await readFile(new URL('./mutation-state.mjs',import.meta.url))).update(await readFile(new URL('./resource-guard.mjs',import.meta.url))).digest('hex');
 const fixtureFingerprint=createHash('sha256').update(JSON.stringify({identity:fixture.identity,expected:fixture.expected,venueIds:fixture.venueIds,screens:fixture.screens.map(s=>({id:s.id,type:s.type,venueId:s.venueId}))})).digest('hex');
 function stop(reason){if(!stopped){stopped=true;stopReason=reason;events.write(JSON.stringify({at:new Date().toISOString(),event:'stopped',reason})+'\n');controller.abort();}}
 process.on('SIGINT',()=>stop('SIGINT'));process.on('SIGTERM',()=>stop('SIGTERM'));
-const logEvent=(event,details={})=>events.write(JSON.stringify({at:new Date().toISOString(),stage:stageName,event,...details})+'\n');
+const logEvent=(event,details={})=>{const row={at:new Date().toISOString(),stage:stageName,event,...details};events.write(JSON.stringify(row)+'\n');if(event==='stage_started'||event==='stage_completed')console.log(JSON.stringify(row));};
 async function call(name,route,options={}){
  const result=await requestFull(fixture.baseUrl,route,{timeoutMs,signal:controller.signal,...options});
  if(result.ok && options.check && !options.check(result.data)){result.ok=false;result.error='invalid_payload';}
@@ -108,9 +110,9 @@ async function staffAction(actor){
      if(state.ok){const expected=activeScreens.filter(s=>s.venueId===actor.venueId);const entry={version:Number(state.data.version),at:changedAt,stage:stageName,content,seen:new Set(),expected:new Set(expected.map(s=>s.id??s.cookie))};if(!pending.has(actor.venueId))pending.set(actor.venueId,[]);pending.get(actor.venueId).push(entry);for(const screen of expected){const cached=snapshots.get(screen.id??screen.cookie);if(cached)acknowledge(screen,entry,cached);}}else stop('write_version_probe_failed');}
  }
 }
-const stages=profile==='quick'?[{name:'warmup',screens:10,seconds:30},{name:'target50',screens:50,seconds:90}]:profile==='harness'?[{name:'harness',screens:10,seconds:30}]:[
+const stages=plannedMatrix??(profile==='quick'?[{name:'warmup',screens:10,seconds:30},{name:'target50',screens:50,seconds:90}]:profile==='harness'?[{name:'harness',screens:10,seconds:30}]:[
  {name:'warmup',screens:10,seconds:180},{name:'step10',screens:10,seconds:600},{name:'step25',screens:25,seconds:600},{name:'target50',screens:50,seconds:600},
- {name:'reload50',screens:50,seconds:60,reload:true},{name:'soak50',screens:50,seconds:3600},{name:'stress100',screens:100,seconds:300},{name:'stress200',screens:200,seconds:300}];
+ {name:'reload50',screens:50,seconds:60,reload:true},{name:'soak50',screens:50,seconds:3600},{name:'stress100',screens:100,seconds:300},{name:'stress200',screens:200,seconds:300}]);
 if(fixture.screens.length<Math.max(...stages.map(s=>s.screens)))throw new Error('Fixture has too few distinct screen credentials.');
 await writeFile(path.join(output,'manifest.json'),JSON.stringify({format:'ifm-audit-result-v1',runId:fixture.runId,startedAt,mutationEvidenceVersion:1,harnessSha256,fixtureFingerprint,softwareVersion:cli['software-version']??'unrecorded',profile,harnessOnly:profile==='harness',target:fixture.baseUrl,transport:cli.transport??'unspecified',writesEnabled:Boolean(cli['allow-writes']),resourceMonitorAttached:Boolean(resourceUrl),stages,maxInflight,timeoutMs,notes:['HTTP sessions simulate screens; this is not physical TV evidence.','Initial authentication is excluded; fixtures contain pre-provisioned test sessions.','Appwrite duration is summed SDK time, not database wall time.']},null,2)+'\n');
 let identityOk=false;let control=[];
@@ -151,9 +153,19 @@ try{
      await new Promise(resolve=>setTimeout(resolve,Math.max(5,20*scale)));
    }
    await Promise.allSettled([...inflight]);
+   if(profile==='matrix'&&!stopped&&cli['allow-writes']){
+     const graceEnd=performance.now()+17000;let nextResourceCheck=0;
+     while(!stopped&&performance.now()<graceEnd&&[...pending.values()].flat().some(e=>e.seen.size<e.expected.size)){
+       if(await access(stopFile).then(()=>true,()=>false)){stop('stop_file');break;}
+       if(resourceUrl&&performance.now()>=nextResourceCheck){nextResourceCheck=performance.now()+1000;const resource=await requestFull(resourceUrl.origin,resourceUrl.pathname,{timeoutMs:5000,signal:controller.signal});const decision=inspectResourceSample(lastResourceSample,resource,fixture.runId);lastResourceSample=decision.last;if(decision.reason){stop(decision.reason);break;}}
+       for(const screen of activeScreens)if(performance.now()>=screen.next){screen.next=performance.now()+(screen.type==='server'?15000:5000);schedule(()=>pollScreen(screen),screen);}
+       await new Promise(r=>setTimeout(r,50));
+     }
+     await Promise.allSettled([...inflight]);
+   }
    logEvent('stage_completed',{screens:stage.screens,elapsedSeconds:(performance.now()-stageStart)/1000,dropped:dropped-dropStart,summary:summarize(samples.slice(sampleStart))});
  }
- if(!stopped && cli['allow-writes']){
+ if(!stopped && cli['allow-writes'] && profile!=='matrix'){
    stageName='delivery_grace';const graceEnd=performance.now()+17000*scale;
    while(!stopped&&performance.now()<graceEnd&&[...pending.values()].flat().some(e=>e.seen.size<e.expected.size)){for(const screen of activeScreens)if(performance.now()>=screen.next){screen.next=performance.now()+(screen.type==='server'?15000:5000)*scale;schedule(()=>pollScreen(screen),screen);}await new Promise(r=>setTimeout(r,Math.max(5,20*scale)));}
    await Promise.allSettled([...inflight]);
@@ -172,7 +184,7 @@ finally{
  const grouped={};for(const row of samples){const key=`${row.stage}/${row.route}`;(grouped[key]??=[]).push(row);}
  const entries=[...pending.values()].flat();const expectedReceipts=entries.reduce((n,e)=>n+e.expected.size,0);const missingReceipts=entries.reduce((n,e)=>n+e.expected.size-e.seen.size,0);
  const deliveryPassed=!cli['allow-writes']||(successfulWrites>0&&expectedReceipts>0&&missingReceipts===0&&delivery.every(row=>row.lagMs<=row.intervalMs+2000));
- const nominalStages=new Set(['step10','step25','target50','soak50']);const slo=[];for(const [key,rows]of Object.entries(grouped)){const [stage,route]=key.split('/');if(!nominalStages.has(stage)||route==='write-version-probe')continue;const limit=route==='hub-statistics'||route==='tv-menu'?2000:['stock-adjust','availability-write','price-write','break-write'].includes(route)?1000:500;const stats=summarize(rows);slo.push({stage,route,count:stats.count,limitMs:limit,p95Ms:stats.p95Ms,errorRate:stats.failures/stats.count,passed:stats.p95Ms<=limit&&stats.failures/stats.count<.01});}
+ const nominalStages=new Set(profile==='matrix'?stages.filter(s=>s.name!=='warmup').map(s=>s.name):['step10','step25','target50','soak50']);const slo=[];for(const [key,rows]of Object.entries(grouped)){const [stage,route]=key.split('/');if(!nominalStages.has(stage)||route==='write-version-probe')continue;const limit=route==='hub-statistics'||route==='tv-menu'?2000:['stock-adjust','availability-write','price-write','break-write'].includes(route)?1000:500;const stats=summarize(rows);slo.push({stage,route,count:stats.count,limitMs:limit,p95Ms:stats.p95Ms,errorRate:stats.failures/stats.count,passed:stats.p95Ms<=limit&&stats.failures/stats.count<.01});}
  const report={format:'ifm-audit-result-v1',runId:fixture.runId,startedAt,endedAt:new Date().toISOString(),profile,harnessOnly:profile==='harness',identityVerified:identityOk,resourceReadFailures,stopped:stopped,stopReason,dropped,summary:summarize(samples),routes:Object.fromEntries(Object.entries(grouped).map(([key,rows])=>[key,summarize(rows)])),acceptance:{integrityPassed:control.length===fixture.staff.length&&control.every(row=>row.ok),sloPassed:slo.length?slo.every(row=>row.passed):null,routeChecks:slo,deliveryPassed},delivery:{successfulWrites,expectedReceipts,missingReceipts,count:delivery.length,p95Ms:percentile(delivery.map(row=>row.lagMs),.95),violations:delivery.filter(row=>row.lagMs>row.intervalMs+2000).length},initialItemStates,mutationEvidenceVersion:1,stockChecks:control,passed:identityOk&&!stopped&&dropped===0&&samples.every(row=>row.ok)&&control.length===fixture.staff.length&&control.every(row=>row.ok)&&deliveryPassed&&slo.every(row=>row.passed)};
  await writeFile(path.join(output,'summary.json'),JSON.stringify(report,null,2)+'\n');
  measurements.end();events.end();await Promise.all([new Promise(r=>measurements.on('finish',r)),new Promise(r=>events.on('finish',r))]);

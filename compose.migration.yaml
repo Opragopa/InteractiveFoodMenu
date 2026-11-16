@@ -1,0 +1,26 @@
+# One-off tooling only. Never switches the running API or starts a migration automatically.
+# Use with compose.yaml and compose.postgres.yaml; see docs/POSTGRES_MIGRATION.md.
+services:
+  migration:
+    profiles: [migration]
+    image: ifm-migration:${MIGRATION_TAG:-local}
+    build:
+      context: ./backend-api
+    env_file:
+      - .env.backend
+    environment:
+      DATABASE_PROVIDER: appwrite
+      DATABASE_URL: postgresql://${POSTGRES_USER:-foodmenu}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.deploy}@postgres:5432/${POSTGRES_DB:-foodmenu}
+    command: [npm, run, migration:preflight]
+    networks:
+      - menu_internal
+      - backend_outbound
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    mem_limit: 512m

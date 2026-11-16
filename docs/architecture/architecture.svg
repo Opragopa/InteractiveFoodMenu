@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080"><defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#35564c" stroke-width="1.8"/></marker></defs><rect width="1600" height="1080" fill="white"/><style>text{font-family:Arial,sans-serif;fill:#1d352e}.h{font-size:27px;font-weight:700}.t{font-size:22px;font-weight:600}.s{font-size:19px}.small{font-size:17px;fill:#4b625a}.mono{font-family:monospace;font-size:17px;fill:#4b625a}.line{stroke:#35564c;stroke-width:1.7;fill:none;marker-end:url(#arrow)}</style>
+<text x="60" y="46" class="h" text-anchor="start">InteractiveFoodMenu — UML диаграмма компонентов</text>
+<text x="60" y="76" class="small" text-anchor="start">Логическая структура модульного монолита • Состояние локальной реализации на 16 ноября 2026 года</text>
+<rect x="80" y="110" width="330" height="115" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="380" y="123" width="17" height="21" fill="white" stroke="#789187"/><rect x="376" y="127" width="8" height="5" fill="white" stroke="#789187"/><rect x="376" y="136" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="98" y="142" class="t" text-anchor="start">Кабинет сотрудника</text>
+<text x="98" y="171" class="s" text-anchor="start">Web и Android</text>
+<text x="98" y="197" class="s" text-anchor="start">Меню и остатки</text>
+<rect x="450" y="110" width="330" height="115" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="750" y="123" width="17" height="21" fill="white" stroke="#789187"/><rect x="746" y="127" width="8" height="5" fill="white" stroke="#789187"/><rect x="746" y="136" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="468" y="142" class="t" text-anchor="start">Хаб управляющего</text>
+<text x="468" y="171" class="s" text-anchor="start">Web</text>
+<text x="468" y="197" class="s" text-anchor="start">Точки, обращения, отчёты</text>
+<rect x="820" y="110" width="330" height="115" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="1120" y="123" width="17" height="21" fill="white" stroke="#789187"/><rect x="1116" y="127" width="8" height="5" fill="white" stroke="#789187"/><rect x="1116" y="136" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="838" y="142" class="t" text-anchor="start">Форма посетителя</text>
+<text x="838" y="171" class="s" text-anchor="start">Web без регистрации</text>
+<text x="838" y="197" class="s" text-anchor="start">Отправка обращения</text>
+<rect x="1190" y="110" width="330" height="115" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="1490" y="123" width="17" height="21" fill="white" stroke="#789187"/><rect x="1486" y="127" width="8" height="5" fill="white" stroke="#789187"/><rect x="1486" y="136" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="1208" y="142" class="t" text-anchor="start">Экран меню</text>
+<text x="1208" y="171" class="s" text-anchor="start">React и legacy HTML</text>
+<text x="1208" y="197" class="s" text-anchor="start">Показ меню и перерыва</text>
+<text x="80" y="260" class="small" text-anchor="start">HTTPS / JSON</text>
+<rect x="80" y="280" width="1440" height="90" fill="#e9f0ed" stroke="#789187" stroke-width="1.4"/>
+<rect x="1490" y="293" width="17" height="21" fill="white" stroke="#789187"/><rect x="1486" y="297" width="8" height="5" fill="white" stroke="#789187"/><rect x="1486" y="306" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="98" y="312" class="t" text-anchor="start">HTTP API и маршрутизация</text>
+<text x="98" y="341" class="s" text-anchor="start">Express • /api и /tv • валидация входных данных • ограничения частоты запросов</text>
+<rect x="60" y="405" width="1480" height="414" fill="#ffffff" stroke="#789187" stroke-width="1.4"/>
+<text x="80" y="434" class="small" text-anchor="start">Прикладные модули — тот же процесс backend-api</text>
+<rect x="80" y="455" width="1110" height="80" fill="#e9f0ed" stroke="#789187" stroke-width="1.4"/>
+<rect x="1160" y="468" width="17" height="21" fill="white" stroke="#789187"/><rect x="1156" y="472" width="8" height="5" fill="white" stroke="#789187"/><rect x="1156" y="481" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="98" y="487" class="t" text-anchor="start">Сессии и политика доступа</text>
+<text x="98" y="516" class="s" text-anchor="start">Личные аккаунты • организация / точка • роли управляющего, аудитора и сотрудника</text>
+<rect x="1250" y="455" width="270" height="80" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="1490" y="468" width="17" height="21" fill="white" stroke="#789187"/><rect x="1486" y="472" width="8" height="5" fill="white" stroke="#789187"/><rect x="1486" y="481" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="1268" y="487" class="t" text-anchor="start">Redis</text>
+<text x="1268" y="516" class="s" text-anchor="start">Лимиты запросов</text>
+<rect x="80" y="575" width="260" height="110" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="310" y="588" width="17" height="21" fill="white" stroke="#789187"/><rect x="306" y="592" width="8" height="5" fill="white" stroke="#789187"/><rect x="306" y="601" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="98" y="607" class="t" text-anchor="start">Сеть точек</text>
+<text x="98" y="636" class="s" text-anchor="start">Организации</text>
+<text x="98" y="662" class="s" text-anchor="start">Назначения ролей</text>
+<rect x="375" y="575" width="260" height="110" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="605" y="588" width="17" height="21" fill="white" stroke="#789187"/><rect x="601" y="592" width="8" height="5" fill="white" stroke="#789187"/><rect x="601" y="601" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="393" y="607" class="t" text-anchor="start">Меню</text>
+<text x="393" y="636" class="s" text-anchor="start">Категории и блюда</text>
+<text x="393" y="662" class="s" text-anchor="start">Остатки, CSV и SSE</text>
+<rect x="670" y="575" width="260" height="110" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="900" y="588" width="17" height="21" fill="white" stroke="#789187"/><rect x="896" y="592" width="8" height="5" fill="white" stroke="#789187"/><rect x="896" y="601" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="688" y="607" class="t" text-anchor="start">Обращения</text>
+<text x="688" y="636" class="s" text-anchor="start">Причина и статус</text>
+<text x="688" y="662" class="s" text-anchor="start">Действия и история</text>
+<rect x="965" y="575" width="260" height="110" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="1195" y="588" width="17" height="21" fill="white" stroke="#789187"/><rect x="1191" y="592" width="8" height="5" fill="white" stroke="#789187"/><rect x="1191" y="601" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="983" y="607" class="t" text-anchor="start">Отчёты</text>
+<text x="983" y="636" class="s" text-anchor="start">Агрегаты и период</text>
+<text x="983" y="662" class="s" text-anchor="start">CSV без текстов</text>
+<rect x="1260" y="575" width="260" height="110" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="1490" y="588" width="17" height="21" fill="white" stroke="#789187"/><rect x="1486" y="592" width="8" height="5" fill="white" stroke="#789187"/><rect x="1486" y="601" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="1278" y="607" class="t" text-anchor="start">Аудит</text>
+<text x="1278" y="636" class="s" text-anchor="start">Автор и время</text>
+<text x="1278" y="662" class="s" text-anchor="start">Объект и действие</text>
+<path d="M210 548 H1390 M635 535 V548" fill="none" stroke="#35564c" stroke-width="1.5"/>
+<rect x="80" y="725" width="1440" height="70" fill="#e9f0ed" stroke="#789187" stroke-width="1.4"/>
+<rect x="1490" y="738" width="17" height="21" fill="white" stroke="#789187"/><rect x="1486" y="742" width="8" height="5" fill="white" stroke="#789187"/><rect x="1486" y="751" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="98" y="757" class="t" text-anchor="start">Единый интерфейс доступа к данным</text>
+<text x="98" y="786" class="s" text-anchor="start">Tables / Storage • транзакции новых модулей • снимки меню и уведомления об изменениях</text>
+<rect x="60" y="850" width="1480" height="170" fill="#ffffff" stroke="#789187" stroke-width="1.4"/>
+<text x="800" y="878" class="small" text-anchor="middle">«alternative» DATABASE_PROVIDER — один активный провайдер</text>
+<rect x="80" y="900" width="690" height="95" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="740" y="913" width="17" height="21" fill="white" stroke="#789187"/><rect x="736" y="917" width="8" height="5" fill="white" stroke="#789187"/><rect x="736" y="926" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="98" y="932" class="t" text-anchor="start">Self hosted Appwrite</text>
+<text x="98" y="961" class="s" text-anchor="start">TablesDB и Storage • транзакции через SDK</text>
+<rect x="830" y="900" width="690" height="95" fill="#f4f7f5" stroke="#789187" stroke-width="1.4"/>
+<rect x="1490" y="913" width="17" height="21" fill="white" stroke="#789187"/><rect x="1486" y="917" width="8" height="5" fill="white" stroke="#789187"/><rect x="1486" y="926" width="8" height="5" fill="white" stroke="#789187"/>
+<text x="848" y="932" class="t" text-anchor="start">PostgreSQL</text>
+<text x="848" y="961" class="s" text-anchor="start">Таблицы и assets • внешние ключи • LISTEN / NOTIFY</text>
+<text x="80" y="1051" class="small" text-anchor="start">Пунктирная стрелка — зависимость компонента. Компоненты backend-api не являются отдельными микросервисами.</text>
+<path class="line" d="M245 225 L245 280" stroke-dasharray="7 5"/>
+<path class="line" d="M615 225 L615 280" stroke-dasharray="7 5"/>
+<path class="line" d="M985 225 L985 280" stroke-dasharray="7 5"/>
+<path class="line" d="M1355 225 L1355 280" stroke-dasharray="7 5"/>
+<path class="line" d="M800 370 L800 455" stroke-dasharray="7 5"/>
+<path class="line" d="M1190 495 L1250 495" stroke-dasharray="7 5"/>
+<path class="line" d="M210 548 L210 575" stroke-dasharray="7 5"/>
+<path class="line" d="M210 685 L210 725" stroke-dasharray="7 5"/>
+<path class="line" d="M505 548 L505 575" stroke-dasharray="7 5"/>
+<path class="line" d="M505 685 L505 725" stroke-dasharray="7 5"/>
+<path class="line" d="M800 548 L800 575" stroke-dasharray="7 5"/>
+<path class="line" d="M800 685 L800 725" stroke-dasharray="7 5"/>
+<path class="line" d="M1095 548 L1095 575" stroke-dasharray="7 5"/>
+<path class="line" d="M1095 685 L1095 725" stroke-dasharray="7 5"/>
+<path class="line" d="M1390 548 L1390 575" stroke-dasharray="7 5"/>
+<path class="line" d="M1390 685 L1390 725" stroke-dasharray="7 5"/>
+<path class="line" d="M450 795 L450 900" stroke-dasharray="7 5"/>
+<path class="line" d="M1150 795 L1150 900" stroke-dasharray="7 5"/>
+</svg>

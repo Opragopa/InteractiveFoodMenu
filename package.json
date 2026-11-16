@@ -18,6 +18,7 @@
     "load:stand": "node tests/load/stand.mjs",
     "load:report": "node tests/load/report.mjs",
     "load:reconcile": "node tests/load/reconcile.mjs",
-    "load:staff-sync": "node tests/load/staff-sync-probe.mjs"
+    "load:staff-sync": "node tests/load/staff-sync-probe.mjs",
+    "load:matrix": "node tests/load/run-matrix.mjs"
   }
 }

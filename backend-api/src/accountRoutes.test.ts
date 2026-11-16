@@ -56,7 +56,7 @@ function fakeServices() {
 
 test("personal hub and staff accounts use cookies, one-use invites and immediate revocation", async () => {
   const { services, bucket } = fakeServices();
-  bucket("operators").set("operator-1", { $id: "operator-1", username: "owner", passwordHash: await hash("a-long-hub-password"), active: true, sessionVersion: 1 });
+  bucket("operators").set("operator-1", { $id: "operator-1", username: "owner", platformAdmin: true, passwordHash: await hash("a-long-hub-password"), active: true, sessionVersion: 1 });
   const server = createServer(createApp(config, services));
   await new Promise<void>(resolve => server.listen(0, resolve));
   const address = server.address(); assert.ok(address && typeof address === "object");

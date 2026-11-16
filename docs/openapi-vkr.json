@@ -1,0 +1,1305 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "InteractiveFoodMenu VKR API",
+    "version": "2026-11-16",
+    "description": "Новые операции ВКР. Даты отчётов — московские календарные дни. Чтение ограничено областью роли; изменение разрешено управляющему или администратору. Staff — только собственная точка."
+  },
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "hubCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "ifm_hub"
+      },
+      "staffCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "ifm_staff"
+      },
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/public/venues/{code}": {
+      "get": {
+        "summary": "Публичное название точки и причины обращения",
+        "security": [],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/public/venues/{code}/reviews": {
+      "post": {
+        "summary": "Отправить обращение без обязательного имени",
+        "security": [],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Запись создана"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "food_quality",
+                      "service",
+                      "availability",
+                      "information",
+                      "other"
+                    ]
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "category",
+                  "message"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/vkr/access": {
+      "get": {
+        "summary": "Текущая область доступа и организации",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/organizations": {
+      "post": {
+        "summary": "Создать организацию администратором",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Запись создана"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/accounts": {
+      "get": {
+        "summary": "Аккаунты хаба и назначения без хэшей паролей",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Создать ограниченный аккаунт",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Запись создана"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9._-]{2,39}$"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 12,
+                    "maxLength": 128
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "username",
+                  "password"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/grants": {
+      "post": {
+        "summary": "Назначить роль в организации или точке",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Запись создана"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "operatorId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "organizationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "venueId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "manager",
+                      "auditor"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "operatorId",
+                  "organizationId",
+                  "role"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/grants/{id}": {
+      "delete": {
+        "summary": "Отозвать назначение без повторного входа пользователя",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Удалено"
+          }
+        }
+      }
+    },
+    "/hub/venues/{id}/assignees": {
+      "get": {
+        "summary": "Доступные ответственные по точке",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/reviews": {
+      "get": {
+        "summary": "Обращения доступных точек за период",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "venueId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/reviews/{id}/actions": {
+      "get": {
+        "summary": "История изменений обращения",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/reviews/{id}": {
+      "patch": {
+        "summary": "Изменить обращение с проверкой версии",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "food_quality",
+                      "service",
+                      "availability",
+                      "information",
+                      "other"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "in_progress",
+                      "closed"
+                    ]
+                  },
+                  "assignedTo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "comment": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "category",
+                  "status",
+                  "comment"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/staff/reviews": {
+      "get": {
+        "summary": "Обращения доступных точек за период",
+        "security": [
+          {
+            "staffCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "venueId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/staff/reviews/{id}/actions": {
+      "get": {
+        "summary": "История изменений обращения",
+        "security": [
+          {
+            "staffCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/staff/reviews/{id}": {
+      "patch": {
+        "summary": "Изменить обращение с проверкой версии",
+        "security": [
+          {
+            "staffCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "food_quality",
+                      "service",
+                      "availability",
+                      "information",
+                      "other"
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "in_progress",
+                      "closed"
+                    ]
+                  },
+                  "assignedTo": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "comment": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "version",
+                  "category",
+                  "status",
+                  "comment"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/reports/feedback": {
+      "get": {
+        "summary": "Агрегированный отчёт без текстов обращений",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "venueId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/hub/reports/feedback.csv": {
+      "get": {
+        "summary": "CSV агрегатов с периодом и датой формирования",
+        "security": [
+          {
+            "hubCookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "venueId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Результат",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Некорректные поля или переход статуса"
+          },
+          "401": {
+            "description": "Требуется действующая сессия"
+          },
+          "403": {
+            "description": "Нет прав в области данных"
+          },
+          "404": {
+            "description": "Запись не найдена"
+          },
+          "409": {
+            "description": "Конфликт версии, уникальности или связей"
+          },
+          "429": {
+            "description": "Ограничение частоты",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

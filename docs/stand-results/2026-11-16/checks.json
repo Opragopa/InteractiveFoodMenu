@@ -1,0 +1,17 @@
+{
+  "backendPassed": 75,
+  "backendFailed": 0,
+  "backendSkipped": 0,
+  "webPassed": 91,
+  "buildBackend": true,
+  "buildWeb": true,
+  "browser": [
+    "anonymous submit",
+    "hub login",
+    "start processing",
+    "close review",
+    "history",
+    "CSV download",
+    "390px no page overflow"
+  ]
+}

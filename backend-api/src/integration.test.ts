@@ -24,6 +24,7 @@ const config = {
 test("API integration exposes health, CORS and staff login", async () => {
   const venue = { $id: "venue-1", code: "wintercafe123", pinHash: await hashSecret("123456"), staffVersion: 1, active: true };
   const tables = {
+    createRow: async ({ rowId, data }: { rowId: string; data: Record<string, unknown> }) => ({ $id: rowId, ...data }),
     listRows: async ({ tableId }: { tableId: string }) => tableId === "venues" ? { rows: [venue], total: 1 } : { rows: [], total: 0 },
     get: async () => ({}),
     getTable: async () => ({}),
@@ -68,6 +69,7 @@ test("stock controls availability, refuses negative stock and preserves legacy i
   const legacy: Record<string, unknown> = { $id: "legacy", venueId: "venue-1", categoryId: "cat-1", name: "Кофе", priceMinor: 20000, sortOrder: 1, isAvailable: false };
   const rows: Record<string, Record<string, unknown>> = { "venue-1": venue, tracked, legacy };
   const tables = {
+    createRow: async ({ rowId, data }: { rowId: string; data: Record<string, unknown> }) => ({ $id: rowId, ...data }),
     listRows: async ({ tableId }: { tableId: string }) => ({ rows: tableId === "venues" ? [venue] : tableId === "categories" ? [category] : tableId === "items" ? [tracked, legacy] : [], total: 1 }),
     getRow: async ({ rowId }: { rowId: string }) => {
       if (rowId === "venue-1") {

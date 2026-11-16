@@ -104,7 +104,7 @@ test("PostgreSQL migration, atomic stock, pagination and cross-instance idle SSE
       } finally { controller.abort(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
     });
     await t.test("failed migration rolls back every imported row", async () => {
-      for (const table of ["venues", "categories", "items", "operators", "display_tokens", "statistics_events", "assets"]) await pool.query(`TRUNCATE ifm."${table}"`);
+      await pool.query(`TRUNCATE ${[...TABLES.map(table => table.id), "assets"].map(table => `ifm."${table}"`).join(",")}`);
       const bad = { ...source, storage: { ...source.storage, getFileDownload: async () => Buffer.from([9]) } } as unknown as AppwriteServices;
       await assert.rejects(migrateAppwrite(bad, pool, "source", "assets"), /size mismatch/);
       assert.equal((await pool.query("SELECT count(*)::int n FROM ifm.venues")).rows[0].n, 0);

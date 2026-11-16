@@ -1,0 +1,188 @@
+{
+  "softwareFingerprint": "a16677a9a96cf5c028cd68be2ab64704ca9a5ec5207d6c3d73053e11395ee0d3",
+  "date": "2026-11-16T12:54:09.485Z",
+  "software": "local working tree",
+  "node": "v22.22.2",
+  "postgres": "18.1",
+  "host": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpus": 10,
+    "ramBytes": 17179869184
+  },
+  "scope": "Local synthetic stand; PostgreSQL; one API process; HTTP loopback; not a real pilot",
+  "configuration": {
+    "organizations": 2,
+    "venues": 2,
+    "menuItems": 100,
+    "concurrency": 20,
+    "durationSeconds": 120,
+    "limits": {
+      "readP95Ms": 2000,
+      "errors": 0,
+      "deliveryP95Ms": 10000
+    }
+  },
+  "checks": {
+    "operations": {
+      "sample": 30,
+      "p50Ms": 1.586500000000001,
+      "p95Ms": 3.793292000000065
+    },
+    "sse": {
+      "sample": 10,
+      "p95Ms": 110.76758300000006,
+      "passed": true
+    },
+    "feedback": {
+      "created": true,
+      "classified": true,
+      "closed": true,
+      "exported": true,
+      "workflowMs": 23.39141699999982
+    },
+    "load": {
+      "requests": 22406,
+      "errors": 0,
+      "errorExamples": [],
+      "elapsedMs": 120095.909583,
+      "rps": 186.56755319809534,
+      "p50Ms": 6.254124999999476,
+      "p95Ms": 12.676083000002109,
+      "p99Ms": 25.614291999998386,
+      "apiMaxRssBytes": 217333760,
+      "apiCpuMicroseconds": {
+        "user": 24561606,
+        "system": 3468760
+      },
+      "passed": true
+    },
+    "restore": {
+      "backupMs": 59.07575000000361,
+      "restoreMs": 41.02887500000361,
+      "rtoMeasuredMs": 79.5029579999973,
+      "rpo": "0 writes lost in quiesced synthetic fixture",
+      "tables": [
+        {
+          "table": "organizations",
+          "rows": 3,
+          "sourceSha256": "36f9fd6dbb5e2ec3920e93bde09155a57e022777e3ab312c6ce559481df5b145",
+          "restoredSha256": "36f9fd6dbb5e2ec3920e93bde09155a57e022777e3ab312c6ce559481df5b145",
+          "equal": true
+        },
+        {
+          "table": "role_assignments",
+          "rows": 0,
+          "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "equal": true
+        },
+        {
+          "table": "reviews",
+          "rows": 1,
+          "sourceSha256": "5214c4d40d34d118965058abfa173ea1be756a14bd3960a1a9cf83703bff5e91",
+          "restoredSha256": "5214c4d40d34d118965058abfa173ea1be756a14bd3960a1a9cf83703bff5e91",
+          "equal": true
+        },
+        {
+          "table": "review_actions",
+          "rows": 2,
+          "sourceSha256": "efef412f3121177859084d7386b6743a61cf772772479267ca8c673a9bae383f",
+          "restoredSha256": "efef412f3121177859084d7386b6743a61cf772772479267ca8c673a9bae383f",
+          "equal": true
+        },
+        {
+          "table": "operators",
+          "rows": 1,
+          "sourceSha256": "1356163f30fc490f9302b65afedc26c9d1532701c1c788f3b03013b6554ed56a",
+          "restoredSha256": "1356163f30fc490f9302b65afedc26c9d1532701c1c788f3b03013b6554ed56a",
+          "equal": true
+        },
+        {
+          "table": "staff_accounts",
+          "rows": 0,
+          "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "equal": true
+        },
+        {
+          "table": "staff_invites",
+          "rows": 0,
+          "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "equal": true
+        },
+        {
+          "table": "venues",
+          "rows": 2,
+          "sourceSha256": "30c3b233770eeb1f5c28a93af94fac2bd18ef03b2620e69baaf6521cb95a1c77",
+          "restoredSha256": "30c3b233770eeb1f5c28a93af94fac2bd18ef03b2620e69baaf6521cb95a1c77",
+          "equal": true
+        },
+        {
+          "table": "categories",
+          "rows": 2,
+          "sourceSha256": "16478585ebd29e8b7748990975c1f547c127baba70a2efc6cef8c97bf567057f",
+          "restoredSha256": "16478585ebd29e8b7748990975c1f547c127baba70a2efc6cef8c97bf567057f",
+          "equal": true
+        },
+        {
+          "table": "items",
+          "rows": 100,
+          "sourceSha256": "982dac49d38f05f3e5f7993001556e719b7153e45c5ee8d23536e99ab796c508",
+          "restoredSha256": "982dac49d38f05f3e5f7993001556e719b7153e45c5ee8d23536e99ab796c508",
+          "equal": true
+        },
+        {
+          "table": "display_tokens",
+          "rows": 1,
+          "sourceSha256": "6e9b4d27f51c9878ae66583432ef62a73994cde0e3ccaf34e452b989b5f774e4",
+          "restoredSha256": "6e9b4d27f51c9878ae66583432ef62a73994cde0e3ccaf34e452b989b5f774e4",
+          "equal": true
+        },
+        {
+          "table": "display_pairings",
+          "rows": 0,
+          "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "equal": true
+        },
+        {
+          "table": "client_logs",
+          "rows": 0,
+          "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "equal": true
+        },
+        {
+          "table": "statistics_events",
+          "rows": 41,
+          "sourceSha256": "4993a176290f9af4ccd53ece466d64e6c1421ff66bbbf681118b6fd931704a5f",
+          "restoredSha256": "4993a176290f9af4ccd53ece466d64e6c1421ff66bbbf681118b6fd931704a5f",
+          "equal": true
+        },
+        {
+          "table": "admin_audit_logs",
+          "rows": 45,
+          "sourceSha256": "010146e6c5b475e8b0f703007398ed0a6427de90b48e5ed5d47ca8533089a6a0",
+          "restoredSha256": "010146e6c5b475e8b0f703007398ed0a6427de90b48e5ed5d47ca8533089a6a0",
+          "equal": true
+        },
+        {
+          "table": "assets",
+          "rows": 0,
+          "sourceSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "restoredSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "equal": true
+        }
+      ],
+      "application": {
+        "ready": 200,
+        "menu": 200,
+        "passwordLogin": 200
+      },
+      "passed": true
+    }
+  },
+  "passed": true
+}
